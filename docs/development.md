@@ -64,8 +64,18 @@ startup if one is missing.
 | `DATABASE_USERNAME` | no | `rideflow` | Backend DB user |
 | `DATABASE_PASSWORD` | **yes** | — | Backend DB password |
 | `DATABASE_POOL_SIZE` | no | `10` | Hikari maximum pool size |
-| `REDIS_PASSWORD` | **yes** (compose) | — | Redis `requirepass` (used by the backend from Phase 5) |
-| `REDIS_PORT` | no | `6379` | Host port for Redis |
+| `REDIS_PASSWORD` | **yes** (compose) | — | Redis `requirepass`; the backend authenticates with the same value |
+| `REDIS_HOST` | no | `localhost` | Redis host for the backend |
+| `REDIS_PORT` | no | `6379` | Redis port (host port in compose, connection port for the backend) |
+| `REDIS_SSL_ENABLED` | no | `false` | TLS to Redis (managed Redis services) |
+| `CACHE_ENABLED` | no | `true` | `false` bypasses every Redis cache (benchmark baseline, debugging) |
+| `RATE_LIMIT_ENABLED` | no | `true` | `false` disables rate limiting (benchmarks; the integration tests enable it only in `RateLimitIT`) |
+| `ROUTING_PROVIDER` | no | `osrm` | `osrm` or `straight-line` (no network) |
+| `ROUTING_BASE_URL` | no | `https://router.project-osrm.org` | OSRM server; self-host it for anything beyond light development |
+| `GEOCODING_PROVIDER` | no | `nominatim` | `nominatim` or `disabled` (search endpoints then return 503) |
+| `GEOCODING_BASE_URL` | no | `https://nominatim.openstreetmap.org` | Nominatim server |
+| `GEOCODING_USER_AGENT` | no | `RideFlow/0.1 (+repo URL)` | Identifying User-Agent, required by the Nominatim usage policy; add a contact address when deploying |
+| `GEOCODING_COUNTRY_CODES` | no | `in` | Countries search results are limited to |
 | `KAFKA_HOST_PORT` | no | `29092` | Host port of the Kafka EXTERNAL listener |
 | `JWT_SECRET` | **yes** | — | HS256 signing key, ≥ 32 bytes (`openssl rand -base64 48`) |
 | `JWT_ISSUER` | no | `rideflow` | `iss` claim, validated on every request |

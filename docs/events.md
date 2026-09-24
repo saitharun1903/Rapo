@@ -126,7 +126,7 @@ A rejected location message (validation failure, `STALE_LOCATION`, `DRIVER_OFFLI
 | `/user/queue/ride-offers` | offered driver | `{type: "OFFER", rideId, offer: RideOfferResponse}` | a matching round offers the ride to this driver |
 | | | `{type: "WITHDRAWN", rideId, offer: null}` | another driver accepted, or the passenger cancelled (the offer's own expiry is not pushed; `offer.expiresAt` is known) |
 | `/user/queue/rides` | passenger and current driver | `RideResponse` (same as `GET /api/rides/{id}`, includes `version`) | every ride status change |
-| `/user/queue/ride-location` | passenger of the driver's active ride | `{rideId, location: {lat, lng}, headingDeg, speedMps, recordedAt}` | each accepted location report while a driver is assigned (DRIVER_ASSIGNED to IN_PROGRESS) |
+| `/user/queue/ride-location` | passenger of the driver's active ride | `{rideId, location: {lat, lng}, headingDeg, speedMps, recordedAt, eta: {target, seconds, distanceMeters, source, computedAt}?}`. The ETA is the Redis-cached value (refreshed in the background at most every 30 s); it is `null` until the first one is computed and while the driver waits at the pickup | each accepted location report while a driver is assigned (DRIVER_ASSIGNED to IN_PROGRESS) |
 | `/user/queue/presence` | driver | `{availability: "OFFLINE", reason: "LOCATION_TIMEOUT"\|"ACCOUNT_SUSPENDED", occurredAt}` | the server took the driver offline |
 | `/user/queue/errors` | sender | `{code, message, destination, fieldErrors}` | a location message was rejected |
 | `/topic/admin/activity` | ADMIN | `{rideId, previousStatus, status, actor, rideVersion, occurredAt}` (no personal data) | every ride status change |

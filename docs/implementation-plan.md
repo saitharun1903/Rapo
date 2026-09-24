@@ -41,6 +41,7 @@ Each phase ends with: compile → tests → lint/static checks → self-review �
 | 2 Backend foundation | ✅ Verified | GitHub Actions `backend-ci` run 36032457542: unit, web-slice, ArchUnit and all 13 Testcontainers integration tests passed against real PostGIS (the CI step fails if any integration test is skipped) |
 | 3 Ride system | ✅ Verified | GitHub Actions `backend-ci` run 36036099948: 120 unit/web/ArchUnit tests and 29 PostGIS integration tests passed (full ride lifecycle over HTTP, three-driver simultaneous accept race, offer expiry with radius growth, ride expiry, re-dispatch, quote tampering/expiry, proximity query correctness and GiST index use) |
 | 4 Real-time | ✅ Verified | GitHub Actions `backend-ci` run 36040434543: 153 unit/web/ArchUnit tests and 35 PostGIS integration tests passed, including `RealtimeIT` with a real STOMP client against the running server (offer, status and driver location reach only the ride's participants; offers withdrawn from losing drivers; unauthenticated, forged-token, foreign-origin, admin-topic, foreign-queue and spoofed-send frames refused with ERROR and closed; invalid location messages answered without closing; flood throttling; silent drivers taken offline while drivers on a trip are not; sockets closed at token expiry) |
+| 5 Redis | ✅ Verified | GitHub Actions `backend-ci` run 36044436417: 175 unit/web/ArchUnit tests and 42 integration tests passed against real PostGIS and Redis (`RedisCachingIT`: TTLs, fallback routes not cached, hashed keys, ETA eviction on status change; `RateLimitIT`: login per IP and email, register per IP, 429 with `Retry-After`, shared geocoder budget). `cache-benchmark` run 36044436543: before/after k6 numbers in [performance.md](performance.md) |
 
 **Phase 2 delivered:** Spring Boot 4.1.1 / Java 21 skeleton; Flyway V1–V3; JWT access tokens and rotating refresh tokens with reuse detection; role-based security with JSON 401/403; `GlobalExceptionHandler`; request-id correlation; OpenAPI; auth, profile, driver onboarding, admin driver verification and user suspension; admin bootstrap; demo seed; docker-compose; `.env.example`; backend CI.
 
@@ -65,8 +66,19 @@ Each phase ends with: compile → tests → lint/static checks → self-review �
 - **Timestamp precision:** nanosecond `Instant`s round up when stored as microseconds, which could cost a trip a second of duration. The application clock now ticks in microseconds.
 - **Background job threads:** adding the broker's own scheduler and executors would have silently moved `@Scheduled` jobs onto the broker's thread pool and disabled the `@Async` executor. Both are now configured explicitly.
 
+**Phase 5 delivered:**
+- **Rate limiting:** a Redis Lua fixed-window limiter covering login, registration, fare estimates, booking, geocoding per user, and a global geocoder budget. It returns 429 with `Retry-After`, hashes subjects in keys, and fails open.
+- **Caches:** road routes (15 min, routed answers only), surge per geohash-6 cell (60 s), geocoding (24 h), and a live ETA per ride (30 s, evicted on every status change), now carried in location pushes.
+- **Geocoding:** Nominatim search and reverse endpoints, following its usage policy.
+- **Redis as an optional dependency:** a short circuit breaker, readiness that ignores Redis, and cache and limiter metrics.
+- **Benchmark:** a k6 cache benchmark in CI, with real upstream latency and real results.
+
+**Design changes made in Phase 5:**
+- **D22:** Redis is optional at runtime.
+- **D23:** driver-location keys wait for the Kafka batch writer, instead of duplicating every write now.
+
 **Carried forward:**
-- **Phase 5:** location keys, routed ETA in location pushes (throttled per ride), login and estimate rate limiting, and caching of surge, routes and geocoding.
+- **Phase 6:** Redis location and active-ride keys, together with the batched PostgreSQL writer.
 - **Phase 6:** swaps the in-process event adapter for the outbox and Kafka (the realtime bridge feeds the same destinations), and adds payments, ratings and `/user/queue/notifications`.
 
 ## Phases

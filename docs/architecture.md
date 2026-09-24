@@ -55,6 +55,8 @@ Why not microservices: the domain has one consistency-critical aggregate (the ri
 | D19 | **Lock ordering:** every transaction that mutates a ride locks the ride row (`SELECT … FOR UPDATE`) before touching its offers | Optimistic locking alone | Concurrent accept, cancel and matching serialise per ride and cannot deadlock; the optimistic `@Version` stays as a backstop. |
 | D20 | Pushes go to **per-user queues** (`/user/queue/rides`, `/ride-location`, `/ride-offers`), with recipients computed by the server when it sends | Per-ride topics (`/topic/rides/{id}/…`) authorised at SUBSCRIBE time against a Redis participants key | A subscription authorised once stays open when access changes. A driver who withdraws from a ride would keep receiving its updates, including the next driver's details. Computing recipients from current data closes that gap and removes a cache that must be kept in step with the database. Cost: the payload names its `rideId`, and a user with several sessions receives the update on each, which is what a user with two tabs needs anyway. *(Changed in Phase 4.)* |
 | D21 | **A socket lives no longer than its access token:** frames are refused after `exp`, and the server closes the socket (code 4001) | Validate only at CONNECT | Access tokens are short-lived because they cannot be revoked. A socket that outlived its token would turn a 15-minute credential into an unlimited one for everything pushed to it, such as live driver positions. Clients already refresh the token before reconnecting. *(Added in Phase 4.)* |
+| D22 | **Redis is optional at runtime:** caches and rate limits fail open, a small circuit skips Redis for 5 s after a failure, and readiness ignores it | Treat Redis as a hard dependency | Everything in Redis is recomputable or protective. An outage should cost some latency and a window without rate limits (visible in metrics), not an outage of logins and bookings. *(Added in Phase 5.)* |
+| D23 | Driver positions stay in PostgreSQL only until the Kafka batch writer exists (Phase 6) | Redis location keys now | While every report is still written to PostgreSQL, a Redis copy would add a second write per report and a second source of truth for the arrival geofence without removing any load. The keys arrive with the batched writer that makes them the hot path. *(Decided in Phase 5.)* |
 
 ---
 
@@ -383,23 +385,49 @@ sequenceDiagram
 
 ## 9. Redis strategy
 
-Redis holds **ephemeral, high-frequency or recomputable** state only. PostgreSQL remains the source of truth for anything durable. Rides are deliberately **not** cached: they change often and must be strongly consistent.
+Redis holds **ephemeral, recomputable or protective** state only; PostgreSQL remains the source of truth. Rides are deliberately **not** cached: they change often and must be strongly consistent. Each key below exists because it removes a slow or rate-limited external call, or repeated database work, on a hot path. Implemented in Phase 5 (`com.rideflow.cache`, `RedisKeys` lists every key).
 
-| Key pattern | Type | TTL | Purpose | Invalidation |
+| Key | Type | TTL | Why it exists | Invalidation |
 |---|---|---|---|---|
-| `driver:{id}:location` | hash | 30 s | Latest position for tracking snapshot, arrival geofence, ETA | Overwritten on each update; expiry = stale |
-| `driver:{id}:active-ride` | string | 12 h safety | Hot-path lookup when routing a location to a ride | Set on accept; deleted on complete/cancel/re-dispatch (after commit) |
-| `ride:{id}:eta` | string | 30 s | Throttles routed ETA recomputation during pickup | Expiry |
-| `route:{sha1(from,to,profile)}` | string (JSON) | 15 min | Caches routing-provider responses (slow, rate-limited external call) | Expiry |
-| `geocode:{sha1(query)}` | string (JSON) | 24 h | Nominatim usage policy requires caching; cuts latency | Expiry |
-| `surge:{geohash6}` | string | 60 s | Surge multiplier per ~1 km cell; the demand/supply counts are PostGIS queries | Expiry (short enough to track demand) |
-| `rl:{scope}:{subject}:{window}` | counter | window length | Fixed-window rate limiting through an atomic Lua `INCR` + `EXPIRE` | Expiry |
+| `route:{fromLat,fromLng}:{toLat,toLng}` (5 decimals, ~1 m) | JSON | 15 min | The router is an external HTTP call and most of an estimate's latency. Trips between user-picked places repeat: a passenger re-estimates before booking, and places come from search results | Expiry. Only `ROUTED` answers are stored; a straight-line fallback is served but not kept, so a router outage does not pin degraded estimates |
+| `surge:{geohash6}` | JSON number | 60 s | Every estimate needs surge, which costs two PostGIS radius counts. One value per ~1.2 km × 0.6 km cell, computed at the cell centre (the counting radius is 2 km, so this moves the sample point by at most ~700 m) | Expiry. 60 s bounds staleness against real demand |
+| `geocode:search:{sha256(query, cell, limit)}` | JSON | 24 h | The Nominatim usage policy requires caching and allows 1 request/s. The key uses the normalised query and a geohash-4 bias cell (~40 km × 20 km), so a search repeated anywhere in the city is one upstream call. Hashed: queries can contain addresses | Expiry (places rarely change) |
+| `geocode:reverse:{lat,lng}` (4 decimals, ~11 m) | JSON | 24 h | Same policy; nearby map pins share an entry | Expiry |
+| `ride:{id}:eta` | JSON | 30 s | A driver reports every few seconds; routing each report would call the router several times a second per ride for a number that barely changes. The cached ETA is carried in location pushes and the tracking snapshot | **Deleted on every ride status change**, because the destination changes (pickup, then dropoff) or tracking ends. Entries carry their target, so a late write for the old destination is ignored |
+| `ride:{id}:eta-refresh` | string, `SET NX` | 30 s | Only one instance recomputes an expired ETA, not every location update that notices it | Expiry; deleted with `ride:{id}:eta` |
+| `rl:{scope}:{sha256(subject)}` | counter | window | Fixed-window rate limits, shared by all instances. An atomic Lua `INCR` + `PEXPIRE` + `PTTL`; the remaining TTL becomes `Retry-After`. Subjects (IPs, emails) are hashed | Expiry |
 
-Rate-limit scopes: login (5/min per IP + email), register (3/min per IP), ride creation (5/min per user), fare estimate (30/min per user), AI questions (10/hour per user). Location messages are throttled per WebSocket session in memory (≥ 1 s interval) because each driver has a single session.
+**Rate limits** (`rideflow.rate-limit.rules`):
 
-Redis failure behaviour: rate limiting fails **open** (logged and counted in a metric). Tracking snapshots degrade to "unavailable". (Offer exclusivity and fare quotes deliberately do not depend on Redis; see D16 and D17. WebSocket authorisation needs no participants cache; see D20.)
+| Scope | Limit | Subject |
+|---|---|---|
+| LOGIN | 5/min | client IP + email |
+| REGISTER | 3/min | client IP |
+| FARE_ESTIMATE | 30/min | passenger |
+| RIDE_BOOKING | 5/min | passenger |
+| GEOCODING | 30/min | user |
+| GEOCODING_UPSTREAM | 1/s | whole application; only cache misses count |
 
-Phase 5 will measure fare-estimate and geocoding latency with and without the cache using k6, and record the real numbers here.
+Limits return `429 RATE_LIMITED` with `Retry-After`. A busy geocoding budget returns `503 GEOCODING_UNAVAILABLE` with `Retry-After`. A fixed window allows up to twice the limit across a window boundary; that is acceptable for abuse protection and cheaper than a sliding window. The client IP is the servlet's remote address. `forward-headers-strategy: framework` makes that the first `X-Forwarded-For` hop, so in production the reverse proxy must overwrite that header, or clients could spoof their IP. Location messages are throttled per WebSocket session in memory (at least 1 s apart), because each driver has one session.
+
+**Failure behaviour (D22).**
+- **Caches:** fall back to computing the value.
+- **Rate limits:** fail open, counted in `rideflow_ratelimit_errors_total`.
+- **ETA pushes:** carry no ETA; the tracking snapshot still computes one.
+- **Circuit:** `RedisAvailability` skips Redis for 5 s after a failure, so an outage costs one timeout (500 ms) rather than one per call.
+- **Health:** readiness excludes Redis; overall health still reports it.
+
+**Metrics:**
+- `rideflow_cache_requests_total{cache, result=hit|miss|error|bypass}`
+- `rideflow_ratelimit_rejected_total{scope}`
+- `rideflow_ratelimit_errors_total`
+- `rideflow_redis_available`
+
+Redis command latency dashboards are Phase 11.
+
+**Not in Redis (yet).** Driver positions (`driver:{id}:location`, `driver:{id}:active-ride`) move to Redis together with the Kafka batch writer in Phase 6 (D23). Until then every report is written to PostgreSQL anyway, so a Redis copy would only add a write. Nearby-driver search stays in PostGIS (D2), because it joins spatial filters with verification, availability and vehicle category.
+
+**Measured effect.** The results are in [performance.md](performance.md#cache-benchmark-phase-5).
 
 ---
 
@@ -640,7 +668,7 @@ Coverage is reported by JaCoCo, with a gate on `service` packages in CI (thresho
 |---|---|---|---|
 | Tiles / rendering | `MapView` (frontend) | MapLibre GL + OpenFreeMap style (no key) | MapTiler / self-hosted tiles via env |
 | Routing (distance, duration, polyline) | `RoutingProvider` | `OsrmRoutingProvider` (`ROUTING_BASE_URL`) | `StraightLineRoutingProvider` (explicitly flagged approximate) |
-| Geocoding / search | `GeocodingProvider` | `NominatimGeocodingProvider` (backend-proxied, cached, identifying User-Agent, 1 req/s) | Pick point on map, browser geolocation |
+| Geocoding / search | `GeocodingProvider` | `NominatimGeocodingProvider` (backend-proxied, cached 24 h, identifying User-Agent, 1 upstream req/s across instances) | Pick point on map, browser geolocation. Nominatim forbids search-as-you-type, so the frontend searches on submit |
 
 The public OSRM and Nominatim instances are for light development use only; the deployment docs cover self-hosting or a commercial provider.
 

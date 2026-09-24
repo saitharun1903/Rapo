@@ -68,8 +68,8 @@ Password policy: 10–72 characters (BCrypt limit), at least one letter and one 
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/geo/search?q=&lat=&lng=` | Place search biased near a point → `[{label, point}]` |
-| GET | `/geo/reverse?lat=&lng=` | Address label for a point |
+| GET | `/geo/search?q=&lat=&lng=` | Place search (`q` 2–200 chars), biased towards `lat`/`lng` when given → `[{name, address, point}]`. Call on submit, not per keystroke (Nominatim policy). `429 RATE_LIMITED` (30/min per user), `503 GEOCODING_UNAVAILABLE` with `Retry-After` when the provider is down or the shared upstream budget (1 req/s) is used up |
+| GET | `/geo/reverse?lat=&lng=` | Address at a point → `{name, address, point}`, or `204` when there is none. Same limits |
 | GET | `/geo/route?fromLat=&fromLng=&toLat=&toLng=` | `{distanceMeters, durationSeconds, geometry (GeoJSON LineString), source}`; used to draw routes and by the simulator |
 
 ## Fares
