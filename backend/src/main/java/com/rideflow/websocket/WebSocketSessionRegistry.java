@@ -30,7 +30,7 @@ import org.springframework.web.socket.handler.WebSocketHandlerDecoratorFactory;
  * Also exposes {@code rideflow.ws.sessions.active{role}}.
  */
 @Component
-public class WebSocketSessionRegistry implements WebSocketHandlerDecoratorFactory {
+public final class WebSocketSessionRegistry implements WebSocketHandlerDecoratorFactory {
 
     /** Private-use close code (4000-4999): the client should refresh its token and reconnect. */
     public static final CloseStatus TOKEN_EXPIRED = new CloseStatus(4001, "Access token expired");

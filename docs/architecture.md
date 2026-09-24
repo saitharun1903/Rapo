@@ -53,6 +53,8 @@ Why not microservices: the domain has one consistency-critical aggregate (the ri
 | D17 | "One pending offer per driver" is a **partial unique index** (`ride_offers(driver_id) WHERE status='PENDING'`) with `INSERT … ON CONFLICT DO NOTHING` | Redis `SET NX` lock | Atomic with the offer insert, no second system that can disagree with the database. *(Changed in Phase 3.)* |
 | D18 | Rides store `lat`/`lng`; PostGIS **generated columns** derive `geography` from them | Hibernate Spatial / JTS mapping | Entities stay plain Java while every spatial query and GiST index still uses real PostGIS geography. |
 | D19 | **Lock ordering:** every transaction that mutates a ride locks the ride row (`SELECT … FOR UPDATE`) before touching its offers | Optimistic locking alone | Concurrent accept, cancel and matching serialise per ride and cannot deadlock; the optimistic `@Version` stays as a backstop. |
+| D20 | Pushes go to **per-user queues** (`/user/queue/rides`, `/ride-location`, `/ride-offers`), with recipients computed by the server when it sends | Per-ride topics (`/topic/rides/{id}/…`) authorised at SUBSCRIBE time against a Redis participants key | A subscription authorised once stays open when access changes. A driver who withdraws from a ride would keep receiving its updates, including the next driver's details. Computing recipients from current data closes that gap and removes a cache that must be kept in step with the database. Cost: the payload names its `rideId`, and a user with several sessions receives the update on each, which is what a user with two tabs needs anyway. *(Changed in Phase 4.)* |
+| D21 | **A socket lives no longer than its access token:** frames are refused after `exp`, and the server closes the socket (code 4001) | Validate only at CONNECT | Access tokens are short-lived because they cannot be revoked. A socket that outlived its token would turn a 15-minute credential into an unlimited one for everything pushed to it, such as live driver positions. Clients already refresh the token before reconnecting. *(Added in Phase 4.)* |
 
 ---
 
@@ -332,6 +334,8 @@ State lives entirely in PostgreSQL, so matching is restart-safe: if the after-co
 
 ## 8. Real-time location pipeline
 
+*Current path (Phase 4):* `STOMP /app/drivers/location` (or `POST /api/drivers/location`) → `DriverLocationService` validates, conditionally upserts `driver_locations`, samples `ride_track_points` during a trip, and, while the driver is assigned to a ride, publishes `DriverLocationUpdatedEvent`. After commit, `RealtimePublisher` pushes it to that ride's passenger on `/user/queue/ride-location`. The diagram below is the target path once Redis (Phase 5) and Kafka (Phase 6) take over the hot path; the validation rules and the client contract stay the same.
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -352,7 +356,7 @@ sequenceDiagram
     L->>R: GET driver:{id}:active-ride
     L->>K: produce keyed by driverId (includes activeRideId)
     K->>B: consume (instance-unique group)
-    B->>P: /topic/rides/{rideId}/location (only if activeRideId set)
+    B->>P: /user/{passengerId}/queue/ride-location (only if activeRideId set)
     K->>C: batch consume (shared group)
     C->>C: coalesce to latest point per driver
     C->>PG: batched UPSERT driver_locations
@@ -365,12 +369,13 @@ sequenceDiagram
 - **No per-ping PostgreSQL writes.** The hot path touches Redis and Kafka only; PostgreSQL receives one upsert per driver per consumer batch, plus track points sampled at ≥ 10 s or ≥ 25 m.
 - **Privacy.** A driver's location is only ever pushed to the passenger of their active ride. Passengers browsing the map see nearby-car positions rounded to ~100 m, without identity.
 - **Connection lifecycle.**
-  - *Connect:* JWT in the STOMP `CONNECT` frame, validated by `StompAuthChannelInterceptor`. Invalid or expired token → `ERROR` frame and close.
-  - *Subscribe:* `/topic/rides/{rideId}/**` is authorised against `ride:{id}:participants` (Redis, backed by DB). Unauthorised → error frame, subscription refused.
-  - *Invalid messages:* Bean Validation failures are sent to `/user/queue/errors` with an error code; the session stays open.
-  - *Heartbeats:* STOMP 10 s/10 s. On disconnect, a driver is not immediately set offline; their location key simply stops refreshing.
-  - *Reconnect:* the client retries with exponential backoff and jitter (1 s → 30 s cap), refreshing the access token first. After reconnecting it re-fetches the snapshot (`GET /api/rides/active`, `/tracking`, `GET /api/drivers/me/offers`) and resubscribes (the *snapshot + stream* pattern). Status messages carry `aggregateVersion`, so the client ignores stale ones.
-  - *Stale locations:* the Redis key expires after 30 s, so the passenger UI shows "Location signal lost". Matching ignores drivers whose `updated_at` is older than the freshness window. `DriverPresenceSweeper` flips `AVAILABLE` drivers with no update for 2 min to `OFFLINE` and notifies them.
+  - *Connect:* the access token in the STOMP `CONNECT` frame, validated by `StompAuthenticationInterceptor`. An invalid or missing token gets an `ERROR` frame and the socket is closed. So is a socket that sends no `CONNECT` within 10 s.
+  - *Token expiry:* frames after the token's `exp` are refused, and `WebSocketSessionRegistry` closes the socket with code 4001 (D21).
+  - *Subscribe and send:* a deny-by-default allow-list (`StompAuthorizationInterceptor`): own `/user/queue/*` destinations for everyone, `/topic/admin/activity` for admins, and `SEND` only to `/app/drivers/location` by drivers. All pushes use per-user queues with recipients computed at send time (D20).
+  - *Invalid messages:* validation and domain failures are sent to `/user/queue/errors` with an error code; the session stays open.
+  - *Heartbeats:* STOMP 10 s/10 s. On disconnect a driver is not set offline; presence follows location freshness.
+  - *Reconnect:* the client retries with exponential backoff and jitter (1 s → 30 s cap), refreshing the access token first. After reconnecting it re-fetches the snapshot (`GET /api/rides/active`, `/tracking`, `GET /api/drivers/me/offers`) and resubscribes (the *snapshot + stream* pattern). Ride updates carry `version`, so the client ignores stale ones.
+  - *Stale locations:* the tracking snapshot reports `stale: true` when the driver's last position is older than 30 s, and the passenger UI shows "Location signal lost". Matching ignores drivers whose `updated_at` is older than the freshness window. `DriverPresenceSweeper` sets `AVAILABLE` drivers with no update for 2 min to `OFFLINE` and notifies them on `/user/queue/presence`; drivers on a trip are never taken offline.
 
 **Scaling note:** the realtime bridge's instance-unique consumer group means every instance receives all location events. That is fine up to thousands of concurrent rides. Beyond that, the next step is partition-aware routing or a dedicated realtime gateway (documented as a future improvement, not built).
 
@@ -384,7 +389,6 @@ Redis holds **ephemeral, high-frequency or recomputable** state only. PostgreSQL
 |---|---|---|---|---|
 | `driver:{id}:location` | hash | 30 s | Latest position for tracking snapshot, arrival geofence, ETA | Overwritten on each update; expiry = stale |
 | `driver:{id}:active-ride` | string | 12 h safety | Hot-path lookup when routing a location to a ride | Set on accept; deleted on complete/cancel/re-dispatch (after commit) |
-| `ride:{id}:participants` | hash | 1 h | WebSocket subscription authorisation without a DB hit per SUBSCRIBE | Rewritten on assignment; deleted on terminal state |
 | `ride:{id}:eta` | string | 30 s | Throttles routed ETA recomputation during pickup | Expiry |
 | `route:{sha1(from,to,profile)}` | string (JSON) | 15 min | Caches routing-provider responses (slow, rate-limited external call) | Expiry |
 | `geocode:{sha1(query)}` | string (JSON) | 24 h | Nominatim usage policy requires caching; cuts latency | Expiry |
@@ -393,7 +397,7 @@ Redis holds **ephemeral, high-frequency or recomputable** state only. PostgreSQL
 
 Rate-limit scopes: login (5/min per IP + email), register (3/min per IP), ride creation (5/min per user), fare estimate (30/min per user), AI questions (10/hour per user). Location messages are throttled per WebSocket session in memory (≥ 1 s interval) because each driver has a single session.
 
-Redis failure behaviour: rate limiting fails **open** (logged and counted in a metric). Tracking snapshots degrade to "unavailable". (Offer exclusivity and fare quotes deliberately do not depend on Redis; see D16 and D17.)
+Redis failure behaviour: rate limiting fails **open** (logged and counted in a metric). Tracking snapshots degrade to "unavailable". (Offer exclusivity and fare quotes deliberately do not depend on Redis; see D16 and D17. WebSocket authorisation needs no participants cache; see D20.)
 
 Phase 5 will measure fare-estimate and geocoding latency with and without the cache using k6, and record the real numbers here.
 

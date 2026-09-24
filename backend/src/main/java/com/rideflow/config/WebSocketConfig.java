@@ -58,9 +58,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // Browsers send Origin on the handshake; only the configured frontends may open a socket.
         registry.addEndpoint(StompDestinations.ENDPOINT)
                 .setAllowedOrigins(cors.allowedOrigins().toArray(String[]::new));
+        // Not setPreserveReceiveOrder(true): its ordering decorator catches and only logs exceptions from the
+        // inbound interceptors, so a rejected CONNECT or SUBSCRIBE would produce no ERROR frame and leave the
+        // socket open. Location reports do not need ordering: the upsert never regresses to an older fix.
         registry.setErrorHandler(errorHandler);
-        // Process each client's frames in order (SUBSCRIBE before the SEND that follows it).
-        registry.setPreserveReceiveOrder(true);
     }
 
     @Override

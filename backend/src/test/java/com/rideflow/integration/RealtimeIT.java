@@ -6,6 +6,7 @@ import static com.rideflow.support.GeoTestPoints.offset;
 import static com.rideflow.support.RideApi.body;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
+import static org.awaitility.Awaitility.await;
 
 import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
@@ -24,6 +25,7 @@ import com.rideflow.support.StompTestClient;
 import com.rideflow.support.StompTestClient.Connection;
 import com.rideflow.support.SubscriptionProbe;
 import com.rideflow.websocket.WebSocketSessionRegistry;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -80,6 +82,8 @@ class RealtimeIT extends PostgisContainerSupport {
     private DriverLocationRepository driverLocations;
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired
+    private MeterRegistry meters;
 
     private RideApi api;
     private StompTestClient stomp;
@@ -284,14 +288,16 @@ class RealtimeIT extends PostgisContainerSupport {
         clock.advance(Duration.ofSeconds(1));
         GeoPoint first = offset(HITECH_CITY, 250, 0);
         socket.send(DRIVER_LOCATION, location(first, clock.instant()));
-        // A second fix within the same second is dropped. The invalid message after it is answered only once
-        // both have been processed (frames from one session are handled in order).
-        socket.send(DRIVER_LOCATION, location(offset(HITECH_CITY, 100, 0), clock.instant()));
-        socket.send(DRIVER_LOCATION, Map.of("recordedAt", clock.instant().toString()));
-        assertThat(socket.next(ERRORS).get("code").asString()).isEqualTo("VALIDATION_FAILED");
+        await().atMost(StompTestClient.TIMEOUT).untilAsserted(() -> assertThat(
+                driverLocations.find(driver.id()).orElseThrow().point().lat()).isCloseTo(first.lat(), within(1e-7)));
 
-        assertThat(socket.isConnected()).isTrue();
+        // A second fix within the same second is dropped (and counted), so the stored position does not move.
+        double droppedBefore = droppedLocations();
+        socket.send(DRIVER_LOCATION, location(offset(HITECH_CITY, 100, 0), clock.instant()));
+        await().atMost(StompTestClient.TIMEOUT).until(() -> droppedLocations() == droppedBefore + 1);
         assertThat(driverLocations.find(driver.id()).orElseThrow().point().lat()).isCloseTo(first.lat(), within(1e-7));
+        assertThat(socket.isConnected()).isTrue();
+        socket.assertNothingReceived(ERRORS);
     }
 
     @Test
@@ -335,6 +341,10 @@ class RealtimeIT extends PostgisContainerSupport {
 
         socket.awaitClosed();
         assertThat(socket.isConnected()).isFalse();
+    }
+
+    private double droppedLocations() {
+        return meters.get("rideflow.ws.location.dropped").counter().count();
     }
 
     private String availability(Actor driver) {

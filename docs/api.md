@@ -109,7 +109,7 @@ Password policy: 10–72 characters (BCrypt limit), at least one letter and one 
 | GET | `/rides` | Caller's rides (passenger: own; driver: assigned). Filters: `status`, `from`, `to`. Sort: `requestedAt`, `completedAt` |
 | GET | `/rides/active` | Caller's active ride or `204` |
 | GET | `/rides/{id}` | Ride detail |
-| GET | `/rides/{id}/tracking` | Latest driver location snapshot `{point, headingDeg, recordedAt, stale, etaSeconds}` *(Phase 4)* |
+| GET | `/rides/{id}/tracking` | Snapshot after load or reconnect: `{rideId, status, driverLocation{point, headingDeg, recordedAt}?, stale, eta{target: PICKUP\|DROPOFF, seconds, distanceMeters, source: ROUTED\|APPROXIMATE}?}`. Passenger or assigned driver; a driver who only got an offer gets 404. `409 TRACKING_UNAVAILABLE` unless a driver is assigned (DRIVER_ASSIGNED to IN_PROGRESS). `stale` when the last position is older than 30 s; `eta` is `null` when stale or while the driver waits at the pickup. Live updates then arrive over WebSocket ([events.md](events.md) §2) |
 | GET | `/rides/{id}/timeline` | Status events |
 | POST | `/rides/{id}/cancel` | Optional body `{reason}`. Passenger (before the trip starts) → `CANCELLED`, and the driver is released. Assigned driver before arrival → ride goes back to `MATCHING` and is re-offered to other drivers. Driver after arriving → `CANCELLED` only once the 5-minute no-show wait has passed, else `409 NO_SHOW_WAIT_NOT_ELAPSED` |
 | POST | `/rides/{id}/rating` | `{score 1-5, comment?}` → 201; only after `COMPLETED`, once per rater *(Phase 6)* |
@@ -165,7 +165,7 @@ Errors common to driver actions: `404 RIDE_NOT_FOUND` (not your ride or offer), 
 | PUT | `/drivers/me/vehicle` | DRIVER | Replace active vehicle (re-verification not required in v1) |
 | POST | `/drivers/online` | DRIVER (VERIFIED) | `{location{lat,lng}}` → `AVAILABLE` (`403 DRIVER_NOT_VERIFIED`, `409 NO_ACTIVE_VEHICLE`) |
 | POST | `/drivers/offline` | DRIVER | `→ OFFLINE`, releases any pending offer; `409 DRIVER_ON_TRIP` during a trip. Returns the driver profile |
-| POST | `/drivers/location` | DRIVER | `{location{lat,lng}, headingDeg?, speedMps?, accuracyMeters?, recordedAt}` → 202. `recordedAt` must be within 30 s in the past / 5 s in the future (`422 STALE_LOCATION`); driver must be online (`409 DRIVER_OFFLINE`). REST fallback for the WebSocket stream (Phase 4) |
+| POST | `/drivers/location` | DRIVER | `{location{lat,lng}, headingDeg?, speedMps?, accuracyMeters?, recordedAt}` → 202. `recordedAt` must be within 30 s in the past / 5 s in the future (`422 STALE_LOCATION`); driver must be online (`409 DRIVER_OFFLINE`). REST fallback for the WebSocket stream `/app/drivers/location`, with the same rules and the same push to the passenger |
 | GET | `/drivers/me/offers` | DRIVER | Pending offers (used on reconnect) |
 | GET | `/drivers/me/earnings?from=&to=&granularity=DAY` | DRIVER | `{total, tripCount, onlineSeconds?, series[{bucket, earnings, trips}]}` from `payments` |
 | GET | `/drivers/nearby?lat=&lng=&radiusMeters=&category=` | PASSENGER, ADMIN | Passenger: `[{point (≈100 m grid), category}]`, max 20, no identity. Admin: full detail |
