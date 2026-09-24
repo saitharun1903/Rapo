@@ -10,6 +10,11 @@ spring:
 rideflow:
   scheduling:
     enabled: false
+  kafka:
+    # Resolved once per Spring context (bound into EventingProperties): each cached context gets its own
+    # topics and consumer groups, so contexts with different beans (clocks, stubs) never consume each
+    # other's events.
+    prefix: "it-${random.uuid}."
   # No network in tests; the OSRM client is covered by RoutingTest with a mock server.
   routing:
     provider: straight-line

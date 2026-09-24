@@ -56,7 +56,11 @@ Why not microservices: the domain has one consistency-critical aggregate (the ri
 | D20 | Pushes go to **per-user queues** (`/user/queue/rides`, `/ride-location`, `/ride-offers`), with recipients computed by the server when it sends | Per-ride topics (`/topic/rides/{id}/…`) authorised at SUBSCRIBE time against a Redis participants key | A subscription authorised once stays open when access changes. A driver who withdraws from a ride would keep receiving its updates, including the next driver's details. Computing recipients from current data closes that gap and removes a cache that must be kept in step with the database. Cost: the payload names its `rideId`, and a user with several sessions receives the update on each, which is what a user with two tabs needs anyway. *(Changed in Phase 4.)* |
 | D21 | **A socket lives no longer than its access token:** frames are refused after `exp`, and the server closes the socket (code 4001) | Validate only at CONNECT | Access tokens are short-lived because they cannot be revoked. A socket that outlived its token would turn a 15-minute credential into an unlimited one for everything pushed to it, such as live driver positions. Clients already refresh the token before reconnecting. *(Added in Phase 4.)* |
 | D22 | **Redis is optional at runtime:** caches and rate limits fail open, a small circuit skips Redis for 5 s after a failure, and readiness ignores it | Treat Redis as a hard dependency | Everything in Redis is recomputable or protective. An outage should cost some latency and a window without rate limits (visible in metrics), not an outage of logins and bookings. *(Added in Phase 5.)* |
-| D23 | Driver positions stay in PostgreSQL only until the Kafka batch writer exists (Phase 6) | Redis location keys now | While every report is still written to PostgreSQL, a Redis copy would add a second write per report and a second source of truth for the arrival geofence without removing any load. The keys arrive with the batched writer that makes them the hot path. *(Decided in Phase 5.)* |
+| D23 | Driver positions: **Redis holds the live position, PostgreSQL gets batches from Kafka**. Both were introduced together in Phase 6 | Redis location keys in Phase 5, while every report was still written to PostgreSQL | A Redis copy only pays off once it takes the per-report write off PostgreSQL; before that it was a second write and a second source of truth for the geofence. *(Decided in Phase 5, implemented in Phase 6.)* |
+| D24 | Kafka payloads are the **domain event records** (`RideStatusChangedEvent`, …) inside a versioned envelope; readers ignore unknown fields | Separate payload DTOs mapped from domain events | Producer and consumer are one codebase, so a mapping layer would duplicate every record without decoupling anything. Additive changes need no version bump. If a consumer is ever extracted into its own service, the records move into a shared schema module (or Avro, D15). *(Added in Phase 6.)* |
+| D25 | **One topic per target ride status** (`ride.accepted`, `ride.completed`, …) plus `ride.dispatch.requested` for early matching rounds | One `ride.status-changed` topic | Consumers subscribe to the transitions they act on; payments reads only `ride.completed`. Cost: no ordering across a ride's topics, which consumers tolerate through `aggregateVersion` and state checks (events.md §1.4). *(Added in Phase 6.)* |
+| D26 | The outbox relay is a **dedicated thread woken by commits**, with a 250 ms poll as a backstop | `@Scheduled` poller only; CDC (Debezium) | A commit hook makes events leave within milliseconds instead of on average half a poll interval. The relay also keeps running when scheduled jobs are disabled. CDC would need Kafka Connect and replication-slot management for no gain at this scale. *(Added in Phase 6.)* |
+| D27 | Driver state in Redis (`driver:{id}:state`) is **rewritten after every commit** that changes it; a cache miss loads from the database and stores with `SET NX` | Delete on change (cache-aside), or a short TTL only | With delete-on-change, a location report that read the database just before a ride started could write the old state back after the delete. That would miss track points and time the wrong stop until the TTL expired. A write after commit plus `NX` loads means a load can never overwrite a newer state. *(Added in Phase 6.)* |
 
 ---
 
@@ -124,11 +128,10 @@ backend/src/main/java/com/rideflow/
 ├── service/
 │   ├── auth/        # registration, login, refresh-token rotation
 │   ├── user/
-│   ├── driver/      # onboarding, verification, availability
+│   ├── driver/      # onboarding, verification, availability, location ingestion and persistence
 │   ├── ride/        # RideService, RideStateMachine, RideQueryService
 │   ├── matching/    # DriverMatchingService, OfferService, MatchingSweeper
 │   ├── fare/        # FareCalculator, SurgeService, FareQuoteService
-│   ├── location/    # LocationIngestionService, LocationPersistenceService
 │   ├── payment/     # PaymentService, PaymentGateway port
 │   ├── rating/
 │   ├── notification/
@@ -141,10 +144,10 @@ backend/src/main/java/com/rideflow/
 ├── security/        # JWT issuing, refresh tokens, principal
 ├── exception/       # domain exceptions + GlobalExceptionHandler + ApiError
 ├── websocket/       # STOMP auth + authorisation interceptors, message handlers, pushes, session registry
-├── kafka/
-│   ├── event/       # event envelope + payload records
-│   ├── outbox/      # OutboxWriter, OutboxRelay
-│   └── consumer/    # thin listeners delegating to services
+├── kafka/         # adapters: KafkaLocationStream (positions, direct)
+│   ├── event/       # EventTopic (topic catalogue), envelope, EventCodec, KafkaNames
+│   ├── outbox/      # OutboxDomainEventPublisher, OutboxRelay, OutboxPublisher, housekeeping
+│   └── consumer/    # thin listeners: decode, then delegate to a service or the realtime publisher
 ├── geospatial/      # GeoPoint value object, RoutingProvider, GeocodingProvider, PostGIS helpers
 ├── cache/           # Redis key registry, rate limiter, typed cache helpers
 ├── ai/              # AIService, LocalAIService, ExternalAIService, prompts, validators, TripFactsAssembler
@@ -155,7 +158,8 @@ backend/src/main/java/com/rideflow/
 **Dependency rules** (checked by ArchUnit in CI):
 
 - `controller` → `service`, `dto` only (never `repository` or `entity`).
-- `kafka.consumer` and `websocket` → `service` only.
+- `kafka.consumer` → `service` and the `websocket` publisher only (no repositories, no entities, no transactions of its own).
+- `service` never depends on `kafka`: services publish through ports (`DomainEventPublisher`, `LocationStream`).
 - `entity` depends on nothing application-specific.
 - Services own transactions (`@Transactional` at service method level, never on controllers).
 
@@ -230,7 +234,7 @@ classDiagram
 1. A passenger has at most one active ride; a driver has at most one active ride (partial unique indexes).
 2. Ride status only changes through `RideStateMachine` (§6); every change writes a `ride_status_events` row and an outbox event in the same transaction.
 3. A driver can only go online when `verification_status = VERIFIED` and they have an active vehicle.
-4. A driver holds at most one pending offer at a time (Redis `SET NX` lock + DB offer state).
+4. A driver holds at most one pending offer at a time (partial unique index, D17).
 5. Money is `numeric(10,2)` / `BigDecimal`, never floating point.
 6. Fares are snapshotted (`fare_breakdowns`) so historical rides remain explainable even if pricing config changes.
 
@@ -301,7 +305,7 @@ LIMIT  :candidateLimit;
 ```mermaid
 sequenceDiagram
     autonumber
-    participant T as Trigger (after commit, async)
+    participant T as Kafka matching consumer
     participant M as DriverMatchingService
     participant PG as PostgreSQL/PostGIS
     participant S as MatchingSweeper (every 5 s)
@@ -319,7 +323,7 @@ sequenceDiagram
     alt a driver accepts
         Note over PG: accept TX locks the ride: offer ACCEPTED, others CANCELLED,<br/>driver ON_TRIP, ride DRIVER_ASSIGNED
     else every offer rejected
-        Note over T: reject publishes MatchingRoundRequested, next round immediately
+        Note over T: reject publishes ride.dispatch.requested, next round immediately
     else offers expire / nobody in range
         S->>PG: rides whose round started more than offerTtl ago and have no open offer
         S->>M: runNextRound(rideId)
@@ -328,15 +332,15 @@ sequenceDiagram
 
 Tunables (`rideflow.matching.*`): initial radius 3 km, growth factor 1.5 (3 km, 4.5 km, 6.75 km), max radius 8 km, max rounds 3, candidate limit 10, offers per round 3, offer TTL 20 s, location freshness 30 s. Sending up to three concurrent offers reduces passenger wait; the first accept wins (serialised on the ride row lock) and the others get `409 RIDE_ALREADY_ASSIGNED`.
 
-State lives entirely in PostgreSQL, so matching is restart-safe: if the after-commit trigger is lost, the sweeper picks the ride up. Every instance can run the sweeper, because `runNextRound` locks the ride and re-checks every precondition. A driver who withdraws before pickup puts the ride back into `MATCHING` from round one, and is never re-offered the same ride (`UNIQUE (ride_id, driver_id)`).
+State lives entirely in PostgreSQL, so matching is restart-safe: if the Kafka trigger is late or lost (for example while Kafka is down), the sweeper picks the ride up. Every instance can run the sweeper, because `runNextRound` locks the ride and re-checks every precondition. A driver who withdraws before pickup puts the ride back into `MATCHING` from round one, and is never re-offered the same ride (`UNIQUE (ride_id, driver_id)`).
 
-*Phase 3 status:* the trigger is an in-process `@TransactionalEventListener(AFTER_COMMIT)` + `@Async` behind the `DomainEventPublisher` port. Phase 6 replaces the adapter with the transactional outbox and Kafka `ride.requested`; the matching service is unchanged.
+*Trigger:* the `matching` consumer group reads `ride.requested` (new rides) and `ride.dispatch.requested` (last offer rejected, or driver backed out). It records each event in `processed_events` in the round's transaction, because re-running a redelivered trigger could start the next round before the current one timed out. Until Phase 6 the trigger was an in-process after-commit listener behind the same `DomainEventPublisher` port; the matching service did not change.
 
 ---
 
 ## 8. Real-time location pipeline
 
-*Current path (Phase 4):* `STOMP /app/drivers/location` (or `POST /api/drivers/location`) → `DriverLocationService` validates, conditionally upserts `driver_locations`, samples `ride_track_points` during a trip, and, while the driver is assigned to a ride, publishes `DriverLocationUpdatedEvent`. After commit, `RealtimePublisher` pushes it to that ride's passenger on `/user/queue/ride-location`. The diagram below is the target path once Redis (Phase 5) and Kafka (Phase 6) take over the hot path; the validation rules and the client contract stay the same.
+Implemented in Phase 6 (before that, every report was written to PostgreSQL synchronously). `STOMP /app/drivers/location` and `POST /api/drivers/location` both go to `DriverLocationService`.
 
 ```mermaid
 sequenceDiagram
@@ -353,22 +357,25 @@ sequenceDiagram
 
     D->>WS: SEND {lat,lng,heading,speed,accuracy,recordedAt}
     WS->>L: authenticated DRIVER principal
-    L->>L: validate ranges and clock skew, per-driver rate limit
-    L->>R: HSET driver:{id}:location, EXPIRE 30s
-    L->>R: GET driver:{id}:active-ride
-    L->>K: produce keyed by driverId (includes activeRideId)
+    L->>L: validate ranges and clock skew (the socket is throttled to 1 msg/s)
+    L->>R: GET driver:{id}:state (availability + active ride; DB on a miss)
+    L->>R: Lua: store driver:{id}:location if not older, TTL 5 min
+    L->>K: produce keyed by driverId, with rideId, passengerId, status, next stop
     K->>B: consume (instance-unique group)
-    B->>P: /user/{passengerId}/queue/ride-location (only if activeRideId set)
-    K->>C: batch consume (shared group)
-    C->>C: coalesce to latest point per driver
-    C->>PG: batched UPSERT driver_locations
-    C->>PG: append sampled ride_track_points for IN_PROGRESS rides
+    B->>P: /user/{passengerId}/queue/ride-location (only if the passenger is connected to this instance)
+    K->>C: batch consume (shared group, one poll = one transaction)
+    C->>C: keep the latest report per driver
+    C->>PG: batched UPSERT driver_locations (never moves a position backwards)
+    C->>PG: append sampled ride_track_points while the ride is still IN_PROGRESS
 ```
 
 **Design points**
 
 - **No polling.** Passengers receive pushes over STOMP. REST `GET /api/rides/{id}/tracking` exists only for the initial snapshot after load/reconnect.
 - **No per-ping PostgreSQL writes.** The hot path touches Redis and Kafka only; PostgreSQL receives one upsert per driver per consumer batch, plus track points sampled at ≥ 10 s or ≥ 25 m.
+- **Who reads which copy.** The live position (Redis, falling back to PostgreSQL) serves the pickup geofence, the tracking snapshot, the final track point at completion and presence re-checks. Spatial search (matching, nearby cars, surge supply) reads PostgreSQL, which trails by one consumer batch. Going online writes PostgreSQL directly, so a driver is matchable at once.
+- **Completion.** The trip's last points may still be in flight when the driver completes. Completion therefore appends the driver's live position as the final track point, and the batch writer only appends points while the ride is still `IN_PROGRESS`.
+- **Kafka outage.** Reports keep updating Redis, so geofence, snapshots and presence keep working. PostgreSQL positions go stale and matching stops finding those drivers after 30 s. Reports from the outage are dropped (at most once), and positions resume with the next report.
 - **Privacy.** A driver's location is only ever pushed to the passenger of their active ride. Passengers browsing the map see nearby-car positions rounded to ~100 m, without identity.
 - **Connection lifecycle.**
   - *Connect:* the access token in the STOMP `CONNECT` frame, validated by `StompAuthenticationInterceptor`. An invalid or missing token gets an `ERROR` frame and the socket is closed. So is a socket that sends no `CONNECT` within 10 s.
@@ -385,7 +392,7 @@ sequenceDiagram
 
 ## 9. Redis strategy
 
-Redis holds **ephemeral, recomputable or protective** state only; PostgreSQL remains the source of truth. Rides are deliberately **not** cached: they change often and must be strongly consistent. Each key below exists because it removes a slow or rate-limited external call, or repeated database work, on a hot path. Implemented in Phase 5 (`com.rideflow.cache`, `RedisKeys` lists every key).
+Redis holds **ephemeral, recomputable or protective** state only; PostgreSQL remains the source of truth. Rides are deliberately **not** cached: they change often and must be strongly consistent. Each key below exists because it removes a slow or rate-limited external call, or repeated database work, on a hot path. Implemented in Phases 5 and 6 (`com.rideflow.cache`, `RedisKeys` lists every key).
 
 | Key | Type | TTL | Why it exists | Invalidation |
 |---|---|---|---|---|
@@ -395,6 +402,8 @@ Redis holds **ephemeral, recomputable or protective** state only; PostgreSQL rem
 | `geocode:reverse:{lat,lng}` (4 decimals, ~11 m) | JSON | 24 h | Same policy; nearby map pins share an entry | Expiry |
 | `ride:{id}:eta` | JSON | 30 s | A driver reports every few seconds; routing each report would call the router several times a second per ride for a number that barely changes. The cached ETA is carried in location pushes and the tracking snapshot | **Deleted on every ride status change**, because the destination changes (pickup, then dropoff) or tracking ends. Entries carry their target, so a late write for the old destination is ignored |
 | `ride:{id}:eta-refresh` | string, `SET NX` | 30 s | Only one instance recomputes an expired ETA, not every location update that notices it | Expiry; deleted with `ride:{id}:eta` |
+| `driver:{id}:location` | hash | 5 min | The live position (lat, lng, heading, recordedAt, updatedAt), written on every accepted report by a Lua script that refuses older reports. Read by the geofence, tracking snapshot, completion and presence checks | Overwritten by each report; the TTL (longer than the 2-min presence timeout) removes drivers who stopped reporting |
+| `driver:{id}:state` | JSON | 60 s | Availability and active ride (id, passenger, status, stops), which every location report needs. Without it each report would read two tables | Rewritten after the commit of every change to the driver's availability or ride; a miss loads from the database with `SET NX` (D27) |
 | `rl:{scope}:{sha256(subject)}` | counter | window | Fixed-window rate limits, shared by all instances. An atomic Lua `INCR` + `PEXPIRE` + `PTTL`; the remaining TTL becomes `Retry-After`. Subjects (IPs, emails) are hashed | Expiry |
 
 **Rate limits** (`rideflow.rate-limit.rules`):
@@ -425,7 +434,7 @@ Limits return `429 RATE_LIMITED` with `Retry-After`. A busy geocoding budget ret
 
 Redis command latency dashboards are Phase 11.
 
-**Not in Redis (yet).** Driver positions (`driver:{id}:location`, `driver:{id}:active-ride`) move to Redis together with the Kafka batch writer in Phase 6 (D23). Until then every report is written to PostgreSQL anyway, so a Redis copy would only add a write. Nearby-driver search stays in PostGIS (D2), because it joins spatial filters with verification, availability and vehicle category.
+**Not in Redis.** Nearby-driver search stays in PostGIS (D2), because it joins spatial filters with verification, availability and vehicle category. Positions reach PostGIS through the batch consumer (section 8).
 
 **Measured effect.** The results are in [performance.md](performance.md#cache-benchmark-phase-5).
 
@@ -433,36 +442,48 @@ Redis command latency dashboards are Phase 11.
 
 ## 10. Kafka architecture
 
-Full topic and schema catalogue: [events.md](events.md).
+Implemented in Phase 6. Topic catalogue, payloads and delivery semantics: [events.md](events.md) section 1.
 
 ```mermaid
 flowchart LR
-    RS["RideService<br/>+ outbox"] -->|ride.requested| MC["Matching consumer"]
-    MC -->|ride.driver.assigned| NC["Notification consumer"]
-    RS -->|ride.accepted<br/>ride.driver.arriving<br/>ride.driver.arrived<br/>ride.started<br/>ride.cancelled<br/>ride.expired| NC
-    RS -->|ride.completed| PC["Payment consumer"]
-    RS -->|ride.completed| AC["Trip analysis consumer"]
+    RS["Ride services<br/>+ outbox"] -->|ride.requested<br/>ride.dispatch.requested| MC["matching"]
+    MC -->|ride.driver.assigned<br/>ride.matching / ride.expired| RB
+    RS -->|ride.accepted … ride.cancelled| NC["notifications"]
+    RS -->|ride.completed| PC["payments"]
     PC -->|payment.created| NC
-    ADM["Admin / driver verification"] -->|notification.requested| NC
-    LOC["LocationIngestionService"] -->|driver.location.updated| LPC["Location persistence consumer"]
-    RS & MC & PC & LOC -.->|all ride.* and location| RB["Realtime bridge<br/>instance-unique group"]
-    RB -->|STOMP push| CL["Clients"]
-    NC -->|persist + STOMP push| CL
+    ADM["Admin driver verification"] -->|notification.requested| NC
+    NC -->|notification.created| RB
+    LOC["DriverLocationService<br/>(direct, at most once)"] -->|driver.location.updated| LPC["location-persistence<br/>(batch)"]
+    LOC --> RB
+    RS -->|all ride.* topics| RB["realtime bridge<br/>group per instance"]
+    RB -->|STOMP push to local sessions| CL["Clients"]
 ```
 
 **Where Kafka is used, and where it is not**
 
 - ✅ Matching: decouples the passenger's `POST /rides` (fast `201`) from a multi-step search and offer process.
-- ✅ Payments, AI analysis, notifications: side effects of completion that must not slow or fail the driver's "complete" request.
+- ✅ Payments, notifications (and AI analysis in Phase 7): side effects of completion that must not slow or fail the driver's "complete" request.
 - ✅ Location: absorbs high-frequency writes and feeds both batch persistence and fan-out.
-- ❌ Accept, start, complete, fare estimate, login: the caller needs the result immediately, so these are synchronous REST calls.
+- ✅ WebSocket fan-out: an instance pushes to its own sessions, so every instance must see every event.
+- ❌ Accept, start, complete, fare estimate, login, ratings: the caller needs the result immediately, so these are synchronous REST calls.
 
 **Reliability**
 
-- Producer: transactional outbox → `OutboxRelay` polls unpublished rows (`FOR UPDATE SKIP LOCKED`, batch 100, every 250 ms) and sends with `acks=all`, `enable.idempotence=true`. It marks a row published only after the broker acknowledges it.
-- Consumer: at-least-once delivery. Handlers with side effects are idempotent through `processed_events(consumer, event_id)` inserts in the same transaction, or through natural idempotency (state checks).
-- Errors: `DefaultErrorHandler` with exponential backoff (3 attempts), then `DeadLetterPublishingRecoverer` to `<topic>.DLT`. DLT depth is exposed as a metric and shown on the admin system page.
-- Ordering: messages are keyed by `rideId` (ride topics) or `driverId` (location), so per-entity order is preserved within a topic. Cross-topic ordering is handled with `aggregateVersion`.
+- **Producer:**
+  - Domain events are written to `outbox_events` in the transaction that caused them (D5).
+  - `OutboxRelay` sends them in order through an idempotent producer (`acks=all`) and marks them published only when acknowledged (D26).
+  - Positions skip the outbox (at most once, events.md §1.4).
+- **Consumer:**
+  - At least once.
+  - Handlers with side effects record `processed_events(consumer, event_id)` in the same transaction (matching, payments, notifications).
+  - The location writer is naturally idempotent.
+- **Errors:**
+  - `DefaultErrorHandler` retries with exponential backoff (1 s, 2 s, 4 s), then `DeadLetterPublishingRecoverer` sends the record to `<topic>.DLT`.
+  - Undecodable records go to the DLT at once.
+  - `rideflow_kafka_dead_letters_total{topic}` counts both.
+- **Ordering:** keys are `rideId` (ride topics) and `driverId` (positions), so per-entity order holds within a topic. Across topics, consumers use `aggregateVersion` and state checks (D25).
+- **Scaling:** 3 partitions per topic cap each shared group at 3 active consumers. The realtime bridge's per-instance group means every instance reads every event, which is fine up to thousands of concurrent rides (section 8).
+- **Tests:** `KafkaEventFlowIT` runs the full lifecycle against a real broker (Testcontainers) and reads the topics with an independent consumer. It also covers dead-lettering (immediate and after retries) and redelivery of the same record.
 
 ---
 
@@ -621,7 +642,7 @@ Logs, metrics and errors are three separate signals:
 
 - HTTP: `http_server_requests_seconds` (count, latency histogram, status → error rate), auto-instrumented.
 - JVM / CPU / GC / threads, Hikari pool (`hikaricp_connections_*`), Lettuce Redis command latency, Kafka client and consumer-lag metrics, all through Micrometer binders.
-- Custom (`monitoring/RideFlowMetrics`): `rideflow_rides_total{event}`, `rideflow_matching_duration_seconds` (requested → assigned), `rideflow_offers_total{outcome}`, `rideflow_ws_sessions_active{role}`, `rideflow_location_updates_total{result}`, `rideflow_outbox_pending`, `rideflow_dlt_messages_total{topic}`, `rideflow_ai_requests_total{provider,outcome}`, `rideflow_ai_latency_seconds`, `rideflow_rate_limit_rejections_total{scope}`.
+- Custom (`monitoring/RideFlowMetrics`): `rideflow_rides_total{event}`, `rideflow_matching_duration_seconds` (requested → assigned), `rideflow_offers_total{outcome}`, `rideflow_ws_sessions_active{role}`, `rideflow_location_updates_total{result}`, `rideflow_outbox_pending`, `rideflow_outbox_published_total`, `rideflow_outbox_failures_total`, `rideflow_kafka_dead_letters_total{topic}`, `rideflow_location_publish_failures_total`, `rideflow_ai_requests_total{provider,outcome}`, `rideflow_ai_latency_seconds`, `rideflow_rate_limit_rejections_total{scope}`.
 
 **Grafana (provisioned from `infrastructure/grafana/`):**
 

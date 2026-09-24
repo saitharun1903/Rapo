@@ -18,11 +18,16 @@ public class RideTrackPointRepository {
             INSERT INTO ride_track_points (ride_id, location, recorded_at) VALUES (:rideId, %s, :recordedAt)
             """.formatted(POINT);
 
-    /** Skips the point when a sample exists that is both recent and close, i.e. keeps it if time OR distance moved enough. */
+    /**
+     * Skips the point when a sample exists that is both recent and close, i.e. keeps it if time OR distance
+     * moved enough. Only while the ride is in progress: positions are persisted asynchronously, and one that
+     * arrives after completion must not extend the trail the fare was computed from.
+     */
     private static final String APPEND_IF_SAMPLED = """
             INSERT INTO ride_track_points (ride_id, location, recorded_at)
             SELECT :rideId, %1$s, :recordedAt
-            WHERE NOT EXISTS (
+            WHERE EXISTS (SELECT 1 FROM rides r WHERE r.id = :rideId AND r.status = 'IN_PROGRESS')
+              AND NOT EXISTS (
                 SELECT 1 FROM ride_track_points p
                 WHERE p.ride_id = :rideId
                   AND p.recorded_at > :recentSince

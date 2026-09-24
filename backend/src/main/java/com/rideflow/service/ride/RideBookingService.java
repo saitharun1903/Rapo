@@ -13,10 +13,8 @@ import com.rideflow.exception.ErrorCode;
 import com.rideflow.exception.InvalidStateException;
 import com.rideflow.repository.FareBreakdownRepository;
 import com.rideflow.repository.RideRepository;
-import com.rideflow.service.event.DomainEventPublisher;
 import com.rideflow.service.fare.FareQuote;
 import com.rideflow.service.fare.FareQuoteService;
-import com.rideflow.service.ride.event.MatchingRoundRequestedEvent;
 import java.time.Clock;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -26,8 +24,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Turns a verified fare quote into a REQUESTED ride. Matching happens asynchronously after commit, so
- * the passenger gets 201 immediately and follows progress through status updates.
+ * Turns a verified fare quote into a REQUESTED ride. The status change is published as {@code ride.requested},
+ * which the matching consumer reacts to, so the passenger gets 201 immediately and follows progress through
+ * status updates.
  */
 @Service
 public class RideBookingService {
@@ -38,19 +37,17 @@ public class RideBookingService {
     private final RideRepository rides;
     private final FareBreakdownRepository fareBreakdowns;
     private final RideTransitionRecorder recorder;
-    private final DomainEventPublisher events;
     private final RideViewAssembler views;
     private final RateLimiter rateLimiter;
     private final Clock clock;
 
     public RideBookingService(FareQuoteService quotes, RideRepository rides, FareBreakdownRepository fareBreakdowns,
-                              RideTransitionRecorder recorder, DomainEventPublisher events, RideViewAssembler views,
+                              RideTransitionRecorder recorder, RideViewAssembler views,
                               RateLimiter rateLimiter, Clock clock) {
         this.quotes = quotes;
         this.rides = rides;
         this.fareBreakdowns = fareBreakdowns;
         this.recorder = recorder;
-        this.events = events;
         this.views = views;
         this.rateLimiter = rateLimiter;
         this.clock = clock;
@@ -79,7 +76,6 @@ public class RideBookingService {
             throw activeRideExists();
         }
         fareBreakdowns.save(FareBreakdown.of(ride.getId(), FareKind.ESTIMATE, quote.fare()));
-        events.publish(new MatchingRoundRequestedEvent(ride.getId()));
         log.info("Ride {} requested ({}, {} m, fare {} {})", ride.getId(), ride.getVehicleCategory(),
                 ride.getEstimatedDistanceMeters(), quote.fare().total(), quote.fare().currency());
         return views.toResponse(ride);

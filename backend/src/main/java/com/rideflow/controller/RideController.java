@@ -1,6 +1,8 @@
 package com.rideflow.controller;
 
 import com.rideflow.dto.common.PageResponse;
+import com.rideflow.dto.rating.RateRideRequest;
+import com.rideflow.dto.rating.RatingResponse;
 import com.rideflow.dto.ride.BookRideRequest;
 import com.rideflow.dto.ride.CancelRideRequest;
 import com.rideflow.dto.ride.RideResponse;
@@ -9,6 +11,7 @@ import com.rideflow.dto.ride.RideTimelineEntryResponse;
 import com.rideflow.dto.ride.RideTrackingResponse;
 import com.rideflow.entity.RideStatus;
 import com.rideflow.security.AuthenticatedUser;
+import com.rideflow.service.rating.RatingService;
 import com.rideflow.service.ride.RideBookingService;
 import com.rideflow.service.ride.RideCancellationService;
 import com.rideflow.service.ride.RideQueryService;
@@ -23,6 +26,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -46,13 +50,16 @@ public class RideController {
     private final RideQueryService queryService;
     private final RideCancellationService cancellationService;
     private final RideTrackingService trackingService;
+    private final RatingService ratingService;
 
     public RideController(RideBookingService bookingService, RideQueryService queryService,
-                          RideCancellationService cancellationService, RideTrackingService trackingService) {
+                          RideCancellationService cancellationService, RideTrackingService trackingService,
+                          RatingService ratingService) {
         this.bookingService = bookingService;
         this.queryService = queryService;
         this.cancellationService = cancellationService;
         this.trackingService = trackingService;
+        this.ratingService = ratingService;
     }
 
     @PostMapping
@@ -97,6 +104,15 @@ public class RideController {
     public RideTrackingResponse tracking(
             @AuthenticationPrincipal AuthenticatedUser user, @PathVariable UUID rideId) {
         return trackingService.snapshot(user, rideId);
+    }
+
+    @PostMapping("/{rideId}/rating")
+    @Operation(summary = "Rate the other participant of a completed ride (once per participant)")
+    public ResponseEntity<RatingResponse> rate(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable UUID rideId,
+            @Valid @RequestBody RateRideRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ratingService.rate(user, rideId, request));
     }
 
     @PostMapping("/{rideId}/cancel")

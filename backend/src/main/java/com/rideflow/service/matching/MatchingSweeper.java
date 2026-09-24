@@ -15,8 +15,9 @@ import org.springframework.stereotype.Component;
 
 /**
  * Advances rides whose matching round timed out (offers expired or nobody was in range) and recovers
- * rides whose after-commit trigger never ran. State lives in the database, so this is restart-safe and
- * can run on every instance: {@link DriverMatchingService#runNextRound} serialises per ride.
+ * rides whose Kafka trigger has not arrived (for example while Kafka is unreachable). State lives in the
+ * database, so this is restart-safe and can run on every instance: {@link DriverMatchingService#runNextRound}
+ * serialises per ride.
  */
 @Component
 public class MatchingSweeper {

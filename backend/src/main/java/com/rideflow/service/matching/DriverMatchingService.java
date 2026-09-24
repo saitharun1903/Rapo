@@ -10,6 +10,7 @@ import com.rideflow.repository.NearbyDriver;
 import com.rideflow.repository.RideOfferRepository;
 import com.rideflow.repository.RideRepository;
 import com.rideflow.service.event.DomainEventPublisher;
+import com.rideflow.service.event.ProcessedEvents;
 import com.rideflow.service.ride.RideTransitionRecorder;
 import com.rideflow.service.ride.event.RideOffersCreatedEvent;
 import java.time.Clock;
@@ -31,30 +32,46 @@ import org.springframework.transaction.annotation.Transactional;
 public class DriverMatchingService {
 
     private static final Logger log = LoggerFactory.getLogger(DriverMatchingService.class);
+    /** Idempotency key of the matching consumer ({@code processed_events.consumer}). */
+    private static final String CONSUMER = "matching";
 
     private final RideRepository rides;
     private final RideOfferRepository offers;
     private final DriverLocationRepository driverLocations;
     private final RideTransitionRecorder recorder;
     private final DomainEventPublisher events;
+    private final ProcessedEvents processedEvents;
     private final MatchingProperties properties;
     private final Clock clock;
 
     public DriverMatchingService(RideRepository rides, RideOfferRepository offers,
                                  DriverLocationRepository driverLocations, RideTransitionRecorder recorder,
-                                 DomainEventPublisher events, MatchingProperties properties, Clock clock) {
+                                 DomainEventPublisher events, ProcessedEvents processedEvents,
+                                 MatchingProperties properties, Clock clock) {
         this.rides = rides;
         this.offers = offers;
         this.driverLocations = driverLocations;
         this.recorder = recorder;
         this.events = events;
+        this.processedEvents = processedEvents;
         this.properties = properties;
         this.clock = clock;
     }
 
     /**
+     * Kafka entry point ({@code ride.requested}, {@code ride.dispatch.requested}). A redelivered trigger is
+     * ignored: re-running it later could start the next round before the current one has timed out.
+     */
+    @Transactional
+    public void runNextRoundOnce(UUID eventId, UUID rideId) {
+        if (processedEvents.firstDelivery(CONSUMER, eventId)) {
+            runNextRound(rideId);
+        }
+    }
+
+    /**
      * Starts the ride's next matching round if it still needs one. Safe to call repeatedly and
-     * concurrently (after-commit trigger, sweeper, other instances): the ride row is locked and every
+     * concurrently (Kafka trigger, sweeper, other instances): the ride row is locked and every
      * precondition is re-checked under the lock.
      */
     @Transactional

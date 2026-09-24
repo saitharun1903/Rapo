@@ -6,6 +6,8 @@ import com.rideflow.entity.ActorType;
 import com.rideflow.entity.DistanceSource;
 import com.rideflow.entity.EstimateSource;
 import com.rideflow.entity.PaymentMethod;
+import com.rideflow.entity.PaymentProvider;
+import com.rideflow.entity.PaymentStatus;
 import com.rideflow.entity.RideStatus;
 import com.rideflow.entity.VehicleCategory;
 import com.rideflow.geospatial.GeoPoint;
@@ -27,6 +29,7 @@ public record RideResponse(
         PaymentMethod paymentMethod,
         Estimate estimate,
         Actual actual,
+        PaymentInfo payment,
         DriverInfo driver,
         PassengerInfo passenger,
         Matching matching,
@@ -43,6 +46,14 @@ public record RideResponse(
     /** Present once the ride is completed. */
     public record Actual(int distanceMeters, int durationSeconds, DistanceSource distanceSource, Money fare,
                          FareBreakdownResponse breakdown) {
+    }
+
+    /**
+     * Present once the completed ride has been settled (asynchronously, shortly after completion).
+     * {@code provider} {@code SANDBOX} marks a simulated card payment: no money moved.
+     */
+    public record PaymentInfo(UUID id, PaymentMethod method, PaymentStatus status, PaymentProvider provider,
+                              Money amount) {
     }
 
     public record DriverInfo(UUID id, String fullName, BigDecimal ratingAvg, int ratingCount, Vehicle vehicle) {

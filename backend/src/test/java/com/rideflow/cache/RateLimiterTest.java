@@ -37,7 +37,7 @@ class RateLimiterTest {
     private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
     private final RedisAvailability availability = new RedisAvailability(new CacheProperties(true,
             Duration.ofMinutes(15), Duration.ofHours(24), Duration.ofSeconds(60), Duration.ofSeconds(30),
-            Duration.ofSeconds(5)), clock, meters);
+            Duration.ofSeconds(60), Duration.ofMinutes(5), Duration.ofSeconds(5)), clock, meters);
 
     private RateLimiter limiter(boolean enabled) {
         Map<RateLimitScope, RateLimitProperties.Rule> rules = new EnumMap<>(RateLimitScope.class);

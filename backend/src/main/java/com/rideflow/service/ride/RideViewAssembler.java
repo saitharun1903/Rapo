@@ -7,10 +7,12 @@ import com.rideflow.entity.Driver;
 import com.rideflow.entity.FareBreakdown;
 import com.rideflow.entity.FareKind;
 import com.rideflow.entity.Ride;
+import com.rideflow.entity.RideStatus;
 import com.rideflow.entity.Vehicle;
 import com.rideflow.mapper.FareMapper;
 import com.rideflow.repository.DriverRepository;
 import com.rideflow.repository.FareBreakdownRepository;
+import com.rideflow.repository.PaymentRepository;
 import com.rideflow.repository.UserRepository;
 import com.rideflow.repository.VehicleRepository;
 import java.util.List;
@@ -29,14 +31,17 @@ public class RideViewAssembler {
     private final DriverRepository drivers;
     private final VehicleRepository vehicles;
     private final UserRepository users;
+    private final PaymentRepository payments;
     private final FareMapper fareMapper;
 
     public RideViewAssembler(FareBreakdownRepository fareBreakdowns, DriverRepository drivers,
-                             VehicleRepository vehicles, UserRepository users, FareMapper fareMapper) {
+                             VehicleRepository vehicles, UserRepository users, PaymentRepository payments,
+                             FareMapper fareMapper) {
         this.fareBreakdowns = fareBreakdowns;
         this.drivers = drivers;
         this.vehicles = vehicles;
         this.users = users;
+        this.payments = payments;
         this.fareMapper = fareMapper;
     }
 
@@ -53,6 +58,7 @@ public class RideViewAssembler {
                 ride.getPaymentMethod(),
                 estimate(ride, fares.get(FareKind.ESTIMATE)),
                 actual(ride, fares.get(FareKind.FINAL)),
+                paymentInfo(ride),
                 driverInfo(ride),
                 users.findById(ride.getPassengerId())
                         .map(user -> new RideResponse.PassengerInfo(user.getId(), user.getFullName()))
@@ -63,6 +69,16 @@ public class RideViewAssembler {
                         ride.getExpiredAt()),
                 ride.getCancelledBy() == null ? null
                         : new RideResponse.Cancellation(ride.getCancelledBy(), ride.getCancellationReason()));
+    }
+
+    private RideResponse.PaymentInfo paymentInfo(Ride ride) {
+        if (ride.getStatus() != RideStatus.COMPLETED) {
+            return null;
+        }
+        return payments.findByRideId(ride.getId())
+                .map(payment -> new RideResponse.PaymentInfo(payment.getId(), payment.getMethod(), payment.getStatus(),
+                        payment.getProvider(), Money.of(payment.getAmount(), payment.getCurrency())))
+                .orElse(null);
     }
 
     /** Summaries for a page of rides, loading all fare snapshots in one query. */

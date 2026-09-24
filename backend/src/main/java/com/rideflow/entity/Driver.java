@@ -141,6 +141,12 @@ public class Driver extends TimestampedEntity {
         }
     }
 
+    /** The average is recomputed from all of the driver's ratings by the caller, so rounding never accumulates. */
+    public void updateRating(BigDecimal average, int count) {
+        this.ratingAvg = average;
+        this.ratingCount = count;
+    }
+
     public boolean isOnline() {
         return availability != DriverAvailability.OFFLINE;
     }

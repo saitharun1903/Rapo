@@ -1,0 +1,16 @@
+package com.rideflow.entity;
+
+public enum NotificationType {
+    DRIVER_ACCEPTED,
+    DRIVER_ARRIVING,
+    DRIVER_ARRIVED,
+    DRIVER_REASSIGNING,
+    TRIP_STARTED,
+    TRIP_COMPLETED,
+    RIDE_CANCELLED,
+    RIDE_EXPIRED,
+    PAYMENT_RECEIVED,
+    EARNINGS_RECORDED,
+    DRIVER_VERIFIED,
+    DRIVER_REJECTED
+}

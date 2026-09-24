@@ -59,11 +59,6 @@ public class DriverLocationRepository {
               AND dl.updated_at > :freshSince AND ST_DWithin(dl.location, %s, :radius)
             """.formatted(POINT);
 
-    private static final String DISTANCE_TO = """
-            SELECT ST_Distance(location, %s) FROM driver_locations
-            WHERE driver_id = :driverId AND updated_at > :freshSince
-            """.formatted(POINT);
-
     private static final String SILENT_AVAILABLE = """
             SELECT d.id FROM drivers d
             LEFT JOIN driver_locations dl ON dl.driver_id = d.id
@@ -72,8 +67,6 @@ public class DriverLocationRepository {
             LIMIT :limit
             """;
 
-    private static final String LAST_UPDATE = "SELECT updated_at FROM driver_locations WHERE driver_id = :driverId";
-
     private final NamedParameterJdbcTemplate jdbc;
 
     public DriverLocationRepository(NamedParameterJdbcTemplate jdbc) {
@@ -81,7 +74,8 @@ public class DriverLocationRepository {
     }
 
     /**
-     * Stores the position unless a newer one is already stored (out-of-order reports never regress it).
+     * Stores the position unless a newer one is already stored (out-of-order reports never regress it). Used
+     * when a driver goes online, so matching can find them at once.
      *
      * @return {@code true} if this report became the driver's current position
      */
@@ -94,6 +88,30 @@ public class DriverLocationRepository {
                 .addValue("accuracy", accuracyMeters)
                 .addValue("recordedAt", SqlTime.utc(recordedAt))
                 .addValue("now", SqlTime.utc(now))) == 1;
+    }
+
+    /**
+     * Writes a batch of positions from the location consumer, one statement per driver in a single JDBC
+     * batch. The same never-regress rule applies, so replaying a batch is harmless.
+     */
+    public void upsertAll(List<LocationWrite> positions) {
+        if (positions.isEmpty()) {
+            return;
+        }
+        MapSqlParameterSource[] batch = positions.stream().map(position -> point(position.point())
+                        .addValue("driverId", position.driverId())
+                        .addValue("heading", position.headingDeg())
+                        .addValue("speed", position.speedMps())
+                        .addValue("accuracy", position.accuracyMeters())
+                        .addValue("recordedAt", SqlTime.utc(position.recordedAt()))
+                        .addValue("now", SqlTime.utc(position.receivedAt())))
+                .toArray(MapSqlParameterSource[]::new);
+        jdbc.batchUpdate(UPSERT, batch);
+    }
+
+    /** One position report to persist; {@code receivedAt} (server time) becomes {@code updated_at}. */
+    public record LocationWrite(UUID driverId, GeoPoint point, Integer headingDeg, Double speedMps,
+                                Double accuracyMeters, Instant recordedAt, Instant receivedAt) {
     }
 
     public Optional<DriverPosition> find(UUID driverId) {
@@ -143,25 +161,11 @@ public class DriverLocationRepository {
         return count == null ? 0 : count;
     }
 
-    /** Metres between the driver's fresh position and {@code point}; empty if no fresh position exists. */
-    public Optional<Double> distanceTo(UUID driverId, GeoPoint point, Instant freshSince) {
-        return jdbc.query(DISTANCE_TO, point(point)
-                        .addValue("driverId", driverId)
-                        .addValue("freshSince", SqlTime.utc(freshSince)), (rs, row) -> rs.getDouble(1))
-                .stream().findFirst();
-    }
-
     /** AVAILABLE drivers with no location update since {@code silentSince}, longest-silent first. */
     public List<UUID> findSilentAvailableDrivers(Instant silentSince, int limit) {
         return jdbc.queryForList(SILENT_AVAILABLE, new MapSqlParameterSource()
                 .addValue("silentSince", SqlTime.utc(silentSince))
                 .addValue("limit", limit), UUID.class);
-    }
-
-    /** Server time of the driver's last accepted location update, if any. */
-    public Optional<Instant> lastUpdate(UUID driverId) {
-        return jdbc.query(LAST_UPDATE, new MapSqlParameterSource("driverId", driverId),
-                (rs, row) -> SqlTime.instant(rs.getTimestamp("updated_at"))).stream().findFirst();
     }
 
     private static MapSqlParameterSource point(GeoPoint point) {

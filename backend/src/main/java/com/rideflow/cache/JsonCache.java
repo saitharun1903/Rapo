@@ -101,6 +101,21 @@ public class JsonCache {
     }
 
     /**
+     * Stores {@code value} unless the key already holds one. A value loaded from the database uses this, so it
+     * can never overwrite a newer value that was written (with {@link #put}) after a change committed.
+     */
+    public void putIfAbsent(CacheName cache, String key, Object value) {
+        if (!properties.enabled() || !availability.isAvailable()) {
+            return;
+        }
+        try {
+            redis.opsForValue().setIfAbsent(key, jsonMapper.writeValueAsString(value), cache.ttl(properties));
+        } catch (DataAccessException ex) {
+            availability.recordFailure(ex);
+        }
+    }
+
+    /**
      * Sets {@code key} only if absent, with {@code ttl}. Used as a short-lived claim so that one caller does a
      * piece of work. When Redis is unavailable nobody can claim, so the work is skipped rather than repeated
      * by every caller.

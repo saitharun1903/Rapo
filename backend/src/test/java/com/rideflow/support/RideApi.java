@@ -4,6 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import com.jayway.jsonpath.JsonPath;
+import com.rideflow.entity.PaymentMethod;
 import com.rideflow.geospatial.GeoPoint;
 import com.rideflow.support.RideFixtures.Actor;
 import java.time.Instant;
@@ -46,16 +47,21 @@ public class RideApi {
                 "{\"location\":%s,\"recordedAt\":\"%s\"}".formatted(point(at), recordedAt));
     }
 
-    /** Estimates and books an ECONOMY ride; returns the ride id. */
+    /** Estimates and books an ECONOMY ride paid in cash; returns the ride id. */
     public UUID book(Actor passenger, GeoPoint pickup, GeoPoint dropoff) throws Exception {
+        return book(passenger, pickup, dropoff, PaymentMethod.CASH);
+    }
+
+    /** Estimates and books an ECONOMY ride; returns the ride id. */
+    public UUID book(Actor passenger, GeoPoint pickup, GeoPoint dropoff, PaymentMethod paymentMethod) throws Exception {
         MvcResult estimate = call(passenger, "POST", "/api/fares/estimate",
                 "{\"pickup\":%s,\"dropoff\":%s}".formatted(point(pickup), point(dropoff)));
         List<String> quoteIds = JsonPath.read(body(estimate), "$.quotes[?(@.vehicleCategory == 'ECONOMY')].quoteId");
         String quoteId = quoteIds.getFirst();
         MvcResult booked = call(passenger, "POST", "/api/rides", """
                 {"quoteId":"%s","pickup":{"point":%s,"address":"Pickup"},
-                 "dropoff":{"point":%s,"address":"Dropoff"},"paymentMethod":"CASH"}
-                """.formatted(quoteId, point(pickup), point(dropoff)));
+                 "dropoff":{"point":%s,"address":"Dropoff"},"paymentMethod":"%s"}
+                """.formatted(quoteId, point(pickup), point(dropoff), paymentMethod));
         if (booked.getResponse().getStatus() != 201) {
             throw new AssertionError("Booking failed: " + booked.getResponse().getStatus() + " " + body(booked));
         }

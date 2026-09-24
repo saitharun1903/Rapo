@@ -17,13 +17,14 @@ import com.rideflow.exception.ErrorCode;
 import com.rideflow.exception.InvalidStateException;
 import com.rideflow.exception.ResourceNotFoundException;
 import com.rideflow.exception.RideFlowException;
-import com.rideflow.repository.DriverLocationRepository;
+import com.rideflow.geospatial.GeoMath;
 import com.rideflow.repository.DriverRepository;
 import com.rideflow.repository.FareBreakdownRepository;
 import com.rideflow.repository.RideOfferRepository;
 import com.rideflow.repository.RideTrackPointRepository.TrackSummary;
 import com.rideflow.repository.RideTrackPointRepository;
 import com.rideflow.repository.VehicleRepository;
+import com.rideflow.service.driver.DriverPositions;
 import com.rideflow.service.event.DomainEventPublisher;
 import com.rideflow.service.fare.FareCalculator;
 import com.rideflow.service.ride.event.MatchingRoundRequestedEvent;
@@ -52,7 +53,7 @@ public class DriverRideService {
     private final RideOfferWithdrawal offerWithdrawal;
     private final DriverRepository drivers;
     private final VehicleRepository vehicles;
-    private final DriverLocationRepository driverLocations;
+    private final DriverPositions positions;
     private final RideTrackPointRepository trackPoints;
     private final FareBreakdownRepository fareBreakdowns;
     private final FareCalculator fareCalculator;
@@ -65,7 +66,7 @@ public class DriverRideService {
 
     public DriverRideService(RideAccessPolicy access, RideOfferRepository offers, RideOfferWithdrawal offerWithdrawal,
                              DriverRepository drivers,
-                             VehicleRepository vehicles, DriverLocationRepository driverLocations,
+                             VehicleRepository vehicles, DriverPositions positions,
                              RideTrackPointRepository trackPoints, FareBreakdownRepository fareBreakdowns,
                              FareCalculator fareCalculator, RideTransitionRecorder recorder,
                              DomainEventPublisher events, RideViewAssembler views, RideProperties rideProperties,
@@ -75,7 +76,7 @@ public class DriverRideService {
         this.offerWithdrawal = offerWithdrawal;
         this.drivers = drivers;
         this.vehicles = vehicles;
-        this.driverLocations = driverLocations;
+        this.positions = positions;
         this.trackPoints = trackPoints;
         this.fareBreakdowns = fareBreakdowns;
         this.fareCalculator = fareCalculator;
@@ -139,7 +140,9 @@ public class DriverRideService {
     public RideResponse markArrived(UUID driverId, UUID rideId) {
         Instant now = clock.instant();
         Ride ride = access.lockAssignedTo(driverId, rideId);
-        double distance = driverLocations.distanceTo(driverId, ride.getPickup(), freshSince(now))
+        double distance = positions.latest(driverId)
+                .filter(position -> position.updatedAt().isAfter(freshSince(now)))
+                .map(position -> GeoMath.haversineMeters(position.point(), ride.getPickup()))
                 .orElseThrow(() -> new RideFlowException(ErrorCode.LOCATION_UNAVAILABLE,
                         "No recent location from your device; check GPS and try again"));
         if (distance > rideProperties.pickupGeofenceMeters()) {
@@ -184,7 +187,7 @@ public class DriverRideService {
     }
 
     private void recordCurrentPosition(UUID driverId, UUID rideId, Instant now) {
-        driverLocations.find(driverId)
+        positions.latest(driverId)
                 .filter(position -> position.updatedAt().isAfter(freshSince(now)))
                 .ifPresent(position -> trackPoints.append(rideId, position.point(), now));
     }

@@ -8,9 +8,9 @@ import com.rideflow.entity.RideStatus;
 import com.rideflow.entity.Role;
 import com.rideflow.exception.ErrorCode;
 import com.rideflow.exception.InvalidStateException;
-import com.rideflow.repository.DriverLocationRepository;
 import com.rideflow.repository.DriverPosition;
 import com.rideflow.security.AuthenticatedUser;
+import com.rideflow.service.driver.DriverPositions;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
@@ -24,15 +24,15 @@ import org.springframework.stereotype.Service;
 public class RideTrackingService {
 
     private final RideAccessPolicy access;
-    private final DriverLocationRepository driverLocations;
+    private final DriverPositions positions;
     private final LiveEtaService liveEta;
     private final MatchingProperties matchingProperties;
     private final Clock clock;
 
-    public RideTrackingService(RideAccessPolicy access, DriverLocationRepository driverLocations,
+    public RideTrackingService(RideAccessPolicy access, DriverPositions positions,
                                LiveEtaService liveEta, MatchingProperties matchingProperties, Clock clock) {
         this.access = access;
-        this.driverLocations = driverLocations;
+        this.positions = positions;
         this.liveEta = liveEta;
         this.matchingProperties = matchingProperties;
         this.clock = clock;
@@ -48,7 +48,7 @@ public class RideTrackingService {
             throw new InvalidStateException(ErrorCode.TRACKING_UNAVAILABLE,
                     "Live tracking is available while a driver is assigned to the ride");
         }
-        DriverPosition position = driverLocations.find(ride.getDriverId()).orElse(null);
+        DriverPosition position = positions.latest(ride.getDriverId()).orElse(null);
         if (position == null) {
             return new RideTrackingResponse(rideId, ride.getStatus(), null, true, null);
         }

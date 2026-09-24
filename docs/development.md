@@ -77,6 +77,9 @@ startup if one is missing.
 | `GEOCODING_USER_AGENT` | no | `RideFlow/0.1 (+repo URL)` | Identifying User-Agent, required by the Nominatim usage policy; add a contact address when deploying |
 | `GEOCODING_COUNTRY_CODES` | no | `in` | Countries search results are limited to |
 | `KAFKA_HOST_PORT` | no | `29092` | Host port of the Kafka EXTERNAL listener |
+| `KAFKA_BOOTSTRAP_SERVERS` | no | `localhost:29092` | Kafka brokers for the backend |
+| `KAFKA_TOPIC_PREFIX` | no | (empty) | Prepended to every topic and consumer group, to share one cluster between environments |
+| `KAFKA_REPLICATION_FACTOR` | no | `1` | Replication of the declared topics; at least 3 on a real cluster |
 | `JWT_SECRET` | **yes** | — | HS256 signing key, ≥ 32 bytes (`openssl rand -base64 48`) |
 | `JWT_ISSUER` | no | `rideflow` | `iss` claim, validated on every request |
 | `JWT_ACCESS_TOKEN_TTL` | no | `15m` | Access-token lifetime |

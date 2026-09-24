@@ -3,7 +3,6 @@ package com.rideflow.service.driver;
 import com.rideflow.entity.Driver;
 import com.rideflow.entity.DriverAvailability;
 import com.rideflow.entity.OfflineReason;
-import com.rideflow.repository.DriverLocationRepository;
 import com.rideflow.repository.DriverRepository;
 import com.rideflow.repository.RideOfferRepository;
 import com.rideflow.service.driver.event.DriverWentOfflineEvent;
@@ -25,14 +24,16 @@ public class DriverPresenceService {
     private static final Logger log = LoggerFactory.getLogger(DriverPresenceService.class);
 
     private final DriverRepository drivers;
-    private final DriverLocationRepository driverLocations;
+    private final DriverPositions positions;
+    private final DriverStateCache driverStates;
     private final RideOfferRepository offers;
     private final DomainEventPublisher events;
 
-    public DriverPresenceService(DriverRepository drivers, DriverLocationRepository driverLocations,
+    public DriverPresenceService(DriverRepository drivers, DriverPositions positions, DriverStateCache driverStates,
                                  RideOfferRepository offers, DomainEventPublisher events) {
         this.drivers = drivers;
-        this.driverLocations = driverLocations;
+        this.positions = positions;
+        this.driverStates = driverStates;
         this.offers = offers;
         this.events = events;
     }
@@ -50,12 +51,16 @@ public class DriverPresenceService {
         if (driver == null || driver.getAvailability() != DriverAvailability.AVAILABLE) {
             return false;
         }
-        boolean silent = driverLocations.lastUpdate(driverId).map(last -> last.isBefore(silentSince)).orElse(true);
+        // The live position (Redis) counts, not only PostgreSQL, which can trail when Kafka is slow or down.
+        boolean silent = positions.latest(driverId)
+                .map(position -> position.updatedAt().isBefore(silentSince))
+                .orElse(true);
         if (!silent) {
             return false;
         }
         driver.goOffline();
         offers.cancelPendingForDriver(driverId, now);
+        driverStates.refreshAfterCommit(driverId);
         events.publish(new DriverWentOfflineEvent(driverId, OfflineReason.LOCATION_TIMEOUT, now));
         log.info("Driver {} taken offline: no location update since {}", driverId, silentSince);
         return true;

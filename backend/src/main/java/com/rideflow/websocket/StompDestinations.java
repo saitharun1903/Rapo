@@ -26,8 +26,10 @@ public final class StompDestinations {
     public static final String RIDE_OFFERS = "/queue/ride-offers";
     public static final String PRESENCE = "/queue/presence";
     public static final String ERRORS = "/queue/errors";
+    public static final String NOTIFICATIONS = "/queue/notifications";
 
-    public static final Set<String> USER_QUEUES = Set.of(RIDE_UPDATES, RIDE_LOCATION, RIDE_OFFERS, PRESENCE, ERRORS);
+    public static final Set<String> USER_QUEUES =
+            Set.of(RIDE_UPDATES, RIDE_LOCATION, RIDE_OFFERS, PRESENCE, ERRORS, NOTIFICATIONS);
 
     /** Server → admins: every ride status change. */
     public static final String ADMIN_ACTIVITY = "/topic/admin/activity";

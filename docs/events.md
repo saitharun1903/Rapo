@@ -2,91 +2,136 @@
 
 ## 1. Kafka
 
-Kafka 4.x in KRaft mode. Dev: 3 partitions, replication factor 1. Prod: replication ≥ 3 (managed service). Topics are declared as `NewTopic` beans (auto-creation disabled on the broker).
+Kafka 4.x in KRaft mode. Implemented in Phase 6 (`com.rideflow.kafka`). Every topic and its dead-letter topic is declared by the application (`KafkaConfig`, `NewTopic` beans), and the broker does not create topics implicitly. Development uses 3 partitions and replication factor 1; production uses replication ≥ 3 (`KAFKA_REPLICATION_FACTOR`).
+
+Deployed names are `rideflow.kafka.prefix` + the base name below. The prefix is empty by default. It lets several environments share one cluster, and the integration tests give every Spring context a random prefix so contexts never consume each other's events.
 
 ### 1.1 Envelope
 
-Every event is JSON with the same envelope. Payloads are Java records in `com.rideflow.kafka.event`.
+Every event is JSON with the same envelope (`EventEnvelope`, written and read by `EventCodec`). The payload is the domain event record itself (`com.rideflow.service.*.event`), so producer and consumer share one definition.
 
-```json
+```jsonc
 {
   "eventId": "0b8e5c1e-…",           // UUID, idempotency key (= outbox row id)
-  "eventType": "ride.accepted",
-  "schemaVersion": 1,                 // bump only for breaking changes; additive fields don't bump
-  "occurredAt": "2026-09-24T10:15:30.123Z",
-  "aggregateId": "5b0c…",             // rideId / driverId / paymentId
-  "aggregateVersion": 4,              // rides.version after the change; consumers drop stale events
-  "traceId": "4bf92f3577b34da6",
-  "payload": { ... }
+  "eventType": "ride.accepted",       // = topic base name
+  "schemaVersion": 1,                 // changes only for breaking payload changes
+  "occurredAt": "2026-09-25T10:15:30.123456Z",
+  "aggregateId": "5b0c…",             // rideId / driverId / paymentId / userId; also the Kafka key
+  "aggregateVersion": 4,              // rides.version after the change; null for other aggregates
+  "traceId": "4bf92f3577b34da6",      // X-Request-Id of the producing request, for log correlation
+  "payload": { }
 }
 ```
 
-Headers: `eventType`, `schemaVersion`, `traceparent`.
+- **Headers:** `eventType` and `schemaVersion`, so tools can filter without parsing JSON.
+- **Evolution:** readers ignore unknown fields. A producer can therefore add fields without a version change while older consumers still run. Removing or changing a field is a breaking change and needs a new `schemaVersion`.
+- **Unknown versions:** a consumer that receives a `schemaVersion` it does not read sends the record to the DLT (§1.4).
 
 ### 1.2 Topics
 
-| Topic | Key | Producer | Consumers (group) | Retention |
-|---|---|---|---|---|
-| `ride.requested` | rideId | RideService (outbox) | `matching`, `realtime-{instance}` | 7 d |
-| `ride.driver.assigned` | rideId | DriverMatchingService (outbox) | `notifications`, `realtime-{instance}` | 7 d |
-| `ride.accepted` | rideId | RideService (outbox) | `notifications`, `realtime-{instance}` | 7 d |
-| `ride.driver.arriving` | rideId | RideService (outbox) | `notifications`, `realtime-{instance}` | 7 d |
-| `ride.driver.arrived` | rideId | RideService (outbox) | `notifications`, `realtime-{instance}` | 7 d |
-| `ride.started` | rideId | RideService (outbox) | `notifications`, `realtime-{instance}` | 7 d |
-| `ride.completed` | rideId | RideService (outbox) | `payments`, `trip-analysis`, `notifications`, `realtime-{instance}` | 7 d |
-| `ride.cancelled` | rideId | RideService (outbox) | `matching` (release offers/locks), `notifications`, `realtime-{instance}` | 7 d |
-| `ride.expired` | rideId | MatchingSweeper (outbox) | `notifications`, `realtime-{instance}` | 7 d |
-| `driver.location.updated` | driverId | LocationIngestionService (direct) | `location-persistence` (batch), `realtime-{instance}` | 6 h |
-| `payment.created` | rideId | PaymentService (outbox) | `notifications`, `realtime-{instance}` | 7 d |
-| `notification.requested` | userId | admin/driver verification services (outbox) | `notifications` | 3 d |
-| `<topic>.DLT` | same | DeadLetterPublishingRecoverer | none (inspected via admin/system + tooling) | 14 d |
+| Topic | Payload | Key | Delivery | Consumer groups | Retention |
+|---|---|---|---|---|---|
+| `ride.requested` | `RideStatusChangedEvent` (→ REQUESTED) | rideId | outbox | `matching`, `realtime-{instance}` | 7 d |
+| `ride.matching` | `RideStatusChangedEvent` (→ MATCHING: first round, or re-dispatch) | rideId | outbox | `notifications`, `realtime-{instance}` | 7 d |
+| `ride.accepted` | `RideStatusChangedEvent` (→ DRIVER_ASSIGNED) | rideId | outbox | `notifications`, `realtime-{instance}` | 7 d |
+| `ride.driver.arriving` | `RideStatusChangedEvent` | rideId | outbox | `notifications`, `realtime-{instance}` | 7 d |
+| `ride.driver.arrived` | `RideStatusChangedEvent` | rideId | outbox | `notifications`, `realtime-{instance}` | 7 d |
+| `ride.started` | `RideStatusChangedEvent` (→ IN_PROGRESS) | rideId | outbox | `notifications`, `realtime-{instance}` | 7 d |
+| `ride.completed` | `RideStatusChangedEvent` | rideId | outbox | `payments`, `notifications`, `realtime-{instance}` (Phase 7 adds `trip-analysis`) | 7 d |
+| `ride.cancelled` | `RideStatusChangedEvent` | rideId | outbox | `notifications`, `realtime-{instance}` | 7 d |
+| `ride.expired` | `RideStatusChangedEvent` | rideId | outbox | `notifications`, `realtime-{instance}` | 7 d |
+| `ride.dispatch.requested` | `MatchingRoundRequestedEvent` | rideId | outbox | `matching` | 7 d |
+| `ride.driver.assigned` | `RideOffersCreatedEvent` (offers sent in a matching round) | rideId | outbox | `realtime-{instance}` | 7 d |
+| `ride.offers.withdrawn` | `RideOffersWithdrawnEvent` | rideId | outbox | `realtime-{instance}` | 7 d |
+| `driver.location.updated` | `DriverLocationUpdatedEvent` | driverId | **direct** | `location-persistence` (batch), `realtime-{instance}` | 6 h |
+| `driver.offline` | `DriverWentOfflineEvent` | driverId | outbox | `realtime-{instance}` | 7 d |
+| `payment.created` | `PaymentCreatedEvent` | paymentId | outbox | `notifications` | 7 d |
+| `notification.requested` | `NotificationRequestedEvent` (driver verified or rejected) | userId | outbox | `notifications` | 3 d |
+| `notification.created` | `NotificationCreatedEvent` | userId | outbox | `realtime-{instance}` | 3 d |
+| `<topic>.DLT` | the failed record, unchanged, plus Spring's `kafka_dlt-*` headers (original topic, partition, offset, exception class and message) | same | — | none (inspect and replay by hand) | 14 d |
 
-`realtime-{instance}` is a per-instance consumer group (`auto.offset.reset=latest`) so every backend instance can push to the WebSocket clients connected to it.
+Why these topics:
+
+- **One topic per target ride status**, instead of one `ride.status-changed` topic. Consumers subscribe to the transitions they act on (payments reads only `ride.completed`) and do not filter every change. The names keep the domain vocabulary. The cost is that a ride's events are ordered within a topic but not across topics, so consumers must not rely on cross-topic order (§1.4).
+- **`ride.dispatch.requested`** asks matching for its next round early: the last open offer was rejected, or the driver backed out. New rides are matched from `ride.requested`. Round-to-round progress on timeouts stays with `MatchingSweeper`, which reads the database. It also covers rides whose trigger is late, for example while Kafka is down.
+- **`notification.created`** exists because the notifications consumer runs on one instance, but the user may be connected to another. Storing the notification and pushing it are therefore separate steps.
+- **`realtime-{instance}`** is a consumer group per running instance (random id at startup), so every instance receives every event and can push it to the WebSocket clients connected to it.
 
 ### 1.3 Payloads (schemaVersion 1)
 
+Fields of the payload records (`?` = may be null):
+
 ```jsonc
-// ride.requested
-{ "rideId", "passengerId", "vehicleCategory", "pickup": {"lat","lng"}, "dropoff": {"lat","lng"}, "requestedAt" }
+// ride.* status topics: RideStatusChangedEvent
+{ "rideId", "from?", "to", "rideVersion", "passengerId", "driverId?", "releasedDriverId?",
+  "actor": "PASSENGER|DRIVER|SYSTEM|ADMIN", "reason?", "occurredAt" }
+// releasedDriverId: the driver detached by a re-dispatch (→ MATCHING)
 
-// ride.driver.assigned   (offers created for a matching round)
-{ "rideId", "round", "offers": [ { "offerId", "driverId", "distanceMeters", "expiresAt" } ],
-  "pickup": {"lat","lng","address"}, "dropoff": {"lat","lng","address"},
-  "estimatedFare": {"amount","currency"}, "estimatedDistanceMeters" }
+// ride.dispatch.requested: MatchingRoundRequestedEvent
+{ "rideId" }
 
-// ride.accepted
-{ "rideId", "passengerId", "driverId", "vehicleId", "acceptedAt", "withdrawnOfferDriverIds": [] }
+// ride.driver.assigned: RideOffersCreatedEvent
+{ "rideId", "round", "driverIds": [], "expiresAt" }
 
-// ride.driver.arriving / ride.driver.arrived / ride.started
-{ "rideId", "passengerId", "driverId", "at" }
+// ride.offers.withdrawn: RideOffersWithdrawnEvent
+{ "rideId", "driverIds": [] }
 
-// ride.completed
-{ "rideId", "passengerId", "driverId", "completedAt", "actualDistanceMeters", "actualDurationSeconds",
-  "distanceSource", "finalFare": {"amount","currency"}, "paymentMethod" }
+// driver.location.updated: DriverLocationUpdatedEvent
+{ "driverId", "rideId?", "passengerId?", "rideStatus?", "location": {"lat", "lng"}, "headingDeg?", "speedMps?",
+  "accuracyMeters?", "recordedAt", "receivedAt", "destination?": {"target": "PICKUP|DROPOFF", "point": {"lat", "lng"}} }
 
-// ride.cancelled
-{ "rideId", "passengerId", "driverId?", "cancelledBy", "reason", "previousStatus" }
+// driver.offline: DriverWentOfflineEvent
+{ "driverId", "reason": "LOCATION_TIMEOUT|ACCOUNT_SUSPENDED", "occurredAt" }
 
-// ride.expired
-{ "rideId", "passengerId", "rounds", "finalRadiusMeters" }
+// payment.created: PaymentCreatedEvent
+{ "paymentId", "rideId", "passengerId", "driverId", "amount", "currency", "method", "status", "driverEarnings", "occurredAt" }
 
-// driver.location.updated
-{ "driverId", "activeRideId?", "rideStatus?", "lat", "lng", "headingDeg?", "speedMps?", "accuracyMeters?", "recordedAt" }
+// notification.requested: NotificationRequestedEvent
+{ "userId", "type", "rideId?", "detail?" }
 
-// payment.created
-{ "paymentId", "rideId", "passengerId", "driverId", "amount", "currency", "method", "status", "driverEarnings" }
-
-// notification.requested
-{ "userId", "type", "title", "body", "rideId?" }
+// notification.created: NotificationCreatedEvent
+{ "notificationId", "userId", "type", "title", "body", "rideId?", "createdAt" }
 ```
 
-Payloads contain IDs and ride data needed by consumers. They never contain emails, phone numbers, passwords or tokens.
+Payloads carry IDs and ride data, not full views. A consumer that needs more reads the database, which is the source of truth: the payments consumer, for example, loads the final fare. Payloads never contain emails, phone numbers, names, passwords or tokens. A driver's position is in `driver.location.updated` together with the one passenger allowed to see it.
 
 ### 1.4 Delivery semantics
 
-- **Producer:** outbox + relay (`acks=all`, idempotent producer). Location events are produced directly (at-most-once is acceptable for superseded pings).
-- **Consumer:** at-least-once. Each handler is idempotent: a state check (`ride.status` must be the expected source state) and/or an insert into `processed_events` in the same DB transaction as the side effect.
-- **Retries:** 3 attempts with exponential backoff (1 s, 2 s, 4 s), then `.DLT`. Non-retryable exceptions (deserialisation, validation, `InvalidRideTransitionException` for stale events) go straight to the DLT or are logged and skipped, according to a classification table in `KafkaErrorHandlingConfig`.
+**Producing**
+- **Outbox** (everything except positions). `OutboxDomainEventPublisher` writes the event to `outbox_events` in the caller's transaction and refuses to run outside one. `OutboxRelay` sends rows in insertion order through an idempotent producer (`acks=all`). It marks a row published only after the broker acknowledges it.
+  - The relay runs when a transaction that wrote events commits, and otherwise every 250 ms. Every instance runs one, and `FOR UPDATE SKIP LOCKED` keeps them on separate rows.
+  - A row that fails or times out (10 s) keeps its `attempts` and `last_error` and is sent again, so delivery is **at least once**.
+- **Direct** (`driver.location.updated`). Sent straight to Kafka, fire-and-forget, **at most once**. The next report supersedes a lost one within seconds. Failures are counted (`rideflow_location_publish_failures_total`); while they persist, only the first failure and the recovery are logged.
+
+**Consuming**
+- Consumers are **at least once**: offsets are committed after the handler returns.
+- Handlers with side effects insert `(consumer, eventId)` into `processed_events` in the same transaction as the side effect (`ProcessedEvents`). A redelivered event is skipped; a rolled-back one is processed again. This covers matching, payments and notifications.
+- Natural idempotency adds a second guard:
+  - one payment per ride (`payments.ride_id` unique);
+  - one notification per user and event (`notifications (user_id, source_event_id)` unique);
+  - positions never move backwards (upsert only if newer);
+  - a repeated track point is within the sampling distance of itself.
+- **Ordering:** per key within a topic. Across topics nothing is guaranteed.
+  - Matching re-checks the ride under its row lock.
+  - Payments require status COMPLETED.
+  - WebSocket clients apply a ride update only if its `version` is newer.
+  - A late notification is still a true statement about the past.
+
+**Failures** (`KafkaConfig`)
+- Shared groups retry a failed record 3 times with exponential backoff (1 s, 2 s, 4 s). They then publish it to `<topic>.DLT` (same partition) and move on.
+- Records that can never succeed (`EventDecodingException`: not JSON, unknown schema version, wrong type for the topic, no aggregate id) go to the DLT immediately.
+- Each dead-lettered record increments `rideflow_kafka_dead_letters_total{topic}` and is logged with topic, partition and offset.
+- The location batch consumer persists the records before a bad one, dead-letters that one and continues after it.
+- The realtime bridge neither retries nor dead-letters. Every instance would write the same record to the DLT, and pushes are best effort. It logs and moves on.
+
+**Kafka unavailable**
+- Requests keep working, and events wait in the outbox (`rideflow_outbox_pending`).
+- Matching falls back to `MatchingSweeper`, which starts a ride's first round once `rideflow.matching.trigger-grace` (5 s) has passed without a trigger.
+- Live pushes and notifications stop.
+- Positions still reach Redis, so the pickup geofence, tracking snapshots and presence checks still work, but they stop reaching PostgreSQL. Matching then sees drivers as stale after `location-freshness` (30 s).
+- Everything resumes when the broker returns, except the positions reported during the outage. Those are dropped, which is acceptable because they have since been superseded.
+
+**Cleanup:** `EventHousekeepingJob` (03:30 daily) purges published outbox rows after 3 days and `processed_events` rows after 7 days. 7 days is longer than any redelivery window, because Kafka keeps ride topics for 7 days.
 
 ---
 
@@ -113,7 +158,7 @@ Every push goes to a **per-user queue** (`/user/queue/...`), except the admin fe
 
 | Destination | Role | Payload | Rules |
 |---|---|---|---|
-| `/app/drivers/location` | DRIVER (online) | `{location: {lat, lng}, headingDeg?, speedMps?, accuracyMeters?, recordedAt}` (same body as `POST /api/drivers/location`) | At most one message per second per session; faster ones are dropped and counted. `recordedAt` must be at most 5 s in the future and at most 30 s old. A report older than the stored position is ignored |
+| `/app/drivers/location` | DRIVER (online) | `{location: {lat, lng}, headingDeg?, speedMps?, accuracyMeters?, recordedAt}` (same body as `POST /api/drivers/location`) | At most one message per second per session; faster ones are dropped and counted. `recordedAt` must be at most 5 s in the future and at most 30 s old. A report older than the stored position is ignored. Accepted reports go to Redis and `driver.location.updated` (architecture §8) |
 
 A client may send nothing else. `SEND` to any other destination, including any `/topic` or `/queue` destination, is refused with `FORBIDDEN` and the socket is closed. This stops clients injecting messages into other users' streams.
 
@@ -128,20 +173,21 @@ A rejected location message (validation failure, `STALE_LOCATION`, `DRIVER_OFFLI
 | `/user/queue/rides` | passenger and current driver | `RideResponse` (same as `GET /api/rides/{id}`, includes `version`) | every ride status change |
 | `/user/queue/ride-location` | passenger of the driver's active ride | `{rideId, location: {lat, lng}, headingDeg, speedMps, recordedAt, eta: {target, seconds, distanceMeters, source, computedAt}?}`. The ETA is the Redis-cached value (refreshed in the background at most every 30 s); it is `null` until the first one is computed and while the driver waits at the pickup | each accepted location report while a driver is assigned (DRIVER_ASSIGNED to IN_PROGRESS) |
 | `/user/queue/presence` | driver | `{availability: "OFFLINE", reason: "LOCATION_TIMEOUT"\|"ACCOUNT_SUSPENDED", occurredAt}` | the server took the driver offline |
+| `/user/queue/notifications` | the notified user | `{id, type, title, body, rideId?, read: false, createdAt}` (same as the items of `GET /api/notifications`) | the notifications consumer stored a notification (ride progress, payment, verification decision) |
 | `/user/queue/errors` | sender | `{code, message, destination, fieldErrors}` | a location message was rejected |
 | `/topic/admin/activity` | ADMIN | `{rideId, previousStatus, status, actor, rideVersion, occurredAt}` (no personal data) | every ride status change |
 
 All payloads are JSON with the same conventions as the REST API: ISO-8601 instants, and money as a decimal string.
 
-Pushes are sent after the database transaction commits, and are best effort. A lost push is repaired by the reconnect snapshot. Ride updates are sent asynchronously and may arrive out of order; clients apply one only if its `version` is newer than the one they show. Clients order location messages by `recordedAt`.
+Pushes come from Kafka: every instance's realtime bridge (`realtime-{instance}` group, §1.2) consumes the events and pushes to the clients connected to that instance. It checks that a recipient is connected there before it loads anything from the database. Events only exist once their transaction has committed, so a push never announces a change that rolled back.
 
-In Phase 6 the source of these pushes moves from in-process events to Kafka (§1.2, `realtime-{instance}` consumer group). The destinations and payloads stay the same. Phase 6 also adds `/user/queue/notifications` for the notifications consumer.
+Pushes are best effort, and a lost push is repaired by the reconnect snapshot. Ride updates may arrive out of order, so clients apply one only if its `version` is newer than the one they show. Clients order location messages by `recordedAt`.
 
 ### 2.4 Subscription authorisation
 
 `StompAuthorizationInterceptor` applies a deny-by-default allow-list:
 
-- `/user/queue/{rides, ride-location, ride-offers, presence, errors}`: any authenticated user. Spring resolves these to the caller's own sessions, so they cannot address another user.
+- `/user/queue/{rides, ride-location, ride-offers, presence, notifications, errors}`: any authenticated user. Spring resolves these to the caller's own sessions, so they cannot address another user.
 - `/topic/admin/activity`: ADMIN only.
 - Anything else is refused with `FORBIDDEN` (`ERROR` frame, socket closed). This includes a session's resolved queue name (`/queue/rides-user<sessionId>`), the classic way to read another user's queue.
 

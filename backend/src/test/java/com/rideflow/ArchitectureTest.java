@@ -56,10 +56,27 @@ class ArchitectureTest {
             .that().resideInAPackage("..websocket..")
             .should().beAnnotatedWith(Transactional.class);
 
+    /** Services publish through ports (DomainEventPublisher, LocationStream); Kafka stays an adapter. */
+    @ArchTest
+    static final ArchRule servicesDoNotDependOnKafka = noClasses()
+            .that().resideInAPackage("..service..")
+            .should().dependOnClassesThat().resideInAPackage("..kafka..");
+
+    @ArchTest
+    static final ArchRule kafkaConsumersDelegateToServices = noClasses()
+            .that().resideInAPackage("..kafka.consumer..")
+            .should().dependOnClassesThat().resideInAPackage("..repository..")
+            .orShould().dependOnClassesThat().areAnnotatedWith(Entity.class);
+
+    @ArchTest
+    static final ArchRule kafkaConsumersAreNotTransactional = noClasses()
+            .that().resideInAPackage("..kafka.consumer..")
+            .should().beAnnotatedWith(Transactional.class);
+
     @ArchTest
     static final ArchRule entitiesDependOnlyOnDomainTypes = noClasses()
             .that().resideInAPackage("..entity..")
             .should().dependOnClassesThat().resideInAnyPackage(
                     "..service..", "..controller..", "..dto..", "..repository..", "..security..", "..mapper..",
-                    "..websocket..");
+                    "..websocket..", "..kafka..");
 }

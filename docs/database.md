@@ -7,7 +7,7 @@ Conventions:
 - Primary keys `uuid DEFAULT gen_random_uuid()` (except high-volume append-only tables, which use `bigint GENERATED ALWAYS AS IDENTITY`).
 - `created_at` / `updated_at timestamptz NOT NULL DEFAULT now()`; `updated_at` maintained by JPA auditing.
 - Enumerations: `varchar` + `CHECK` (see architecture D10).
-- Money: `numeric(10,2)`; currency `char(3)` (ISO 4217).
+- Money: `numeric(10,2)`; currency `varchar(3)` (ISO 4217).
 - Spatial: `geography(Point, 4326)`. **Longitude first** in `ST_MakePoint(lng, lat)`.
 - `version bigint` for optimistic locking on contended rows.
 - Extensions: `postgis`, `citext`, `pgcrypto` (for `gen_random_uuid` on older versions).
@@ -113,15 +113,16 @@ Indexes: `ux_vehicles_one_active_per_driver UNIQUE (driver_id) WHERE active`.
 
 Indexes: `ix_driver_locations_location USING GIST (location)`, `ix_driver_locations_updated_at (updated_at)`.
 
-Written only by the batched location consumer:
+Written by the batched location consumer (`driver.location.updated`), and directly when a driver goes online so matching can find them at once. The live position is in Redis (`driver:{id}:location`, architecture §8).
 
 ```sql
 INSERT INTO driver_locations (driver_id, location, heading_deg, speed_mps, accuracy_m, recorded_at, updated_at)
 VALUES (...), (...), ...                                   -- one row per driver per batch
 ON CONFLICT (driver_id) DO UPDATE
 SET location = EXCLUDED.location, heading_deg = EXCLUDED.heading_deg, speed_mps = EXCLUDED.speed_mps,
-    accuracy_m = EXCLUDED.accuracy_m, recorded_at = EXCLUDED.recorded_at, updated_at = now()
-WHERE driver_locations.recorded_at < EXCLUDED.recorded_at;   -- never regress to an older point
+    accuracy_m = EXCLUDED.accuracy_m, recorded_at = EXCLUDED.recorded_at,
+    updated_at = EXCLUDED.updated_at                        -- server time the report was received
+WHERE driver_locations.recorded_at <= EXCLUDED.recorded_at;  -- never regress to an older point
 ```
 
 ### rides
@@ -239,16 +240,16 @@ Retention: points older than 90 days are purged by a scheduled job (the aggregat
 | id | uuid PK | |
 | ride_id | uuid NOT NULL UNIQUE FK rides | one payment per ride |
 | amount | numeric(10,2) NOT NULL | CHECK >= 0 |
-| currency | char(3) NOT NULL | |
-| method | varchar(16) NOT NULL | CASH, CARD |
+| currency | varchar(3) NOT NULL | same as `rides.currency` |
+| method | varchar(16) NOT NULL | CHECK IN (CASH, CARD) |
 | status | varchar(16) NOT NULL | CHECK IN (PENDING, CAPTURED, FAILED, REFUNDED) |
-| platform_fee | numeric(10,2) NOT NULL | commission (config %) |
-| driver_earnings | numeric(10,2) NOT NULL | CHECK platform_fee + driver_earnings = amount |
-| gateway | varchar(20) NOT NULL | CASH, SANDBOX, … |
-| gateway_reference | varchar(80) NULL | |
+| platform_fee | numeric(10,2) NOT NULL | `rideflow.payments.platform-fee-rate` (20 %) of the amount, rounded half-up |
+| driver_earnings | numeric(10,2) NOT NULL | the exact remainder; CHECK platform_fee + driver_earnings = amount |
+| gateway | varchar(20) NOT NULL | CHECK IN (CASH, SANDBOX). SANDBOX = simulated card payment, no money moves |
+| gateway_reference | varchar(80) NULL | sandbox: `sandbox_<rideId>` (derived from the idempotency key) |
 | created_at, updated_at | | |
 
-Index: `(status)`; earnings query joins `rides.driver_id`.
+Created by the payments consumer from `ride.completed` with the FINAL fare; cash is recorded as captured (the driver collects it). Index: `(status)`; earnings query joins `rides.driver_id`.
 
 ### ratings
 | column | type | notes |
@@ -261,7 +262,7 @@ Index: `(status)`; earnings query joins `rides.driver_id`.
 | comment | varchar(500) NULL | |
 | created_at | timestamptz | |
 
-Unique: `(ride_id, rater_id)`. Driver `rating_avg/rating_count` updated in the same transaction (incremental average under the driver row's optimistic lock).
+Unique: `(ride_id, rater_id)`; CHECK `rater_id <> ratee_id`. Index `ix_ratings_ratee (ratee_id)`. When a passenger rates a driver, the driver's `rating_avg`/`rating_count` are recomputed from all their ratings in the same transaction, under the driver row lock: concurrent ratings cannot lose an update, and rounding never accumulates.
 
 ### notifications
 | column | type | notes |
@@ -272,7 +273,7 @@ Unique: `(ride_id, rater_id)`. Driver `rating_avg/rating_count` updated in the s
 | title | varchar(120) NOT NULL | |
 | body | varchar(500) NOT NULL | |
 | ride_id | uuid NULL FK rides | |
-| source_event_id | uuid NULL UNIQUE | idempotency against Kafka redelivery |
+| source_event_id | uuid NOT NULL | the Kafka event it was created from; UNIQUE `(user_id, source_event_id)`, since one event can notify two users |
 | read_at | timestamptz NULL | |
 | created_at | timestamptz | |
 
@@ -327,16 +328,17 @@ Indexes: `(entity_type, entity_id)`, `(created_at DESC)`, `(actor_user_id, creat
 | column | type | notes |
 |---|---|---|
 | id | uuid PK | = `eventId` in the envelope |
-| topic | varchar(100) NOT NULL | |
+| seq | bigint identity | insertion order; the relay sends in this order |
+| topic | varchar(150) NOT NULL | deployed name (with `rideflow.kafka.prefix`) |
 | message_key | varchar(100) NOT NULL | rideId / driverId |
 | event_type | varchar(60) NOT NULL | |
 | payload | jsonb NOT NULL | full envelope |
 | created_at | timestamptz NOT NULL | |
-| published_at | timestamptz NULL | |
+| published_at | timestamptz NULL | set when the broker acknowledged the record |
 | attempts | integer NOT NULL DEFAULT 0 | |
 | last_error | varchar(500) NULL | |
 
-Index: `ix_outbox_unpublished (created_at) WHERE published_at IS NULL`. Published rows purged after 3 days.
+Indexes: `ix_outbox_unpublished (seq) WHERE published_at IS NULL` (the relay's queue, read with `FOR UPDATE SKIP LOCKED`), `ix_outbox_published (published_at) WHERE published_at IS NOT NULL` (purge). Published rows are purged after 3 days.
 
 > `driver.location.updated` is **not** written through the outbox: it is high-volume, ephemeral and loss-tolerant (the next ping supersedes it), so it is produced directly to Kafka from the ingestion path.
 
@@ -347,7 +349,7 @@ Index: `ix_outbox_unpublished (created_at) WHERE published_at IS NULL`. Publishe
 | event_id | uuid | PK part |
 | processed_at | timestamptz NOT NULL | |
 
-Purged after 7 days (longer than Kafka redelivery window).
+Index `(processed_at)`. Purged after 7 days, longer than the Kafka retention of the topics whose events it records.
 
 ## Query catalogue (PostGIS)
 
@@ -362,6 +364,6 @@ Purged after 7 days (longer than Kafka redelivery window).
 
 ## Migration plan
 
-Implemented: `V1__extensions.sql` → `V2__users_auth_audit.sql` (users, refresh_tokens, audit_logs) → `V3__drivers_vehicles_locations.sql` → `V4__rides_offers_fares.sql` (rides, ride_offers, ride_status_events, fare_breakdowns, ride_track_points). Planned: `V5__payments_ratings_notifications.sql` → `V6__ai.sql` → `V7__outbox_processed_events.sql`.
+Implemented: `V1__extensions.sql` → `V2__users_auth_audit.sql` (users, refresh_tokens, audit_logs) → `V3__drivers_vehicles_locations.sql` → `V4__rides_offers_fares.sql` (rides, ride_offers, ride_status_events, fare_breakdowns, ride_track_points) → `V5__payments_ratings_notifications.sql` → `V6__outbox_processed_events.sql`. Planned: `V7__ai.sql` (Phase 7).
 
 Seed: `db/seed/R__demo_seed.sql` (repeatable, `demo` profile only). Seed passwords are never committed: they are hashed inside PostgreSQL with pgcrypto `crypt()` from the `${demo_password}` Flyway placeholder, which comes from the `DEMO_USER_PASSWORD` environment variable.

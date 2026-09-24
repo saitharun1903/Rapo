@@ -160,8 +160,16 @@ public class Ride extends TimestampedEntity {
             String currency) {
     }
 
-    /** A status change that just happened, for the status history and domain events. */
-    public record StatusChange(RideStatus from, RideStatus to) {
+    /**
+     * A status change that just happened, for the status history and domain events.
+     *
+     * @param releasedDriverId the driver this change detached from the ride (re-dispatch), otherwise {@code null}
+     */
+    public record StatusChange(RideStatus from, RideStatus to, UUID releasedDriverId) {
+
+        public StatusChange(RideStatus from, RideStatus to) {
+            this(from, to, null);
+        }
     }
 
     public static Ride request(RequestDetails details, Instant now) {
@@ -256,7 +264,8 @@ public class Ride extends TimestampedEntity {
 
     /** The assigned driver backed out before pickup: detach them and search again from round one. */
     public StatusChange redispatch() {
-        StatusChange change = moveTo(RideStatus.MATCHING, ActorType.DRIVER);
+        StatusChange moved = moveTo(RideStatus.MATCHING, ActorType.DRIVER);
+        StatusChange change = new StatusChange(moved.from(), moved.to(), driverId);
         this.driverId = null;
         this.vehicleId = null;
         this.acceptedAt = null;

@@ -12,6 +12,7 @@ import com.rideflow.entity.VehicleCategory;
 import com.rideflow.service.matching.MatchingSweeper;
 import com.rideflow.support.MutableClock;
 import com.rideflow.support.IntegrationTestContainers;
+import com.rideflow.support.KafkaTestSupport;
 import com.rideflow.support.RideApi;
 import com.rideflow.support.RideFixtures;
 import com.rideflow.support.RideFixtures.Actor;
@@ -52,6 +53,8 @@ class MatchingConcurrencyIT extends IntegrationTestContainers {
     private RideFixtures fixtures;
     @Autowired
     private MutableClock clock;
+    @Autowired
+    private KafkaTestSupport kafka;
     @Autowired
     private MatchingSweeper sweeper;
     @Autowired
@@ -132,6 +135,7 @@ class MatchingConcurrencyIT extends IntegrationTestContainers {
 
         clock.advance(PAST_OFFER_TTL);
         api.reportLocation(distant, offset(HITECH_CITY, 3_800, 0), clock.instant()); // keep position fresh
+        kafka.awaitIdle(); // matching reads positions from PostgreSQL, which the location consumer writes
         sweeper.sweep();
 
         assertThat(api.openOfferCount(distant)).isEqualTo(1);

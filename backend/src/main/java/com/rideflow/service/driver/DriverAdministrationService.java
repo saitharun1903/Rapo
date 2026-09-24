@@ -5,6 +5,7 @@ import com.rideflow.dto.driver.DriverResponse;
 import com.rideflow.entity.AuditAction;
 import com.rideflow.entity.Driver;
 import com.rideflow.entity.DriverVerificationStatus;
+import com.rideflow.entity.NotificationType;
 import com.rideflow.entity.OfflineReason;
 import com.rideflow.entity.Vehicle;
 import com.rideflow.exception.ErrorCode;
@@ -16,6 +17,7 @@ import com.rideflow.repository.VehicleRepository;
 import com.rideflow.service.audit.AuditService;
 import com.rideflow.service.driver.event.DriverWentOfflineEvent;
 import com.rideflow.service.event.DomainEventPublisher;
+import com.rideflow.service.notification.event.NotificationRequestedEvent;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
@@ -39,6 +41,7 @@ public class DriverAdministrationService {
     private final RideOfferRepository offers;
     private final DriverMapper driverMapper;
     private final AuditService auditService;
+    private final DriverStateCache driverStates;
     private final DomainEventPublisher events;
     private final Clock clock;
 
@@ -48,6 +51,7 @@ public class DriverAdministrationService {
             RideOfferRepository offers,
             DriverMapper driverMapper,
             AuditService auditService,
+            DriverStateCache driverStates,
             DomainEventPublisher events,
             Clock clock) {
         this.drivers = drivers;
@@ -55,6 +59,7 @@ public class DriverAdministrationService {
         this.offers = offers;
         this.driverMapper = driverMapper;
         this.auditService = auditService;
+        this.driverStates = driverStates;
         this.events = events;
         this.clock = clock;
     }
@@ -76,6 +81,7 @@ public class DriverAdministrationService {
         Driver driver = load(driverId);
         driver.verify(adminId, clock.instant());
         auditService.record(adminId, AuditAction.DRIVER_VERIFIED, ENTITY_TYPE, driverId, Map.of());
+        events.publish(new NotificationRequestedEvent(driverId, NotificationType.DRIVER_VERIFIED, null, null));
         return toResponse(driver);
     }
 
@@ -84,6 +90,7 @@ public class DriverAdministrationService {
         Driver driver = load(driverId);
         driver.reject(reason.trim());
         auditService.record(adminId, AuditAction.DRIVER_REJECTED, ENTITY_TYPE, driverId, Map.of(REASON, reason.trim()));
+        events.publish(new NotificationRequestedEvent(driverId, NotificationType.DRIVER_REJECTED, null, reason.trim()));
         return toResponse(driver);
     }
 
@@ -94,6 +101,7 @@ public class DriverAdministrationService {
         Instant now = clock.instant();
         driver.suspend(reason.trim());
         offers.cancelPendingForDriver(driverId, now);
+        driverStates.refreshAfterCommit(driverId);
         if (wasOnline) {
             events.publish(new DriverWentOfflineEvent(driverId, OfflineReason.ACCOUNT_SUSPENDED, now));
         }

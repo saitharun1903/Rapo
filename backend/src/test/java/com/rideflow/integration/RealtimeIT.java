@@ -59,6 +59,7 @@ class RealtimeIT extends IntegrationTestContainers {
     private static final String RIDE_OFFERS = "/user/queue/ride-offers";
     private static final String PRESENCE = "/user/queue/presence";
     private static final String ERRORS = "/user/queue/errors";
+    private static final String NOTIFICATIONS = "/user/queue/notifications";
     private static final String ADMIN_ACTIVITY = "/topic/admin/activity";
     private static final String DRIVER_LOCATION = "/app/drivers/location";
     private static final Duration PRESENCE_TIMEOUT = Duration.ofMinutes(2);
@@ -149,7 +150,7 @@ class RealtimeIT extends IntegrationTestContainers {
         Actor bystander = fixtures.passenger();
         Actor driver = onlineDriver(offset(HITECH_CITY, 300, 0));
         Connection driverSocket = subscribed(driver, RIDE_OFFERS, RIDES, RIDE_LOCATION, ERRORS);
-        Connection passengerSocket = subscribed(passenger, RIDES, RIDE_LOCATION);
+        Connection passengerSocket = subscribed(passenger, RIDES, RIDE_LOCATION, NOTIFICATIONS);
         Connection bystanderSocket = subscribed(bystander, RIDES, RIDE_LOCATION);
 
         UUID rideId = api.book(passenger, HITECH_CITY, HUSSAIN_SAGAR);
@@ -166,8 +167,13 @@ class RealtimeIT extends IntegrationTestContainers {
         assertThat(assigned.get("driver").get("id").asString()).isEqualTo(driver.id().toString());
         assertThat(assigned.get("version").asLong()).isPositive();
         driverSocket.next(RIDES, ride -> hasStatus(ride, rideId, "DRIVER_ASSIGNED"));
+        // The notifications consumer stored a notification; the realtime bridge pushed it.
+        JsonNode notification = passengerSocket.next(NOTIFICATIONS);
+        assertThat(notification.get("type").asString()).isEqualTo("DRIVER_ACCEPTED");
+        assertThat(notification.get("rideId").asString()).isEqualTo(rideId.toString());
+        assertThat(notification.get("read").asBoolean()).isFalse();
 
-        // A GPS fix streamed over the socket reaches the passenger and is persisted.
+        // A GPS fix streamed over the socket reaches the passenger (through Kafka) and is persisted in a batch.
         GeoPoint moved = offset(HITECH_CITY, 200, 0);
         driverSocket.send(DRIVER_LOCATION, location(moved, clock.instant()));
         JsonNode pushed = passengerSocket.next(RIDE_LOCATION);
@@ -175,7 +181,8 @@ class RealtimeIT extends IntegrationTestContainers {
         assertThat(pushed.get("location").get("lat").asDouble()).isCloseTo(moved.lat(), within(1e-9));
         assertThat(pushed.get("location").get("lng").asDouble()).isCloseTo(moved.lng(), within(1e-9));
         assertThat(pushed.get("headingDeg").asInt()).isEqualTo(90);
-        assertThat(driverLocations.find(driver.id()).orElseThrow().point().lat()).isCloseTo(moved.lat(), within(1e-7));
+        await().atMost(StompTestClient.TIMEOUT).untilAsserted(() -> assertThat(
+                driverLocations.find(driver.id()).orElseThrow().point().lat()).isCloseTo(moved.lat(), within(1e-7)));
 
         // The snapshot endpoint agrees and adds an ETA to the pickup.
         DocumentContext tracking = json(api.call(passenger, "GET", "/api/rides/" + rideId + "/tracking", null));

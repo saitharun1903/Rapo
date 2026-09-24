@@ -39,10 +39,29 @@ spring:
       connect-timeout: 1s
   jackson:
     default-property-inclusion: always
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+    producer:
+      # Wait for all in-sync replicas; with idempotence, retries cannot duplicate or reorder records.
+      acks: all
+      properties:
+        enable.idempotence: true
+        # Fail fast when the broker is unreachable: the outbox retries later, and a location report is dropped
+        # rather than blocking the WebSocket thread.
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
+    consumer:
+      # Shared groups start from the beginning of what is retained, so no event produced before a group's
+      # first start is missed. The realtime bridge overrides this with "latest".
+      auto-offset-reset: earliest
+    admin:
+      # Topics are declared by the application; startup continues (and logs) if the broker is not up yet.
+      fail-fast: false
   task:
     execution:
       # The WebSocket broker registers its own executors, which would otherwise make Spring Boot skip the
-      # application executor that @Async listeners (matching trigger, real-time pushes) run on.
+      # application executor that @Async methods (the background ETA refresh) run on.
       mode: force
 
 server:
@@ -161,6 +180,8 @@ rideflow:
     geocode-ttl: 24h
     surge-ttl: 60s
     eta-ttl: 30s
+    driver-state-ttl: 60s
+    driver-location-ttl: 5m
     redis-retry-after: 5s
   rate-limit:
     enabled: ${RATE_LIMIT_ENABLED:true}
@@ -171,6 +192,30 @@ rideflow:
       FARE_ESTIMATE: { limit: 30, window: 1m }
       GEOCODING: { limit: 30, window: 1m }
       GEOCODING_UPSTREAM: { limit: 1, window: 1s }
+  kafka:
+    prefix: ${KAFKA_TOPIC_PREFIX:}
+    partitions: 3
+    replication-factor: ${KAFKA_REPLICATION_FACTOR:1}
+    retention:
+      lifecycle: 7d
+      location: 6h
+      notification: 3d
+      dead-letter: 14d
+    retry:
+      attempts: 3
+      initial-interval: 1s
+      multiplier: 2
+    processed-events-retention: 7d
+    cleanup-cron: "0 30 3 * * *"
+  outbox:
+    relay-enabled: true
+    batch-size: 100
+    poll-interval: 250ms
+    send-timeout: 10s
+    error-backoff: 5s
+    retention: 3d
+  payments:
+    platform-fee-rate: 0.20
   geocoding:
     provider: ${GEOCODING_PROVIDER:nominatim}
     base-url: ${GEOCODING_BASE_URL:https://nominatim.openstreetmap.org}

@@ -27,10 +27,11 @@ public class RideFixtures {
     private final TransactionTemplate tx;
     private final MutableClock clock;
     private final StringRedisTemplate redis;
+    private final KafkaTestSupport kafka;
 
     public RideFixtures(UserRepository users, DriverRepository drivers, VehicleRepository vehicles,
                         AccessTokenService accessTokens, JdbcTemplate jdbc, TransactionTemplate tx, MutableClock clock,
-                        StringRedisTemplate redis) {
+                        StringRedisTemplate redis, KafkaTestSupport kafka) {
         this.users = users;
         this.drivers = drivers;
         this.vehicles = vehicles;
@@ -39,6 +40,7 @@ public class RideFixtures {
         this.tx = tx;
         this.clock = clock;
         this.redis = redis;
+        this.kafka = kafka;
     }
 
     /** An authenticated test user: id plus a ready-to-use Authorization header value. */
@@ -47,10 +49,16 @@ public class RideFixtures {
 
     /**
      * Integration tests share one database and one Redis; ride tests need a clean slate of rides, online
-     * drivers and cached values so other tests' state never leaks in.
+     * drivers and cached values so other tests' state never leaks in. The previous test's events are
+     * processed first, so no consumer is still working on rows that are about to be deleted.
      */
     public void reset() {
+        kafka.awaitAssignment();
+        kafka.awaitIdle();
         clock.reset();
+        jdbc.update("DELETE FROM notifications");
+        jdbc.update("DELETE FROM ratings");
+        jdbc.update("DELETE FROM payments");
         jdbc.update("DELETE FROM rides");
         jdbc.update("DELETE FROM driver_locations");
         jdbc.update("UPDATE drivers SET availability = 'OFFLINE' WHERE availability <> 'OFFLINE'");

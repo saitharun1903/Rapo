@@ -16,6 +16,7 @@ import com.rideflow.geospatial.GeoMath;
 import com.rideflow.geospatial.GeoPoint;
 import com.rideflow.support.MutableClock;
 import com.rideflow.support.IntegrationTestContainers;
+import com.rideflow.support.KafkaTestSupport;
 import com.rideflow.support.RideApi;
 import com.rideflow.support.RideFixtures;
 import com.rideflow.support.RideFixtures.Actor;
@@ -52,6 +53,8 @@ class RideLifecycleIT extends IntegrationTestContainers {
     private RideFixtures fixtures;
     @Autowired
     private MutableClock clock;
+    @Autowired
+    private KafkaTestSupport kafka;
 
     private RideApi api;
 
@@ -121,6 +124,8 @@ class RideLifecycleIT extends IntegrationTestContainers {
             clock.advance(GPS_INTERVAL);
             assertStatus(api.reportLocation(nearDriver, route[i], clock.instant()), 202);
         }
+        // Positions reach PostgreSQL through the batching Kafka consumer; let it catch up so the trail is complete.
+        kafka.awaitIdle();
         MvcResult completed = api.call(nearDriver, "POST", "/api/rides/" + rideId + "/complete", null);
         assertStatus(completed, 200);
 

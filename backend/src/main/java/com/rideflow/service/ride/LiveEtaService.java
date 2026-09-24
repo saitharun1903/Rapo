@@ -8,14 +8,13 @@ import com.rideflow.dto.ride.EtaResponse;
 import com.rideflow.geospatial.GeoPoint;
 import com.rideflow.geospatial.RouteEstimate;
 import com.rideflow.geospatial.RoutingService;
-import com.rideflow.service.ride.event.RideStatusChangedEvent;
 import java.time.Clock;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * The driver's ETA to the next stop, kept in Redis ({@code ride:{id}:eta}, TTL 30 s). A driver reports a
@@ -65,9 +64,14 @@ public class LiveEtaService {
         });
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void onRideStatusChanged(RideStatusChangedEvent event) {
-        cache.evict(RedisKeys.eta(event.rideId()), RedisKeys.etaRefresh(event.rideId()));
+    /** Called with every ride status change; the entry is deleted once the change has committed. */
+    public void evictAfterCommit(UUID rideId) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                cache.evict(RedisKeys.eta(rideId), RedisKeys.etaRefresh(rideId));
+            }
+        });
     }
 
     private EtaResponse compute(GeoPoint from, EtaDestination destination) {

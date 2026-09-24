@@ -13,6 +13,10 @@ import org.springframework.validation.annotation.Validated;
  * @param geocodeTtl      geocoding results (Nominatim's usage policy requires caching)
  * @param surgeTtl        surge multiplier per ~1 km cell
  * @param etaTtl          live ETA of a ride's driver to its next stop
+ * @param driverStateTtl  a driver's availability and active ride, read on every location report; entries are
+ *                        rewritten after every change, so the TTL only bounds a missed rewrite
+ * @param driverLocationTtl a driver's latest position; longer than the presence timeout, so presence checks
+ *                        still see a driver whose positions are not reaching PostgreSQL
  * @param redisRetryAfter after a Redis failure, skip Redis for this long before trying again
  */
 @Validated
@@ -23,5 +27,7 @@ public record CacheProperties(
         @NotNull Duration geocodeTtl,
         @NotNull Duration surgeTtl,
         @NotNull Duration etaTtl,
+        @NotNull Duration driverStateTtl,
+        @NotNull Duration driverLocationTtl,
         @NotNull Duration redisRetryAfter) {
 }

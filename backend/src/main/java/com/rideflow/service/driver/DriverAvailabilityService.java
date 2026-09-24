@@ -10,6 +10,7 @@ import com.rideflow.exception.ResourceNotFoundException;
 import com.rideflow.geospatial.GeoPoint;
 import com.rideflow.mapper.DriverMapper;
 import com.rideflow.repository.DriverLocationRepository;
+import com.rideflow.repository.DriverPosition;
 import com.rideflow.repository.DriverRepository;
 import com.rideflow.repository.RideOfferRepository;
 import com.rideflow.repository.VehicleRepository;
@@ -31,17 +32,22 @@ public class DriverAvailabilityService {
     private final DriverLocationRepository driverLocations;
     private final RideOfferRepository offers;
     private final DriverMapper driverMapper;
+    private final DriverPositions positions;
+    private final DriverStateCache driverStates;
     private final DomainEventPublisher events;
     private final Clock clock;
 
     public DriverAvailabilityService(DriverRepository drivers, VehicleRepository vehicles,
                                      DriverLocationRepository driverLocations, RideOfferRepository offers,
-                                     DriverMapper driverMapper, DomainEventPublisher events, Clock clock) {
+                                     DriverMapper driverMapper, DriverPositions positions,
+                                     DriverStateCache driverStates, DomainEventPublisher events, Clock clock) {
         this.drivers = drivers;
         this.vehicles = vehicles;
         this.driverLocations = driverLocations;
         this.offers = offers;
         this.driverMapper = driverMapper;
+        this.positions = positions;
+        this.driverStates = driverStates;
         this.events = events;
         this.clock = clock;
     }
@@ -55,7 +61,10 @@ public class DriverAvailabilityService {
                 new InvalidStateException(ErrorCode.NO_ACTIVE_VEHICLE, "Register an active vehicle before going online"));
         driver.goOnline();
         Instant now = clock.instant();
+        // Written to PostgreSQL at once (not through the batch consumer) so matching can find the driver now.
         driverLocations.upsert(driverId, location, null, null, null, now, now);
+        positions.record(driverId, new DriverPosition(location, null, now, now));
+        driverStates.refreshAfterCommit(driverId);
         return driverMapper.toResponse(driver, vehicle);
     }
 
@@ -64,6 +73,7 @@ public class DriverAvailabilityService {
         Driver driver = load(driverId);
         driver.goOffline();
         offers.cancelPendingForDriver(driverId, clock.instant());
+        driverStates.refreshAfterCommit(driverId);
         return driverMapper.toResponse(driver, vehicles.findByDriverIdAndActiveTrue(driverId).orElse(null));
     }
 
@@ -74,6 +84,7 @@ public class DriverAvailabilityService {
             Instant now = clock.instant();
             driver.goOffline();
             offers.cancelPendingForDriver(driverId, now);
+            driverStates.refreshAfterCommit(driverId);
             if (wasOnline) {
                 events.publish(new DriverWentOfflineEvent(driverId, OfflineReason.ACCOUNT_SUSPENDED, now));
             }

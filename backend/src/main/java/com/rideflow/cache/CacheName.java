@@ -10,7 +10,8 @@ public enum CacheName {
     ROUTE(CacheProperties::routeTtl),
     GEOCODE(CacheProperties::geocodeTtl),
     SURGE(CacheProperties::surgeTtl),
-    ETA(CacheProperties::etaTtl);
+    ETA(CacheProperties::etaTtl),
+    DRIVER_STATE(CacheProperties::driverStateTtl);
 
     private final Function<CacheProperties, Duration> ttl;
 

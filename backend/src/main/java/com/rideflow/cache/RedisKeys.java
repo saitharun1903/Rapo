@@ -46,6 +46,16 @@ public final class RedisKeys {
         return "ride:" + rideId + ":eta-refresh";
     }
 
+    /** A driver's availability and active ride, read on every location report. */
+    public static String driverState(UUID driverId) {
+        return "driver:" + driverId + ":state";
+    }
+
+    /** A driver's latest position (hash). */
+    public static String driverLocation(UUID driverId) {
+        return "driver:" + driverId + ":location";
+    }
+
     public static String rateLimit(RateLimitScope scope, String subject) {
         return "rl:" + scope.name().toLowerCase(Locale.ROOT) + ":" + hash(subject);
     }

@@ -42,7 +42,7 @@ class JsonCacheTest {
 
     private JsonCache cache(boolean enabled) {
         CacheProperties properties = new CacheProperties(enabled, Duration.ofMinutes(15), Duration.ofHours(24),
-                SURGE_TTL, Duration.ofSeconds(30), Duration.ofSeconds(5));
+                SURGE_TTL, Duration.ofSeconds(30), Duration.ofSeconds(60), Duration.ofMinutes(5), Duration.ofSeconds(5));
         MutableClock clock = new MutableClock(Instant.parse("2026-09-24T10:00:00Z"));
         return new JsonCache(redis, JsonMapper.builder().build(), properties,
                 new RedisAvailability(properties, clock, meters), meters);

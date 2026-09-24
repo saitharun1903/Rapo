@@ -112,7 +112,7 @@ Password policy: 10–72 characters (BCrypt limit), at least one letter and one 
 | GET | `/rides/{id}/tracking` | Snapshot after load or reconnect: `{rideId, status, driverLocation{point, headingDeg, recordedAt}?, stale, eta{target: PICKUP\|DROPOFF, seconds, distanceMeters, source: ROUTED\|APPROXIMATE}?}`. Passenger or assigned driver; a driver who only got an offer gets 404. `409 TRACKING_UNAVAILABLE` unless a driver is assigned (DRIVER_ASSIGNED to IN_PROGRESS). `stale` when the last position is older than 30 s; `eta` is `null` when stale or while the driver waits at the pickup. Live updates then arrive over WebSocket ([events.md](events.md) §2) |
 | GET | `/rides/{id}/timeline` | Status events |
 | POST | `/rides/{id}/cancel` | Optional body `{reason}`. Passenger (before the trip starts) → `CANCELLED`, and the driver is released. Assigned driver before arrival → ride goes back to `MATCHING` and is re-offered to other drivers. Driver after arriving → `CANCELLED` only once the 5-minute no-show wait has passed, else `409 NO_SHOW_WAIT_NOT_ELAPSED` |
-| POST | `/rides/{id}/rating` | `{score 1-5, comment?}` → 201; only after `COMPLETED`, once per rater *(Phase 6)* |
+| POST | `/rides/{id}/rating` | `{score 1-5, comment? (≤ 500)}` → `201 {id, rideId, score, comment, createdAt}`. The passenger rates the driver, the driver rates the passenger. `409 RIDE_NOT_COMPLETED` before completion, `409 ALREADY_RATED` on a second rating, `404` for anyone else. The driver's `ratingAvg`/`ratingCount` update immediately |
 
 ```json
 // POST /rides
@@ -135,7 +135,7 @@ The quote pins category, distance/time estimate and surge. Its pickup/dropoff mu
   "final": null,
   "driver":  { "id": "…", "fullName": "…", "ratingAvg": "4.86",
                "vehicle": { "make": "…", "model": "…", "color": "…", "plateNumber": "…" } },
-  "payment": null,
+  "payment": null,   // after completion, once settled: { "id", "method", "status", "provider": "CASH|SANDBOX", "amount": { "amount", "currency" } }
   "requestedAt": "…", "acceptedAt": "…", "startedAt": null, "completedAt": null,
   "cancellation": null
 }
@@ -204,11 +204,15 @@ Errors common to driver actions: `404 RIDE_NOT_FOUND` (not your ride or offer), 
 
 ## Notifications
 
-| Method | Path |
-|---|---|
-| GET | `/notifications?unreadOnly=true&page=&size=` |
-| POST | `/notifications/{id}/read` → 204 |
-| POST | `/notifications/read-all` → 204 |
+Any authenticated user; always the caller's own notifications.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/notifications?unreadOnly=&page=&size=&sort=createdAt,desc` | `PageResponse` of `{id, type, title, body, rideId?, read, createdAt}` |
+| POST | `/notifications/{id}/read` | `204`; another user's id gives `404 NOTIFICATION_NOT_FOUND` |
+| POST | `/notifications/read-all` | `204` |
+
+Notifications are created asynchronously by the notifications consumer (ride progress, payments, driver verification decisions) and pushed to `/user/queue/notifications` ([events.md](events.md) §2.3).
 
 ## Admin (role ADMIN)
 
