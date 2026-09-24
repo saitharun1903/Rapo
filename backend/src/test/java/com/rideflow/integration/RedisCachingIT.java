@@ -124,7 +124,8 @@ class RedisCachingIT extends IntegrationTestContainers {
         Actor passenger = fixtures.passenger();
 
         MvcResult first = api.call(passenger, "GET", "/api/geo/search?q=Charminar", null);
-        MvcResult second = api.call(passenger, "GET", "/api/geo/search?q=%20%20CHARMINAR%20", null);
+        // MockMvc encodes the URI itself: pass the raw text a user would type.
+        MvcResult second = api.call(passenger, "GET", "/api/geo/search?q=  CHARMINAR ", null);
 
         assertThat(first.getResponse().getStatus()).isEqualTo(200);
         assertThat(body(second)).isEqualTo(body(first));

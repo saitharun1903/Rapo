@@ -1,0 +1,88 @@
+name: cache-benchmark
+
+# Before/after measurement of the Redis caches (Phase 5). Runs the packaged backend against PostGIS and
+# Redis with caching off, then on, under the same k6 load. Upstream routing/geocoding are local stand-ins
+# whose delay is the latency measured from this runner to the real public servers moments earlier.
+on:
+  workflow_dispatch:
+  push:
+    paths: ["load-tests/cache-benchmark/**", ".github/workflows/cache-benchmark.yml"]
+
+permissions:
+  contents: read
+
+env:
+  VUS: "20"
+  DURATION_SECONDS: "60"
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Build backend
+        working-directory: backend
+        run: ./mvnw -B -q -DskipTests package
+
+      # Random per run: nothing reusable is stored in the repository or the logs.
+      - name: Generate throwaway credentials
+        run: |
+          DB_PASSWORD=$(openssl rand -hex 16)
+          JWT_SECRET=$(openssl rand -hex 32)
+          echo "::add-mask::$DB_PASSWORD"
+          echo "::add-mask::$JWT_SECRET"
+          echo "DB_PASSWORD=$DB_PASSWORD" >> "$GITHUB_ENV"
+          echo "JWT_SECRET=$JWT_SECRET" >> "$GITHUB_ENV"
+
+      - name: Start PostGIS and Redis
+        run: |
+          docker run -d --name db -p 5432:5432 -e POSTGRES_DB=rideflow -e POSTGRES_USER=rideflow \
+            -e POSTGRES_PASSWORD="$DB_PASSWORD" postgis/postgis:17-3.5
+          docker run -d --name redis -p 6379:6379 redis:8.6-alpine
+          # Over TCP: the image's init-time server listens on the socket only, so this waits for the real one.
+          until docker exec db pg_isready -h 127.0.0.1 -U rideflow -d rideflow; do sleep 1; done
+
+      - name: Measure real upstream latency
+        run: bash load-tests/cache-benchmark/measure-upstreams.sh >> "$GITHUB_ENV"
+
+      - name: Start upstream stand-ins
+        run: |
+          mkdir -p /tmp/stubs/mappings
+          for template in load-tests/cache-benchmark/stub-templates/*.tmpl; do
+            sed -e "s/__OSRM_DELAY_MS__/$OSRM_DELAY_MS/" -e "s/__NOMINATIM_DELAY_MS__/$NOMINATIM_DELAY_MS/" \
+              "$template" > "/tmp/stubs/mappings/$(basename "$template" .tmpl)"
+          done
+          docker run -d --name upstream -p 8089:8080 -v /tmp/stubs:/home/wiremock wiremock/wiremock:3.13.2
+          until curl -sf http://localhost:8089/__admin/health > /dev/null; do sleep 1; done
+
+      - name: Run benchmark (cache off, then on)
+        run: bash load-tests/cache-benchmark/run.sh
+
+      - name: Report
+        run: |
+          {
+            echo "Runner: $(nproc) vCPU, $(lscpu | sed -n 's/^Model name: *//p'), $(free -g | awk '/^Mem:/ {print $2}') GB RAM."
+            echo "Load: $VUS VUs on estimates and $((VUS / 4)) on search for ${DURATION_SECONDS}s per mode."
+            echo "Upstream stand-in delay (median of 5 real requests from this runner): OSRM ${OSRM_DELAY_MS} ms, Nominatim ${NOMINATIM_DELAY_MS} ms."
+            echo
+            python load-tests/cache-benchmark/report.py load-tests/results "$DURATION_SECONDS"
+          } > load-tests/results/report.md
+          cat load-tests/results/report.md >> "$GITHUB_STEP_SUMMARY"
+          # Also as an annotation, which is readable without repository admin rights.
+          body=$(tr -d '\r' < load-tests/results/report.md | awk 'BEGIN { ORS = "%0A" } { gsub(/%/, "%25"); print }')
+          echo "::notice title=Cache benchmark::$body"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: cache-benchmark-results
+          path: load-tests/results

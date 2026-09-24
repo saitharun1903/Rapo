@@ -1,0 +1,39 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/route/v1/driving/.*"
+  },
+  "response": {
+    "status": 200,
+    "fixedDelayMilliseconds": __OSRM_DELAY_MS__,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "code": "Ok",
+      "routes": [
+        {
+          "distance": 12840.4,
+          "duration": 1719.6,
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [
+                78.3772,
+                17.4435
+              ],
+              [
+                78.42,
+                17.43
+              ],
+              [
+                78.4738,
+                17.4239
+              ]
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
