@@ -10,6 +10,7 @@ import com.rideflow.exception.ErrorCode;
 import com.rideflow.exception.ResourceNotFoundException;
 import com.rideflow.mapper.DriverMapper;
 import com.rideflow.repository.DriverRepository;
+import com.rideflow.repository.RideOfferRepository;
 import com.rideflow.repository.VehicleRepository;
 import com.rideflow.service.audit.AuditService;
 import java.time.Clock;
@@ -31,6 +32,7 @@ public class DriverAdministrationService {
 
     private final DriverRepository drivers;
     private final VehicleRepository vehicles;
+    private final RideOfferRepository offers;
     private final DriverMapper driverMapper;
     private final AuditService auditService;
     private final Clock clock;
@@ -38,11 +40,13 @@ public class DriverAdministrationService {
     public DriverAdministrationService(
             DriverRepository drivers,
             VehicleRepository vehicles,
+            RideOfferRepository offers,
             DriverMapper driverMapper,
             AuditService auditService,
             Clock clock) {
         this.drivers = drivers;
         this.vehicles = vehicles;
+        this.offers = offers;
         this.driverMapper = driverMapper;
         this.auditService = auditService;
         this.clock = clock;
@@ -80,6 +84,7 @@ public class DriverAdministrationService {
     public DriverResponse suspend(UUID adminId, UUID driverId, String reason) {
         Driver driver = load(driverId);
         driver.suspend(reason.trim());
+        offers.cancelPendingForDriver(driverId, clock.instant());
         auditService.record(adminId, AuditAction.DRIVER_SUSPENDED, ENTITY_TYPE, driverId, Map.of(REASON, reason.trim()));
         return toResponse(driver);
     }

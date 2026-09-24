@@ -10,6 +10,9 @@ spring:
 rideflow:
   scheduling:
     enabled: false
+  # No network in tests; the OSRM client is covered by RoutingTest with a mock server.
+  routing:
+    provider: straight-line
   security:
     bcrypt-strength: 4
     jwt:

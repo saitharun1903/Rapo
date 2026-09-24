@@ -80,6 +80,59 @@ rideflow:
       cookie-path: /api/auth
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  # Rate card (INR). Bump "version" whenever rates change; it is stored with every fare.
+  pricing:
+    currency: INR
+    version: 2026-09-v1
+    rounding-increment: 1.00
+    categories:
+      ECONOMY: { base-fare: 40, per-km: 12, per-minute: 1.5, booking-fee: 10, minimum-fare: 80 }
+      COMFORT: { base-fare: 60, per-km: 16, per-minute: 2.0, booking-fee: 15, minimum-fare: 120 }
+      XL:      { base-fare: 90, per-km: 22, per-minute: 2.5, booking-fee: 20, minimum-fare: 180 }
+  surge:
+    enabled: ${SURGE_ENABLED:true}
+    radius-meters: 2000
+    demand-window: 10m
+    sensitivity: 0.5
+    threshold: 1.0
+    max-multiplier: 2.5
+    step: 0.1
+  matching:
+    initial-radius-meters: 3000
+    radius-growth: 1.5
+    max-radius-meters: 8000
+    max-rounds: 3
+    candidate-limit: 10
+    offers-per-round: 3
+    offer-ttl: 20s
+    location-freshness: 30s
+    trigger-grace: 5s
+    sweep-interval: PT5S
+    sweep-batch-size: 50
+  ride:
+    # Demo city: Hyderabad. Change SERVICE_AREA_* for another city.
+    service-area:
+      center:
+        lat: ${SERVICE_AREA_CENTER_LAT:17.3850}
+        lng: ${SERVICE_AREA_CENTER_LNG:78.4867}
+      radius-meters: ${SERVICE_AREA_RADIUS_METERS:40000}
+    min-trip-distance-meters: 200
+    quote-ttl: 5m
+    quote-match-tolerance-meters: 50
+    pickup-geofence-meters: 150
+    no-show-wait: 5m
+    location:
+      max-age: 30s
+      max-future-skew: 5s
+      track-min-interval: 10s
+      track-min-distance-meters: 25
+  routing:
+    provider: ${ROUTING_PROVIDER:osrm}
+    osrm-base-url: ${ROUTING_BASE_URL:https://router.project-osrm.org}
+    connect-timeout: 2s
+    read-timeout: 4s
+    circuity-factor: 1.3
+    average-speed-kmh: 24
   bootstrap:
     admin:
       email: ${BOOTSTRAP_ADMIN_EMAIL:}

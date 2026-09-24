@@ -72,7 +72,14 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/drivers/nearby").hasAnyRole("PASSENGER", "ADMIN")
                         .requestMatchers("/api/drivers/**").hasRole("DRIVER")
+                        .requestMatchers(HttpMethod.POST, "/api/fares/**").hasRole("PASSENGER")
+                        .requestMatchers(HttpMethod.POST, "/api/rides").hasRole("PASSENGER")
+                        .requestMatchers(HttpMethod.POST, "/api/rides/*/accept", "/api/rides/*/reject",
+                                "/api/rides/*/en-route", "/api/rides/*/arrive", "/api/rides/*/start",
+                                "/api/rides/*/complete").hasRole("DRIVER")
+                        .requestMatchers("/api/rides/**").hasAnyRole("PASSENGER", "DRIVER")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter))

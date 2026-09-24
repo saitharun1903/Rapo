@@ -5,6 +5,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -94,6 +95,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     ResponseEntity<ApiError> handleOptimisticLock(ObjectOptimisticLockingFailureException ex, HttpServletRequest request) {
         log.info("Optimistic lock conflict on {}", ex.getPersistentClassName());
+        return respond(ErrorCode.CONCURRENT_MODIFICATION,
+                "The resource was modified concurrently; reload and retry", request);
+    }
+
+    /** Lock timeouts and deadlock victims: the request lost a race and can simply be retried. */
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    ResponseEntity<ApiError> handleLockFailure(PessimisticLockingFailureException ex, HttpServletRequest request) {
+        log.warn("Lock conflict on {} {}: {}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return respond(ErrorCode.CONCURRENT_MODIFICATION,
                 "The resource was modified concurrently; reload and retry", request);
     }

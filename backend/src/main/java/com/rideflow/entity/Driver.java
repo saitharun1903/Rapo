@@ -108,6 +108,43 @@ public class Driver extends TimestampedEntity {
         this.availability = DriverAvailability.OFFLINE;
     }
 
+    /** Idempotent: an already-available driver stays available. */
+    public void goOnline() {
+        if (verificationStatus != DriverVerificationStatus.VERIFIED) {
+            throw new InvalidStateException(ErrorCode.DRIVER_NOT_VERIFIED,
+                    "Driver must be verified before going online (status: " + verificationStatus + ")");
+        }
+        if (availability == DriverAvailability.OFFLINE) {
+            availability = DriverAvailability.AVAILABLE;
+        }
+    }
+
+    public void goOffline() {
+        if (availability == DriverAvailability.ON_TRIP) {
+            throw new InvalidStateException(ErrorCode.DRIVER_ON_TRIP, "Finish or cancel the current trip before going offline");
+        }
+        availability = DriverAvailability.OFFLINE;
+    }
+
+    public void startTrip() {
+        if (availability != DriverAvailability.AVAILABLE) {
+            throw new InvalidStateException(ErrorCode.DRIVER_UNAVAILABLE,
+                    "Driver must be online and not on another trip (availability: " + availability + ")");
+        }
+        availability = DriverAvailability.ON_TRIP;
+    }
+
+    /** Back to AVAILABLE after a trip ends or the driver is released from it. */
+    public void endTrip() {
+        if (availability == DriverAvailability.ON_TRIP) {
+            availability = DriverAvailability.AVAILABLE;
+        }
+    }
+
+    public boolean isOnline() {
+        return availability != DriverAvailability.OFFLINE;
+    }
+
     private void requireStatus(Set<DriverVerificationStatus> allowed, String action) {
         if (!allowed.contains(verificationStatus)) {
             throw new InvalidStateException(ErrorCode.INVALID_DRIVER_STATE,

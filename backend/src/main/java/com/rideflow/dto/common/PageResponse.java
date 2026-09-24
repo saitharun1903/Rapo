@@ -25,6 +25,12 @@ public record PageResponse<T>(
                 describe(page.getSort()));
     }
 
+    /** For content already mapped in bulk (e.g. with batched lookups), in the page's order. */
+    public static <T> PageResponse<T> of(Page<?> page, List<T> content) {
+        return new PageResponse<>(List.copyOf(content), page.getNumber(), page.getSize(), page.getTotalElements(),
+                page.getTotalPages(), describe(page.getSort()));
+    }
+
     private static String describe(Sort sort) {
         return sort.stream()
                 .map(order -> order.getProperty() + "," + order.getDirection().name().toLowerCase())
