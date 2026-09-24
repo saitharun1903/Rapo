@@ -29,6 +29,11 @@ spring:
     locations: classpath:db/migration
   jackson:
     default-property-inclusion: always
+  task:
+    execution:
+      # The WebSocket broker registers its own executors, which would otherwise make Spring Boot skip the
+      # application executor that @Async listeners (matching trigger, real-time pushes) run on.
+      mode: force
 
 server:
   port: ${SERVER_PORT:8080}
@@ -126,6 +131,15 @@ rideflow:
       max-future-skew: 5s
       track-min-interval: 10s
       track-min-distance-meters: 25
+  realtime:
+    heartbeat: 10s
+    location-min-interval: 1s
+    connect-timeout: 10s
+    session-sweep-interval: PT15S
+    presence:
+      timeout: 2m
+      sweep-interval: PT30S
+      sweep-batch-size: 100
   routing:
     provider: ${ROUTING_PROVIDER:osrm}
     osrm-base-url: ${ROUTING_BASE_URL:https://router.project-osrm.org}

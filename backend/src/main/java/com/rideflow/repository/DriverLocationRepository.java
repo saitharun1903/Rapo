@@ -64,22 +64,36 @@ public class DriverLocationRepository {
             WHERE driver_id = :driverId AND updated_at > :freshSince
             """.formatted(POINT);
 
+    private static final String SILENT_AVAILABLE = """
+            SELECT d.id FROM drivers d
+            LEFT JOIN driver_locations dl ON dl.driver_id = d.id
+            WHERE d.availability = 'AVAILABLE' AND (dl.updated_at IS NULL OR dl.updated_at < :silentSince)
+            ORDER BY dl.updated_at NULLS FIRST
+            LIMIT :limit
+            """;
+
+    private static final String LAST_UPDATE = "SELECT updated_at FROM driver_locations WHERE driver_id = :driverId";
+
     private final NamedParameterJdbcTemplate jdbc;
 
     public DriverLocationRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
-    /** Stores the position unless a newer one is already stored (out-of-order reports never regress it). */
-    public void upsert(UUID driverId, GeoPoint point, Integer headingDeg, Double speedMps, Double accuracyMeters,
-                       Instant recordedAt, Instant now) {
-        jdbc.update(UPSERT, point(point)
+    /**
+     * Stores the position unless a newer one is already stored (out-of-order reports never regress it).
+     *
+     * @return {@code true} if this report became the driver's current position
+     */
+    public boolean upsert(UUID driverId, GeoPoint point, Integer headingDeg, Double speedMps, Double accuracyMeters,
+                          Instant recordedAt, Instant now) {
+        return jdbc.update(UPSERT, point(point)
                 .addValue("driverId", driverId)
                 .addValue("heading", headingDeg)
                 .addValue("speed", speedMps)
                 .addValue("accuracy", accuracyMeters)
                 .addValue("recordedAt", SqlTime.utc(recordedAt))
-                .addValue("now", SqlTime.utc(now)));
+                .addValue("now", SqlTime.utc(now))) == 1;
     }
 
     public Optional<DriverPosition> find(UUID driverId) {
@@ -135,6 +149,19 @@ public class DriverLocationRepository {
                         .addValue("driverId", driverId)
                         .addValue("freshSince", SqlTime.utc(freshSince)), (rs, row) -> rs.getDouble(1))
                 .stream().findFirst();
+    }
+
+    /** AVAILABLE drivers with no location update since {@code silentSince}, longest-silent first. */
+    public List<UUID> findSilentAvailableDrivers(Instant silentSince, int limit) {
+        return jdbc.queryForList(SILENT_AVAILABLE, new MapSqlParameterSource()
+                .addValue("silentSince", SqlTime.utc(silentSince))
+                .addValue("limit", limit), UUID.class);
+    }
+
+    /** Server time of the driver's last accepted location update, if any. */
+    public Optional<Instant> lastUpdate(UUID driverId) {
+        return jdbc.query(LAST_UPDATE, new MapSqlParameterSource("driverId", driverId),
+                (rs, row) -> SqlTime.instant(rs.getTimestamp("updated_at"))).stream().findFirst();
     }
 
     private static MapSqlParameterSource point(GeoPoint point) {

@@ -46,8 +46,20 @@ class ArchitectureTest {
             .should().dependOnClassesThat().resideInAPackage("..controller..");
 
     @ArchTest
+    static final ArchRule websocketLayerUsesServicesNotPersistence = noClasses()
+            .that().resideInAPackage("..websocket..")
+            .should().dependOnClassesThat().resideInAPackage("..repository..")
+            .orShould().dependOnClassesThat().areAnnotatedWith(Entity.class);
+
+    @ArchTest
+    static final ArchRule websocketLayerIsNotTransactional = noClasses()
+            .that().resideInAPackage("..websocket..")
+            .should().beAnnotatedWith(Transactional.class);
+
+    @ArchTest
     static final ArchRule entitiesDependOnlyOnDomainTypes = noClasses()
             .that().resideInAPackage("..entity..")
             .should().dependOnClassesThat().resideInAnyPackage(
-                    "..service..", "..controller..", "..dto..", "..repository..", "..security..", "..mapper..");
+                    "..service..", "..controller..", "..dto..", "..repository..", "..security..", "..mapper..",
+                    "..websocket..");
 }

@@ -21,12 +21,12 @@ import com.rideflow.repository.DriverLocationRepository;
 import com.rideflow.repository.DriverRepository;
 import com.rideflow.repository.FareBreakdownRepository;
 import com.rideflow.repository.RideOfferRepository;
-import com.rideflow.repository.RideTrackPointRepository;
 import com.rideflow.repository.RideTrackPointRepository.TrackSummary;
+import com.rideflow.repository.RideTrackPointRepository;
 import com.rideflow.repository.VehicleRepository;
+import com.rideflow.service.event.DomainEventPublisher;
 import com.rideflow.service.fare.FareCalculator;
 import com.rideflow.service.ride.event.MatchingRoundRequestedEvent;
-import com.rideflow.service.ride.event.RideEventPublisher;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Locale;
@@ -49,6 +49,7 @@ public class DriverRideService {
 
     private final RideAccessPolicy access;
     private final RideOfferRepository offers;
+    private final RideOfferWithdrawal offerWithdrawal;
     private final DriverRepository drivers;
     private final VehicleRepository vehicles;
     private final DriverLocationRepository driverLocations;
@@ -56,20 +57,22 @@ public class DriverRideService {
     private final FareBreakdownRepository fareBreakdowns;
     private final FareCalculator fareCalculator;
     private final RideTransitionRecorder recorder;
-    private final RideEventPublisher events;
+    private final DomainEventPublisher events;
     private final RideViewAssembler views;
     private final RideProperties rideProperties;
     private final MatchingProperties matchingProperties;
     private final Clock clock;
 
-    public DriverRideService(RideAccessPolicy access, RideOfferRepository offers, DriverRepository drivers,
+    public DriverRideService(RideAccessPolicy access, RideOfferRepository offers, RideOfferWithdrawal offerWithdrawal,
+                             DriverRepository drivers,
                              VehicleRepository vehicles, DriverLocationRepository driverLocations,
                              RideTrackPointRepository trackPoints, FareBreakdownRepository fareBreakdowns,
                              FareCalculator fareCalculator, RideTransitionRecorder recorder,
-                             RideEventPublisher events, RideViewAssembler views, RideProperties rideProperties,
+                             DomainEventPublisher events, RideViewAssembler views, RideProperties rideProperties,
                              MatchingProperties matchingProperties, Clock clock) {
         this.access = access;
         this.offers = offers;
+        this.offerWithdrawal = offerWithdrawal;
         this.drivers = drivers;
         this.vehicles = vehicles;
         this.driverLocations = driverLocations;
@@ -113,7 +116,7 @@ public class DriverRideService {
         } catch (ObjectOptimisticLockingFailureException | DataIntegrityViolationException ex) {
             throw alreadyAssigned();
         }
-        offers.cancelPendingForRide(rideId, now);
+        offerWithdrawal.withdrawPending(rideId, now);
         log.info("Ride {} accepted by driver {}", rideId, driverId);
         return views.toResponse(ride);
     }

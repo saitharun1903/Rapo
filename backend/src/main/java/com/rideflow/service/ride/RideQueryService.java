@@ -39,6 +39,14 @@ public class RideQueryService {
         return views.toResponse(access.loadVisible(user, rideId));
     }
 
+    /**
+     * The ride as its participants see it, without an access check. Only for server-side pushes, whose
+     * recipients must be taken from the returned view (its passenger and current driver).
+     */
+    public Optional<RideResponse> findForParticipants(UUID rideId) {
+        return rides.findById(rideId).map(views::toResponse);
+    }
+
     /** The caller's current ride: used by clients after reload or reconnect to restore state. */
     public Optional<RideResponse> active(AuthenticatedUser user) {
         Optional<Ride> ride = user.role() == Role.DRIVER

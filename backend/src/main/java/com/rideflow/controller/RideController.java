@@ -6,11 +6,13 @@ import com.rideflow.dto.ride.CancelRideRequest;
 import com.rideflow.dto.ride.RideResponse;
 import com.rideflow.dto.ride.RideSummaryResponse;
 import com.rideflow.dto.ride.RideTimelineEntryResponse;
+import com.rideflow.dto.ride.RideTrackingResponse;
 import com.rideflow.entity.RideStatus;
 import com.rideflow.security.AuthenticatedUser;
 import com.rideflow.service.ride.RideBookingService;
 import com.rideflow.service.ride.RideCancellationService;
 import com.rideflow.service.ride.RideQueryService;
+import com.rideflow.service.ride.RideTrackingService;
 import com.rideflow.utility.PageRequests;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -43,12 +45,14 @@ public class RideController {
     private final RideBookingService bookingService;
     private final RideQueryService queryService;
     private final RideCancellationService cancellationService;
+    private final RideTrackingService trackingService;
 
     public RideController(RideBookingService bookingService, RideQueryService queryService,
-                          RideCancellationService cancellationService) {
+                          RideCancellationService cancellationService, RideTrackingService trackingService) {
         this.bookingService = bookingService;
         this.queryService = queryService;
         this.cancellationService = cancellationService;
+        this.trackingService = trackingService;
     }
 
     @PostMapping
@@ -86,6 +90,13 @@ public class RideController {
     public List<RideTimelineEntryResponse> timeline(
             @AuthenticationPrincipal AuthenticatedUser user, @PathVariable UUID rideId) {
         return queryService.timeline(user, rideId);
+    }
+
+    @GetMapping("/{rideId}/tracking")
+    @Operation(summary = "Driver position and ETA snapshot; live updates then arrive over WebSocket")
+    public RideTrackingResponse tracking(
+            @AuthenticationPrincipal AuthenticatedUser user, @PathVariable UUID rideId) {
+        return trackingService.snapshot(user, rideId);
     }
 
     @PostMapping("/{rideId}/cancel")

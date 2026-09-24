@@ -5,7 +5,7 @@ import com.rideflow.entity.Ride;
 import com.rideflow.entity.RideStatusEvent;
 import com.rideflow.repository.RideRepository;
 import com.rideflow.repository.RideStatusEventRepository;
-import com.rideflow.service.ride.event.RideEventPublisher;
+import com.rideflow.service.event.DomainEventPublisher;
 import com.rideflow.service.ride.event.RideStatusChangedEvent;
 import java.time.Clock;
 import java.time.Instant;
@@ -23,11 +23,11 @@ public class RideTransitionRecorder {
 
     private final RideRepository rides;
     private final RideStatusEventRepository statusEvents;
-    private final RideEventPublisher events;
+    private final DomainEventPublisher events;
     private final Clock clock;
 
     public RideTransitionRecorder(RideRepository rides, RideStatusEventRepository statusEvents,
-                                  RideEventPublisher events, Clock clock) {
+                                  DomainEventPublisher events, Clock clock) {
         this.rides = rides;
         this.statusEvents = statusEvents;
         this.events = events;

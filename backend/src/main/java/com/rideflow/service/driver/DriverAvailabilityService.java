@@ -2,6 +2,7 @@ package com.rideflow.service.driver;
 
 import com.rideflow.dto.driver.DriverResponse;
 import com.rideflow.entity.Driver;
+import com.rideflow.entity.OfflineReason;
 import com.rideflow.entity.Vehicle;
 import com.rideflow.exception.ErrorCode;
 import com.rideflow.exception.InvalidStateException;
@@ -12,6 +13,8 @@ import com.rideflow.repository.DriverLocationRepository;
 import com.rideflow.repository.DriverRepository;
 import com.rideflow.repository.RideOfferRepository;
 import com.rideflow.repository.VehicleRepository;
+import com.rideflow.service.driver.event.DriverWentOfflineEvent;
+import com.rideflow.service.event.DomainEventPublisher;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
@@ -28,16 +31,18 @@ public class DriverAvailabilityService {
     private final DriverLocationRepository driverLocations;
     private final RideOfferRepository offers;
     private final DriverMapper driverMapper;
+    private final DomainEventPublisher events;
     private final Clock clock;
 
     public DriverAvailabilityService(DriverRepository drivers, VehicleRepository vehicles,
                                      DriverLocationRepository driverLocations, RideOfferRepository offers,
-                                     DriverMapper driverMapper, Clock clock) {
+                                     DriverMapper driverMapper, DomainEventPublisher events, Clock clock) {
         this.drivers = drivers;
         this.vehicles = vehicles;
         this.driverLocations = driverLocations;
         this.offers = offers;
         this.driverMapper = driverMapper;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -65,8 +70,13 @@ public class DriverAvailabilityService {
     /** Used when an admin suspends the account. Refused while the driver is on a trip. */
     public void forceOffline(UUID driverId) {
         drivers.findById(driverId).ifPresent(driver -> {
+            boolean wasOnline = driver.isOnline();
+            Instant now = clock.instant();
             driver.goOffline();
-            offers.cancelPendingForDriver(driverId, clock.instant());
+            offers.cancelPendingForDriver(driverId, now);
+            if (wasOnline) {
+                events.publish(new DriverWentOfflineEvent(driverId, OfflineReason.ACCOUNT_SUSPENDED, now));
+            }
         });
     }
 

@@ -5,6 +5,7 @@ import com.rideflow.dto.driver.DriverResponse;
 import com.rideflow.entity.AuditAction;
 import com.rideflow.entity.Driver;
 import com.rideflow.entity.DriverVerificationStatus;
+import com.rideflow.entity.OfflineReason;
 import com.rideflow.entity.Vehicle;
 import com.rideflow.exception.ErrorCode;
 import com.rideflow.exception.ResourceNotFoundException;
@@ -13,7 +14,10 @@ import com.rideflow.repository.DriverRepository;
 import com.rideflow.repository.RideOfferRepository;
 import com.rideflow.repository.VehicleRepository;
 import com.rideflow.service.audit.AuditService;
+import com.rideflow.service.driver.event.DriverWentOfflineEvent;
+import com.rideflow.service.event.DomainEventPublisher;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -35,6 +39,7 @@ public class DriverAdministrationService {
     private final RideOfferRepository offers;
     private final DriverMapper driverMapper;
     private final AuditService auditService;
+    private final DomainEventPublisher events;
     private final Clock clock;
 
     public DriverAdministrationService(
@@ -43,12 +48,14 @@ public class DriverAdministrationService {
             RideOfferRepository offers,
             DriverMapper driverMapper,
             AuditService auditService,
+            DomainEventPublisher events,
             Clock clock) {
         this.drivers = drivers;
         this.vehicles = vehicles;
         this.offers = offers;
         this.driverMapper = driverMapper;
         this.auditService = auditService;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -83,8 +90,13 @@ public class DriverAdministrationService {
     @Transactional
     public DriverResponse suspend(UUID adminId, UUID driverId, String reason) {
         Driver driver = load(driverId);
+        boolean wasOnline = driver.isOnline();
+        Instant now = clock.instant();
         driver.suspend(reason.trim());
-        offers.cancelPendingForDriver(driverId, clock.instant());
+        offers.cancelPendingForDriver(driverId, now);
+        if (wasOnline) {
+            events.publish(new DriverWentOfflineEvent(driverId, OfflineReason.ACCOUNT_SUSPENDED, now));
+        }
         auditService.record(adminId, AuditAction.DRIVER_SUSPENDED, ENTITY_TYPE, driverId, Map.of(REASON, reason.trim()));
         return toResponse(driver);
     }

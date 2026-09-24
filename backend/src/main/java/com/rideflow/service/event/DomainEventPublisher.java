@@ -1,11 +1,11 @@
-package com.rideflow.service.ride.event;
+package com.rideflow.service.event;
 
 /**
- * Port for publishing ride domain events. Must be called inside the transaction that made the change;
+ * Port for publishing domain events (ride, offer, driver location and presence). Must be called inside the transaction that made the change;
  * listeners only see events whose transaction committed. The current adapter is in-process
  * (Spring application events); Phase 6 replaces it with a transactional outbox relayed to Kafka.
  */
-public interface RideEventPublisher {
+public interface DomainEventPublisher {
 
     void publish(Object event);
 }

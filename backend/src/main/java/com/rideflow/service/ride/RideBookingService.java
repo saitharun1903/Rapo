@@ -11,10 +11,10 @@ import com.rideflow.exception.ErrorCode;
 import com.rideflow.exception.InvalidStateException;
 import com.rideflow.repository.FareBreakdownRepository;
 import com.rideflow.repository.RideRepository;
+import com.rideflow.service.event.DomainEventPublisher;
 import com.rideflow.service.fare.FareQuote;
 import com.rideflow.service.fare.FareQuoteService;
 import com.rideflow.service.ride.event.MatchingRoundRequestedEvent;
-import com.rideflow.service.ride.event.RideEventPublisher;
 import java.time.Clock;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -36,12 +36,12 @@ public class RideBookingService {
     private final RideRepository rides;
     private final FareBreakdownRepository fareBreakdowns;
     private final RideTransitionRecorder recorder;
-    private final RideEventPublisher events;
+    private final DomainEventPublisher events;
     private final RideViewAssembler views;
     private final Clock clock;
 
     public RideBookingService(FareQuoteService quotes, RideRepository rides, FareBreakdownRepository fareBreakdowns,
-                              RideTransitionRecorder recorder, RideEventPublisher events, RideViewAssembler views,
+                              RideTransitionRecorder recorder, DomainEventPublisher events, RideViewAssembler views,
                               Clock clock) {
         this.quotes = quotes;
         this.rides = rides;

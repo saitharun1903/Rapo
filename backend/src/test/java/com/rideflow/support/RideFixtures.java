@@ -56,6 +56,11 @@ public class RideFixtures {
         return actor(user);
     }
 
+    public Actor admin() {
+        User user = tx.execute(status -> users.save(newUser(Role.ADMIN)));
+        return actor(user);
+    }
+
     public Actor verifiedDriver(VehicleCategory category) {
         User user = tx.execute(status -> {
             User saved = users.save(newUser(Role.DRIVER));

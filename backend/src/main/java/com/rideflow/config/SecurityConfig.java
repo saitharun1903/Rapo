@@ -3,6 +3,7 @@ package com.rideflow.config;
 import com.rideflow.security.RestAccessDeniedHandler;
 import com.rideflow.security.RestAuthenticationEntryPoint;
 import com.rideflow.security.RideFlowJwtAuthenticationConverter;
+import com.rideflow.websocket.StompDestinations;
 import java.util.List;
 import java.util.Map;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -71,6 +72,9 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers("/error").permitAll()
+                        // The WebSocket handshake carries no token (browsers cannot set headers on it); the
+                        // STOMP CONNECT frame is authenticated instead (StompAuthenticationInterceptor).
+                        .requestMatchers(HttpMethod.GET, StompDestinations.ENDPOINT).permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/drivers/nearby").hasAnyRole("PASSENGER", "ADMIN")
                         .requestMatchers("/api/drivers/**").hasRole("DRIVER")

@@ -9,8 +9,8 @@ import com.rideflow.repository.DriverLocationRepository;
 import com.rideflow.repository.NearbyDriver;
 import com.rideflow.repository.RideOfferRepository;
 import com.rideflow.repository.RideRepository;
+import com.rideflow.service.event.DomainEventPublisher;
 import com.rideflow.service.ride.RideTransitionRecorder;
-import com.rideflow.service.ride.event.RideEventPublisher;
 import com.rideflow.service.ride.event.RideOffersCreatedEvent;
 import java.time.Clock;
 import java.time.Instant;
@@ -36,13 +36,13 @@ public class DriverMatchingService {
     private final RideOfferRepository offers;
     private final DriverLocationRepository driverLocations;
     private final RideTransitionRecorder recorder;
-    private final RideEventPublisher events;
+    private final DomainEventPublisher events;
     private final MatchingProperties properties;
     private final Clock clock;
 
     public DriverMatchingService(RideRepository rides, RideOfferRepository offers,
                                  DriverLocationRepository driverLocations, RideTransitionRecorder recorder,
-                                 RideEventPublisher events, MatchingProperties properties, Clock clock) {
+                                 DomainEventPublisher events, MatchingProperties properties, Clock clock) {
         this.rides = rides;
         this.offers = offers;
         this.driverLocations = driverLocations;

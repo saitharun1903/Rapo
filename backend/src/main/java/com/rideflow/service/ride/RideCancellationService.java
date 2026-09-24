@@ -12,8 +12,8 @@ import com.rideflow.exception.InvalidStateException;
 import com.rideflow.repository.DriverRepository;
 import com.rideflow.repository.RideOfferRepository;
 import com.rideflow.security.AuthenticatedUser;
+import com.rideflow.service.event.DomainEventPublisher;
 import com.rideflow.service.ride.event.MatchingRoundRequestedEvent;
-import com.rideflow.service.ride.event.RideEventPublisher;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.EnumSet;
@@ -41,18 +41,21 @@ public class RideCancellationService {
 
     private final RideAccessPolicy access;
     private final RideOfferRepository offers;
+    private final RideOfferWithdrawal offerWithdrawal;
     private final DriverRepository drivers;
     private final RideTransitionRecorder recorder;
-    private final RideEventPublisher events;
+    private final DomainEventPublisher events;
     private final RideViewAssembler views;
     private final RideProperties properties;
     private final Clock clock;
 
-    public RideCancellationService(RideAccessPolicy access, RideOfferRepository offers, DriverRepository drivers,
-                                   RideTransitionRecorder recorder, RideEventPublisher events,
+    public RideCancellationService(RideAccessPolicy access, RideOfferRepository offers,
+                                   RideOfferWithdrawal offerWithdrawal, DriverRepository drivers,
+                                   RideTransitionRecorder recorder, DomainEventPublisher events,
                                    RideViewAssembler views, RideProperties properties, Clock clock) {
         this.access = access;
         this.offers = offers;
+        this.offerWithdrawal = offerWithdrawal;
         this.drivers = drivers;
         this.recorder = recorder;
         this.events = events;
@@ -74,7 +77,7 @@ public class RideCancellationService {
     private Ride cancelByPassenger(Ride ride, UUID passengerId, String reason, Instant now) {
         UUID assignedDriver = ride.getDriverId();
         Ride.StatusChange change = ride.cancel(ActorType.PASSENGER, reason, now);
-        offers.cancelPendingForRide(ride.getId(), now);
+        offerWithdrawal.withdrawPending(ride.getId(), now);
         releaseDriver(assignedDriver);
         log.info("Ride {} cancelled by passenger", ride.getId());
         return recorder.record(ride, change, ActorType.PASSENGER, passengerId, reason);

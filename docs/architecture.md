@@ -326,7 +326,7 @@ Tunables (`rideflow.matching.*`): initial radius 3 km, growth factor 1.5 (3 km, 
 
 State lives entirely in PostgreSQL, so matching is restart-safe: if the after-commit trigger is lost, the sweeper picks the ride up. Every instance can run the sweeper, because `runNextRound` locks the ride and re-checks every precondition. A driver who withdraws before pickup puts the ride back into `MATCHING` from round one, and is never re-offered the same ride (`UNIQUE (ride_id, driver_id)`).
 
-*Phase 3 status:* the trigger is an in-process `@TransactionalEventListener(AFTER_COMMIT)` + `@Async` behind the `RideEventPublisher` port. Phase 6 replaces the adapter with the transactional outbox and Kafka `ride.requested`; the matching service is unchanged.
+*Phase 3 status:* the trigger is an in-process `@TransactionalEventListener(AFTER_COMMIT)` + `@Async` behind the `DomainEventPublisher` port. Phase 6 replaces the adapter with the transactional outbox and Kafka `ride.requested`; the matching service is unchanged.
 
 ---
 

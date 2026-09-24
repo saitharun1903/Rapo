@@ -38,6 +38,9 @@ public interface RideOfferRepository extends JpaRepository<RideOffer, UUID> {
 
     List<RideOffer> findByRideIdAndStatus(UUID rideId, OfferStatus status);
 
+    @Query("select o.driverId from RideOffer o where o.rideId = :rideId and o.status = :status")
+    List<UUID> findDriverIdsByRideIdAndStatus(@Param("rideId") UUID rideId, @Param("status") OfferStatus status);
+
     List<RideOffer> findByDriverIdAndStatusAndExpiresAtAfterOrderByOfferedAtDesc(
             UUID driverId, OfferStatus status, Instant now);
 
