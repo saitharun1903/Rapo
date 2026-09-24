@@ -136,9 +136,9 @@ backend/src/main/java/com/rideflow/
 ├── entity/          # JPA entities + enums
 ├── dto/             # request/response records (never entities over the wire)
 ├── mapper/          # MapStruct mappers entity ↔ DTO
-├── security/        # JWT issuing, refresh tokens, principal, STOMP auth interceptor
+├── security/        # JWT issuing, refresh tokens, principal
 ├── exception/       # domain exceptions + GlobalExceptionHandler + ApiError
-├── websocket/       # STOMP message handlers, subscription authorization, session metrics
+├── websocket/       # STOMP auth + authorisation interceptors, message handlers, pushes, session registry
 ├── kafka/
 │   ├── event/       # event envelope + payload records
 │   ├── outbox/      # OutboxWriter, OutboxRelay

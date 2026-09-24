@@ -40,6 +40,7 @@ Each phase ends with: compile → tests → lint/static checks → self-review �
 | 1 Architecture | ✅ Approved | This document set |
 | 2 Backend foundation | ✅ Verified | GitHub Actions `backend-ci` run 36032457542: unit, web-slice, ArchUnit and all 13 Testcontainers integration tests passed against real PostGIS (the CI step fails if any integration test is skipped) |
 | 3 Ride system | ✅ Verified | GitHub Actions `backend-ci` run 36036099948: 120 unit/web/ArchUnit tests and 29 PostGIS integration tests passed (full ride lifecycle over HTTP, three-driver simultaneous accept race, offer expiry with radius growth, ride expiry, re-dispatch, quote tampering/expiry, proximity query correctness and GiST index use) |
+| 4 Real-time | ✅ Verified | GitHub Actions `backend-ci` run 36040434543: 153 unit/web/ArchUnit tests and 35 PostGIS integration tests passed, including `RealtimeIT` with a real STOMP client against the running server (offer, status and driver location reach only the ride's participants; offers withdrawn from losing drivers; unauthenticated, forged-token, foreign-origin, admin-topic, foreign-queue and spoofed-send frames refused with ERROR and closed; invalid location messages answered without closing; flood throttling; silent drivers taken offline while drivers on a trip are not; sockets closed at token expiry) |
 
 **Phase 2 delivered:** Spring Boot 4.1.1 / Java 21 skeleton; Flyway V1–V3; JWT access tokens and rotating refresh tokens with reuse detection; role-based security with JSON 401/403; `GlobalExceptionHandler`; request-id correlation; OpenAPI; auth, profile, driver onboarding, admin driver verification and user suspension; admin bootstrap; demo seed; docker-compose; `.env.example`; backend CI.
 
@@ -47,7 +48,26 @@ Each phase ends with: compile → tests → lint/static checks → self-review �
 
 **Design changes made in Phase 3** (recorded as D16 to D19 in the architecture doc): signed quotes instead of Redis quote storage; a partial unique index instead of a Redis offer lock; generated geography columns; ride-first lock ordering.
 
-**Carried forward:** Phase 4 replaces REST location ingestion with WebSocket and adds the presence sweeper (drivers with stale GPS go offline); Phase 5 adds login and estimate rate limiting and caching of surge, routes and geocoding; Phase 6 swaps the in-process event adapter for the outbox and Kafka, and adds payments and ratings.
+**Phase 4 delivered:**
+- **Endpoint and security:** STOMP over native WebSocket at `/ws`. CONNECT is authenticated with the REST access token. Sockets are closed when that token expires, or when no CONNECT arrives within 10 s. A deny-by-default allow-list governs SUBSCRIBE and SEND. ERROR frames carry only a code.
+- **Location stream:** drivers send GPS over STOMP, throttled per session, with errors answered on `/user/queue/errors`.
+- **Pushes:** sent after commit to per-user queues: ride updates, the driver's location (to the passenger only), offers and offer withdrawals, presence changes, and the admin activity feed.
+- **Tracking snapshot:** `GET /api/rides/{id}/tracking`, with staleness and a routed ETA.
+- **Presence:** a sweeper takes silent AVAILABLE drivers offline and tells them; suspension also notifies an online driver.
+- **Metrics:** WebSocket session gauge, dropped-location counter and push-failure counter.
+
+**Design changes made in Phase 4:**
+- **D20:** per-user queues with recipients computed at send time, replacing per-ride topics authorised at subscribe time.
+- **D21:** a socket lives no longer than its access token.
+
+**Bugs found by the Phase 4 tests:**
+- **Silent rejections:** Spring's `setPreserveReceiveOrder` swallows interceptor exceptions, so rejected frames produced no ERROR frame. It is no longer used.
+- **Timestamp precision:** nanosecond `Instant`s round up when stored as microseconds, which could cost a trip a second of duration. The application clock now ticks in microseconds.
+- **Background job threads:** adding the broker's own scheduler and executors would have silently moved `@Scheduled` jobs onto the broker's thread pool and disabled the `@Async` executor. Both are now configured explicitly.
+
+**Carried forward:**
+- **Phase 5:** location keys, routed ETA in location pushes (throttled per ride), login and estimate rate limiting, and caching of surge, routes and geocoding.
+- **Phase 6:** swaps the in-process event adapter for the outbox and Kafka (the realtime bridge feeds the same destinations), and adds payments, ratings and `/user/queue/notifications`.
 
 ## Phases
 
@@ -57,7 +77,7 @@ Each phase ends with: compile → tests → lint/static checks → self-review �
 | **2 Backend foundation** | Spring Boot skeleton, config properties, Flyway V1–V3, users/drivers/vehicles entities and repos, auth (register/login/refresh/logout, JWT, BCrypt), `GlobalExceptionHandler`, OpenAPI, ArchUnit rules, dev `docker-compose` with PostGIS + Redis + Kafka | `./mvnw verify` green; auth unit + `@WebMvcTest` + Testcontainers tests pass; Swagger UI shows auth endpoints |
 | **3 Ride system** | Flyway V4–V5, `FareCalculator`, routing providers, quotes, `RideStateMachine`, ride create/cancel/accept/reject/en-route/arrive/start/complete, driver online/offline, PostGIS nearby query, matching + offers + sweeper. Events go through a `DomainEventPublisher` port whose Phase 3 adapter is in-process (after-commit) | State-machine exhaustive tests; PostGIS query tests with known geometry; concurrent-accept test; `EXPLAIN ANALYZE` captured |
 | **4 Real-time** | STOMP config, auth and subscription interceptors, location ingestion, tracking snapshot, passenger pushes, offer pushes, presence sweeper | STOMP client integration test: driver location reaches passenger; unauthorised subscribe rejected; stale handling tested |
-| **5 Redis** | Location/active-ride/participants keys, route/geocode/surge caches, Lua rate limiter (quotes and offer exclusivity no longer need Redis: D16, D17) | TTL/invalidation tests; k6 before/after numbers for estimate and geocode recorded |
+| **5 Redis** | Location/active-ride keys, route/geocode/surge caches, throttled live ETA in location pushes, Lua rate limiter (quotes, offer exclusivity and WebSocket authorisation no longer need Redis: D16, D17, D20) | TTL/invalidation tests; k6 before/after numbers for estimate and geocode recorded |
 | **6 Kafka** | Replace in-process adapter with outbox + relay; topics; consumers (matching, notifications, payments, location-persistence batch, realtime bridge); DLT; `processed_events` | Integration test: full lifecycle flows through real Kafka (Testcontainers); DLT test; redelivery idempotency test |
 | **7 AI** | `AIService`, Local (Ollama) + External providers, prompt registry, `TripFactsAssembler`, deterministic observations, validator, Resilience4j, Q&A endpoint | WireMock failure-matrix tests; ride completion unaffected when AI is down; real run against a local model documented |
 | **8 Frontend** | Design system, auth, passenger flow, live tracking, trip history, AI insights, driver console, onboarding, earnings, admin console | Lint + typecheck + Vitest; manual E2E with simulator; Playwright smoke |
