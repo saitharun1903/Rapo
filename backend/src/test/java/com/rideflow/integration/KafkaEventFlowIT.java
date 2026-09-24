@@ -189,7 +189,7 @@ class KafkaEventFlowIT extends IntegrationTestContainers {
                 "VALIDATION_FAILED");
 
         DocumentContext ride = json(api.call(passenger, "GET", "/api/rides/" + rideId, null));
-        assertThat(ride.read("$.driver.ratingAvg", Double.class)).isEqualTo(4.0);
+        assertThat(new BigDecimal(ride.read("$.driver.ratingAvg").toString())).isEqualByComparingTo("4.00");
         assertThat(ride.read("$.driver.ratingCount", Integer.class)).isEqualTo(1);
     }
 
@@ -203,13 +203,20 @@ class KafkaEventFlowIT extends IntegrationTestContainers {
         try (TopicRecorder deadLetterTopic = new TopicRecorder(consumerFactory, List.of(KafkaNames.deadLetterTopic(topic)))) {
             kafkaTemplate.send(topic, key, garbage).get(10, TimeUnit.SECONDS);
 
-            ConsumerRecord<Object, Object> dead = deadLetterTopic.awaitRecords(record -> key.equals(record.key())).getFirst();
-            assertThat(dead.value()).isEqualTo(garbage);
-            assertThat(header(dead, KafkaHeaders.DLT_EXCEPTION_CAUSE_FQCN)).isEqualTo(EventDecodingException.class.getName());
-            assertThat(header(dead, KafkaHeaders.DLT_ORIGINAL_TOPIC)).isEqualTo(topic);
+            // Both groups reading ride.completed fail on it, and each dead-letters its own copy.
+            List<ConsumerRecord<Object, Object>> dead = deadLetterTopic.awaitRecords(record -> key.equals(record.key()),
+                    records -> records.size() == 2);
+            assertThat(dead).extracting(record -> header(record, KafkaHeaders.DLT_ORIGINAL_CONSUMER_GROUP))
+                    .containsExactlyInAnyOrder(names.group("payments"), names.group("notifications"));
+            assertThat(dead).allSatisfy(record -> {
+                assertThat(record.value()).isEqualTo(garbage);
+                assertThat(header(record, KafkaHeaders.DLT_EXCEPTION_CAUSE_FQCN))
+                        .isEqualTo(EventDecodingException.class.getName());
+                assertThat(header(record, KafkaHeaders.DLT_ORIGINAL_TOPIC)).isEqualTo(topic);
+            });
         }
-        assertThat(deadLetters(topic)).isEqualTo(deadLettersBefore + 1);
-        // The payments group committed past the record instead of retrying it forever.
+        assertThat(deadLetters(topic)).isEqualTo(deadLettersBefore + 2);
+        // Both groups committed past the record instead of retrying it forever.
         kafka.awaitIdle();
     }
 
