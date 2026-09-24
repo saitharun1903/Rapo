@@ -2,7 +2,7 @@
 
 A real-time ride-hailing platform: Spring Boot, PostgreSQL + PostGIS, Redis, Kafka, WebSocket, Next.js, and grounded AI trip insights.
 
-> **Status: Phase 2 (backend foundation).** Auth, users, and driver onboarding/verification are implemented. See the [implementation plan](docs/implementation-plan.md#progress). The full README will be written in Phase 15.
+> **Status: Phase 3 (ride system).** Auth, driver onboarding, fares, PostGIS driver matching and the full ride lifecycle are implemented and verified in CI. See the [implementation plan](docs/implementation-plan.md#progress). The full README will be written in Phase 15.
 
 - [Development guide](docs/development.md): setup, tests, environment variables
 - [Architecture](docs/architecture.md)
