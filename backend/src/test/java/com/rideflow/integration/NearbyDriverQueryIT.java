@@ -9,7 +9,7 @@ import com.rideflow.entity.VehicleCategory;
 import com.rideflow.repository.DriverLocationRepository;
 import com.rideflow.repository.NearbyDriver;
 import com.rideflow.support.MutableClock;
-import com.rideflow.support.PostgisContainerSupport;
+import com.rideflow.support.IntegrationTestContainers;
 import com.rideflow.support.RideFixtures;
 import com.rideflow.support.RideFixtures.Actor;
 import com.rideflow.support.RideTestConfig;
@@ -30,7 +30,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @SpringBootTest
 @ActiveProfiles("test")
 @Import(RideTestConfig.class)
-class NearbyDriverQueryIT extends PostgisContainerSupport {
+class NearbyDriverQueryIT extends IntegrationTestContainers {
 
     private static final Duration FRESHNESS = Duration.ofSeconds(30);
 

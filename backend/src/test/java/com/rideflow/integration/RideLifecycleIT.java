@@ -15,7 +15,7 @@ import com.rideflow.entity.VehicleCategory;
 import com.rideflow.geospatial.GeoMath;
 import com.rideflow.geospatial.GeoPoint;
 import com.rideflow.support.MutableClock;
-import com.rideflow.support.PostgisContainerSupport;
+import com.rideflow.support.IntegrationTestContainers;
 import com.rideflow.support.RideApi;
 import com.rideflow.support.RideFixtures;
 import com.rideflow.support.RideFixtures.Actor;
@@ -41,7 +41,7 @@ import org.springframework.test.web.servlet.MvcResult;
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import(RideTestConfig.class)
-class RideLifecycleIT extends PostgisContainerSupport {
+class RideLifecycleIT extends IntegrationTestContainers {
 
     private static final Duration AWAIT = Duration.ofSeconds(10);
     private static final Duration GPS_INTERVAL = Duration.ofSeconds(15);

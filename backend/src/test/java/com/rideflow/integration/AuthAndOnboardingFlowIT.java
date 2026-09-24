@@ -13,7 +13,7 @@ import com.rideflow.entity.Role;
 import com.rideflow.entity.User;
 import com.rideflow.repository.AuditLogRepository;
 import com.rideflow.repository.UserRepository;
-import com.rideflow.support.PostgisContainerSupport;
+import com.rideflow.support.IntegrationTestContainers;
 import jakarta.servlet.http.Cookie;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -31,7 +31,7 @@ import org.springframework.test.web.servlet.MvcResult;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-class AuthAndOnboardingFlowIT extends PostgisContainerSupport {
+class AuthAndOnboardingFlowIT extends IntegrationTestContainers {
 
     private static final String PASSWORD = "Integration-pass-42";
     private static final String CSRF_HEADER = "X-Requested-With";

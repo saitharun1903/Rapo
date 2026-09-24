@@ -1,5 +1,7 @@
 package com.rideflow.service.fare;
 
+import com.rideflow.cache.RateLimitScope;
+import com.rideflow.cache.RateLimiter;
 import com.rideflow.config.RideProperties;
 import com.rideflow.dto.common.Money;
 import com.rideflow.dto.fare.FareEstimateResponse;
@@ -11,8 +13,8 @@ import com.rideflow.exception.RideFlowException;
 import com.rideflow.geospatial.GeoMath;
 import com.rideflow.geospatial.GeoPoint;
 import com.rideflow.geospatial.RouteEstimate;
-import com.rideflow.geospatial.RoutingService;
 import com.rideflow.mapper.FareMapper;
+import com.rideflow.service.geo.RouteService;
 import com.rideflow.service.ride.ServiceAreaPolicy;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -27,30 +29,33 @@ import org.springframework.stereotype.Service;
 public class FareQuoteService {
 
     private final ServiceAreaPolicy serviceArea;
-    private final RoutingService routing;
+    private final RouteService routes;
     private final SurgeService surge;
     private final FareCalculator calculator;
     private final FareQuoteSigner signer;
     private final FareMapper fareMapper;
     private final RideProperties rideProperties;
+    private final RateLimiter rateLimiter;
     private final Clock clock;
 
-    public FareQuoteService(ServiceAreaPolicy serviceArea, RoutingService routing, SurgeService surge,
+    public FareQuoteService(ServiceAreaPolicy serviceArea, RouteService routes, SurgeService surge,
                             FareCalculator calculator, FareQuoteSigner signer, FareMapper fareMapper,
-                            RideProperties rideProperties, Clock clock) {
+                            RideProperties rideProperties, RateLimiter rateLimiter, Clock clock) {
         this.serviceArea = serviceArea;
-        this.routing = routing;
+        this.routes = routes;
         this.surge = surge;
         this.calculator = calculator;
         this.signer = signer;
         this.fareMapper = fareMapper;
         this.rideProperties = rideProperties;
+        this.rateLimiter = rateLimiter;
         this.clock = clock;
     }
 
     public FareEstimateResponse estimate(UUID passengerId, GeoPoint pickup, GeoPoint dropoff) {
+        rateLimiter.acquire(RateLimitScope.FARE_ESTIMATE, passengerId.toString());
         serviceArea.validateTrip(pickup, dropoff);
-        RouteEstimate route = routing.route(pickup, dropoff);
+        RouteEstimate route = routes.route(pickup, dropoff);
         BigDecimal surgeMultiplier = surge.multiplierAt(pickup);
         Instant expiresAt = clock.instant().plus(rideProperties.quoteTtl());
 

@@ -13,6 +13,11 @@ rideflow:
   # No network in tests; the OSRM client is covered by RoutingTest with a mock server.
   routing:
     provider: straight-line
+  geocoding:
+    provider: disabled
+  # Integration tests share one Redis and create many users per minute; RateLimitIT enables limiting itself.
+  rate-limit:
+    enabled: false
   security:
     bcrypt-strength: 4
     jwt:

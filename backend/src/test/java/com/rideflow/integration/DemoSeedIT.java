@@ -5,7 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.rideflow.support.PostgisContainerSupport;
+import com.rideflow.support.IntegrationTestContainers;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -21,7 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 @ActiveProfiles({"test", "demo"})
 @TestPropertySource(properties = "DEMO_USER_PASSWORD=" + DemoSeedIT.DEMO_PASSWORD)
-class DemoSeedIT extends PostgisContainerSupport {
+class DemoSeedIT extends IntegrationTestContainers {
 
     static final String DEMO_PASSWORD = "Demo-seed-pass-7";
 

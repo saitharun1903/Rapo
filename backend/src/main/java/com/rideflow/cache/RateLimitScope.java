@@ -1,0 +1,17 @@
+package com.rideflow.cache;
+
+/** What is being limited. Limits per scope live in {@code rideflow.rate-limit.rules}. */
+public enum RateLimitScope {
+    /** Per client IP and email: slows password guessing against one account. */
+    LOGIN,
+    /** Per client IP: slows mass account creation. */
+    REGISTER,
+    /** Per passenger. */
+    RIDE_BOOKING,
+    /** Per passenger: each estimate costs a routing call and two PostGIS counts. */
+    FARE_ESTIMATE,
+    /** Per user: protects the geocoding provider's quota. */
+    GEOCODING,
+    /** Global: Nominatim's usage policy allows at most one request per second from the whole application. */
+    GEOCODING_UPSTREAM
+}

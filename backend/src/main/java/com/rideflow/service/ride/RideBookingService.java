@@ -1,5 +1,7 @@
 package com.rideflow.service.ride;
 
+import com.rideflow.cache.RateLimitScope;
+import com.rideflow.cache.RateLimiter;
 import com.rideflow.dto.ride.BookRideRequest;
 import com.rideflow.dto.ride.RideResponse;
 import com.rideflow.entity.ActorType;
@@ -38,22 +40,25 @@ public class RideBookingService {
     private final RideTransitionRecorder recorder;
     private final DomainEventPublisher events;
     private final RideViewAssembler views;
+    private final RateLimiter rateLimiter;
     private final Clock clock;
 
     public RideBookingService(FareQuoteService quotes, RideRepository rides, FareBreakdownRepository fareBreakdowns,
                               RideTransitionRecorder recorder, DomainEventPublisher events, RideViewAssembler views,
-                              Clock clock) {
+                              RateLimiter rateLimiter, Clock clock) {
         this.quotes = quotes;
         this.rides = rides;
         this.fareBreakdowns = fareBreakdowns;
         this.recorder = recorder;
         this.events = events;
         this.views = views;
+        this.rateLimiter = rateLimiter;
         this.clock = clock;
     }
 
     @Transactional
     public RideResponse book(UUID passengerId, BookRideRequest request) {
+        rateLimiter.acquire(RateLimitScope.RIDE_BOOKING, passengerId.toString());
         FareQuote quote = quotes.redeem(passengerId, request.quoteId(), request.pickup().point(), request.dropoff().point());
         if (rides.findFirstByPassengerIdAndStatusIn(passengerId, RideStatus.ACTIVE).isPresent()) {
             throw activeRideExists();

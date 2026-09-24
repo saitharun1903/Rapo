@@ -11,6 +11,8 @@ import com.rideflow.repository.VehicleRepository;
 import com.rideflow.security.AccessTokenService;
 import java.util.Locale;
 import java.util.UUID;
+import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -24,9 +26,11 @@ public class RideFixtures {
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tx;
     private final MutableClock clock;
+    private final StringRedisTemplate redis;
 
     public RideFixtures(UserRepository users, DriverRepository drivers, VehicleRepository vehicles,
-                        AccessTokenService accessTokens, JdbcTemplate jdbc, TransactionTemplate tx, MutableClock clock) {
+                        AccessTokenService accessTokens, JdbcTemplate jdbc, TransactionTemplate tx, MutableClock clock,
+                        StringRedisTemplate redis) {
         this.users = users;
         this.drivers = drivers;
         this.vehicles = vehicles;
@@ -34,6 +38,7 @@ public class RideFixtures {
         this.jdbc = jdbc;
         this.tx = tx;
         this.clock = clock;
+        this.redis = redis;
     }
 
     /** An authenticated test user: id plus a ready-to-use Authorization header value. */
@@ -41,14 +46,19 @@ public class RideFixtures {
     }
 
     /**
-     * Integration tests share one database; ride tests need a clean slate of rides and online drivers so
-     * other tests' drivers never show up as matching candidates.
+     * Integration tests share one database and one Redis; ride tests need a clean slate of rides, online
+     * drivers and cached values so other tests' state never leaks in.
      */
     public void reset() {
         clock.reset();
         jdbc.update("DELETE FROM rides");
         jdbc.update("DELETE FROM driver_locations");
         jdbc.update("UPDATE drivers SET availability = 'OFFLINE' WHERE availability <> 'OFFLINE'");
+        // Cached surge, routes and ETAs from earlier tests must not leak into this one.
+        redis.execute((RedisCallback<Void>) connection -> {
+            connection.serverCommands().flushDb();
+            return null;
+        });
     }
 
     public Actor passenger() {

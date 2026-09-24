@@ -1,6 +1,5 @@
 package com.rideflow.dto.ride;
 
-import com.rideflow.entity.EstimateSource;
 import com.rideflow.entity.RideStatus;
 import com.rideflow.geospatial.GeoPoint;
 import java.time.Instant;
@@ -15,17 +14,8 @@ import java.util.UUID;
  *                       the position is stale or the driver is waiting at the pickup
  */
 public record RideTrackingResponse(UUID rideId, RideStatus status, DriverLocation driverLocation, boolean stale,
-                                   Eta eta) {
+                                   EtaResponse eta) {
 
     public record DriverLocation(GeoPoint point, Integer headingDeg, Instant recordedAt) {
-    }
-
-    public enum Target {
-        PICKUP,
-        DROPOFF
-    }
-
-    /** {@code source} says whether the road router or the straight-line fallback produced the numbers. */
-    public record Eta(Target target, int seconds, int distanceMeters, EstimateSource source) {
     }
 }

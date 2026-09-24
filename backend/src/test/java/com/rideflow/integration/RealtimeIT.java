@@ -15,7 +15,7 @@ import com.rideflow.geospatial.GeoPoint;
 import com.rideflow.repository.DriverLocationRepository;
 import com.rideflow.service.driver.DriverPresenceSweeper;
 import com.rideflow.support.MutableClock;
-import com.rideflow.support.PostgisContainerSupport;
+import com.rideflow.support.IntegrationTestContainers;
 import com.rideflow.support.RealtimeTestConfig;
 import com.rideflow.support.RideApi;
 import com.rideflow.support.RideFixtures;
@@ -52,7 +52,7 @@ import tools.jackson.databind.JsonNode;
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import({RideTestConfig.class, RealtimeTestConfig.class})
-class RealtimeIT extends PostgisContainerSupport {
+class RealtimeIT extends IntegrationTestContainers {
 
     private static final String RIDES = "/user/queue/rides";
     private static final String RIDE_LOCATION = "/user/queue/ride-location";
@@ -184,6 +184,14 @@ class RealtimeIT extends PostgisContainerSupport {
         assertThat(tracking.read("$.eta.target", String.class)).isEqualTo("PICKUP");
         assertThat(tracking.read("$.eta.source", String.class)).isEqualTo("APPROXIMATE");
         assertThat(tracking.read("$.eta.distanceMeters", Integer.class)).isPositive();
+
+        // The snapshot cached the ETA, so the next location push carries it without another routing call.
+        clock.advance(Duration.ofSeconds(1));
+        driverSocket.send(DRIVER_LOCATION, location(offset(HITECH_CITY, 150, 0), clock.instant()));
+        JsonNode withEta = passengerSocket.next(RIDE_LOCATION);
+        assertThat(withEta.get("eta").get("target").asString()).isEqualTo("PICKUP");
+        assertThat(withEta.get("eta").get("seconds").asInt())
+                .isEqualTo(tracking.read("$.eta.seconds", Integer.class));
 
         // Nobody else hears about this ride or this driver.
         bystanderSocket.assertNothingReceived(RIDES);

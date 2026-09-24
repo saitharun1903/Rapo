@@ -8,6 +8,7 @@ import java.time.Instant;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -24,7 +25,7 @@ public class RideTestConfig {
     @Bean
     RideFixtures rideFixtures(UserRepository users, DriverRepository drivers, VehicleRepository vehicles,
                               AccessTokenService accessTokens, JdbcTemplate jdbc, TransactionTemplate tx,
-                              MutableClock testClock) {
-        return new RideFixtures(users, drivers, vehicles, accessTokens, jdbc, tx, testClock);
+                              MutableClock testClock, StringRedisTemplate redis) {
+        return new RideFixtures(users, drivers, vehicles, accessTokens, jdbc, tx, testClock, redis);
     }
 }

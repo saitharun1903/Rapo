@@ -38,14 +38,15 @@ public class AuthController {
 
     @PostMapping("/register")
     @Operation(summary = "Create a passenger or driver account")
-    public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
+    public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request,
+                                                 HttpServletRequest http) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request, http.getRemoteAddr()));
     }
 
     @PostMapping("/login")
     @Operation(summary = "Sign in; returns an access token and sets the refresh-token cookie")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-        return withRefreshCookie(authService.login(request));
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
+        return withRefreshCookie(authService.login(request, http.getRemoteAddr()));
     }
 
     @PostMapping("/refresh")

@@ -27,6 +27,16 @@ spring:
           time_zone: UTC
   flyway:
     locations: classpath:db/migration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL_ENABLED:false}
+      # Short timeouts: everything in Redis is optional, and a slow Redis must not make requests slow.
+      timeout: 500ms
+      connect-timeout: 1s
   jackson:
     default-property-inclusion: always
   task:
@@ -54,6 +64,11 @@ management:
       probes:
         enabled: true
       show-details: never
+      group:
+        readiness:
+          # Redis is deliberately absent: caches and rate limits fail open, so a Redis outage should not take
+          # instances out of the load balancer. It still shows in the overall health status.
+          include: readinessState,db
   metrics:
     tags:
       application: ${spring.application.name}
@@ -140,6 +155,31 @@ rideflow:
       timeout: 2m
       sweep-interval: PT30S
       sweep-batch-size: 100
+  cache:
+    enabled: ${CACHE_ENABLED:true}
+    route-ttl: 15m
+    geocode-ttl: 24h
+    surge-ttl: 60s
+    eta-ttl: 30s
+    redis-retry-after: 5s
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    rules:
+      LOGIN: { limit: 5, window: 1m }
+      REGISTER: { limit: 3, window: 1m }
+      RIDE_BOOKING: { limit: 5, window: 1m }
+      FARE_ESTIMATE: { limit: 30, window: 1m }
+      GEOCODING: { limit: 30, window: 1m }
+      GEOCODING_UPSTREAM: { limit: 1, window: 1s }
+  geocoding:
+    provider: ${GEOCODING_PROVIDER:nominatim}
+    base-url: ${GEOCODING_BASE_URL:https://nominatim.openstreetmap.org}
+    user-agent: ${GEOCODING_USER_AGENT:RideFlow/0.1 (+https://github.com/saitharun1903/Rapo)}
+    connect-timeout: 2s
+    read-timeout: 4s
+    result-limit: 5
+    country-codes: ${GEOCODING_COUNTRY_CODES:in}
+    bias-box-degrees: 0.25
   routing:
     provider: ${ROUTING_PROVIDER:osrm}
     osrm-base-url: ${ROUTING_BASE_URL:https://router.project-osrm.org}

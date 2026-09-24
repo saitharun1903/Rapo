@@ -4,10 +4,12 @@ import com.rideflow.dto.realtime.DriverLocationMessage;
 import com.rideflow.dto.realtime.DriverPresenceMessage;
 import com.rideflow.dto.realtime.RideActivityMessage;
 import com.rideflow.dto.realtime.RideOfferMessage;
+import com.rideflow.dto.ride.EtaResponse;
 import com.rideflow.entity.DriverAvailability;
 import com.rideflow.service.driver.event.DriverLocationUpdatedEvent;
 import com.rideflow.service.driver.event.DriverWentOfflineEvent;
 import com.rideflow.service.matching.OfferQueryService;
+import com.rideflow.service.ride.LiveEtaService;
 import com.rideflow.service.ride.RideQueryService;
 import com.rideflow.service.ride.event.RideOffersCreatedEvent;
 import com.rideflow.service.ride.event.RideOffersWithdrawnEvent;
@@ -45,13 +47,15 @@ public class RealtimePublisher {
     private final SimpMessagingTemplate messaging;
     private final RideQueryService rideQueries;
     private final OfferQueryService offerQueries;
+    private final LiveEtaService liveEta;
     private final Counter failures;
 
     public RealtimePublisher(SimpMessagingTemplate messaging, RideQueryService rideQueries,
-                             OfferQueryService offerQueries, MeterRegistry meters) {
+                             OfferQueryService offerQueries, LiveEtaService liveEta, MeterRegistry meters) {
         this.messaging = messaging;
         this.rideQueries = rideQueries;
         this.offerQueries = offerQueries;
+        this.liveEta = liveEta;
         this.failures = Counter.builder("rideflow.ws.push.failures")
                 .description("WebSocket pushes that could not be handed to the broker")
                 .register(meters);
@@ -88,10 +92,18 @@ public class RealtimePublisher {
         event.driverIds().forEach(driverId -> sendToUser(driverId, StompDestinations.RIDE_OFFERS, message));
     }
 
+    /** Carries the cached ETA; when there is none, a background refresh fills it for the next update. */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onDriverLocationUpdated(DriverLocationUpdatedEvent event) {
+        EtaResponse eta = null;
+        if (event.destination() != null) {
+            eta = liveEta.cached(event.rideId(), event.destination()).orElse(null);
+            if (eta == null) {
+                liveEta.refreshInBackground(event.rideId(), event.location(), event.destination());
+            }
+        }
         sendToUser(event.passengerId(), StompDestinations.RIDE_LOCATION, new DriverLocationMessage(event.rideId(),
-                event.location(), event.headingDeg(), event.speedMps(), event.recordedAt()));
+                event.location(), event.headingDeg(), event.speedMps(), event.recordedAt(), eta));
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)

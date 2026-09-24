@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -41,6 +42,15 @@ public class GlobalExceptionHandler {
     ResponseEntity<ApiError> handleDomain(RideFlowException ex, HttpServletRequest request) {
         log.debug("Request rejected with {}: {}", ex.code(), ex.getMessage());
         return respond(ex.code(), ex.getMessage(), request);
+    }
+
+    /** Like any domain error, plus {@code Retry-After} so well-behaved clients know when to try again. */
+    @ExceptionHandler(RetryableException.class)
+    ResponseEntity<ApiError> handleRetryable(RetryableException ex, HttpServletRequest request) {
+        log.debug("Request rejected with {}: {}", ex.code(), ex.getMessage());
+        return ResponseEntity.status(ex.code().status())
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(ex.retryAfterSeconds()))
+                .body(errors.create(ex.code(), ex.getMessage(), request.getRequestURI(), List.of()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

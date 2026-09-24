@@ -1,5 +1,7 @@
 package com.rideflow.service.auth;
 
+import com.rideflow.cache.RateLimitScope;
+import com.rideflow.cache.RateLimiter;
 import com.rideflow.dto.auth.AuthResponse;
 import com.rideflow.dto.auth.LoginRequest;
 import com.rideflow.dto.auth.RegisterRequest;
@@ -35,6 +37,7 @@ public class AuthService {
     private final RefreshTokenService refreshTokens;
     private final AuditService auditService;
     private final UserMapper userMapper;
+    private final RateLimiter rateLimiter;
     private final Clock clock;
     /** Compared against when the email is unknown so response time does not reveal whether an account exists. */
     private final String timingEqualizationHash;
@@ -47,6 +50,7 @@ public class AuthService {
             AuditService auditService,
             UserMapper userMapper,
             OpaqueTokenGenerator tokenGenerator,
+            RateLimiter rateLimiter,
             Clock clock) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
@@ -54,12 +58,18 @@ public class AuthService {
         this.refreshTokens = refreshTokens;
         this.auditService = auditService;
         this.userMapper = userMapper;
+        this.rateLimiter = rateLimiter;
         this.clock = clock;
         this.timingEqualizationHash = passwordEncoder.encode(tokenGenerator.generate());
     }
 
+    /**
+     * @param clientIp the caller's address, for the per-IP rate limit (behind a proxy, only correct if the proxy
+     *                 overwrites {@code X-Forwarded-For}; see docs/architecture.md section 9)
+     */
     @Transactional
-    public UserResponse register(RegisterRequest request) {
+    public UserResponse register(RegisterRequest request, String clientIp) {
+        rateLimiter.acquire(RateLimitScope.REGISTER, clientIp);
         String email = TextNormalizer.email(request.email());
         String phone = TextNormalizer.trimToNull(request.phone());
         if (users.existsByEmail(email)) {
@@ -74,9 +84,12 @@ public class AuthService {
         return userMapper.toResponse(user);
     }
 
+    /** Rate-limited per IP and email before the password is checked, so guessing is slowed either way. */
     @Transactional
-    public AuthSession login(LoginRequest request) {
-        Optional<User> candidate = users.findByEmail(TextNormalizer.email(request.email()));
+    public AuthSession login(LoginRequest request, String clientIp) {
+        String email = TextNormalizer.email(request.email());
+        rateLimiter.acquire(RateLimitScope.LOGIN, clientIp + "|" + email);
+        Optional<User> candidate = users.findByEmail(email);
         if (candidate.isEmpty()) {
             passwordEncoder.matches(request.password(), timingEqualizationHash);
             throw new AuthenticationFailedException(ErrorCode.INVALID_CREDENTIALS, INVALID_CREDENTIALS_MESSAGE);

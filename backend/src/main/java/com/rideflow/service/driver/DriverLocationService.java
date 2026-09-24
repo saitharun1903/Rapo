@@ -16,6 +16,7 @@ import com.rideflow.repository.RideRepository;
 import com.rideflow.repository.RideTrackPointRepository;
 import com.rideflow.service.driver.event.DriverLocationUpdatedEvent;
 import com.rideflow.service.event.DomainEventPublisher;
+import com.rideflow.service.ride.EtaDestination;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
@@ -80,6 +81,7 @@ public class DriverLocationService {
 
     private void publishToPassenger(UUID driverId, Ride ride, LocationUpdateRequest update) {
         events.publish(new DriverLocationUpdatedEvent(driverId, ride.getId(), ride.getPassengerId(),
-                update.location(), update.headingDeg(), update.speedMps(), update.recordedAt()));
+                update.location(), update.headingDeg(), update.speedMps(), update.recordedAt(),
+                EtaDestination.of(ride).orElse(null)));
     }
 }

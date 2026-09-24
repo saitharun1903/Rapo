@@ -3,7 +3,7 @@ package com.rideflow.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.rideflow.support.PostgisContainerSupport;
+import com.rideflow.support.IntegrationTestContainers;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,7 +19,7 @@ import org.springframework.test.context.ActiveProfiles;
  */
 @SpringBootTest
 @ActiveProfiles("test")
-class SchemaMigrationIT extends PostgisContainerSupport {
+class SchemaMigrationIT extends IntegrationTestContainers {
 
     @Autowired
     private JdbcTemplate jdbc;

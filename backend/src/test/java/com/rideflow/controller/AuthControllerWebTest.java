@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -84,7 +85,7 @@ class AuthControllerWebTest {
 
     @Test
     void registerReturns201() throws Exception {
-        when(authService.register(any())).thenReturn(USER);
+        when(authService.register(any(), anyString())).thenReturn(USER);
 
         mvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -106,7 +107,7 @@ class AuthControllerWebTest {
 
     @Test
     void loginReturnsAccessTokenAndSetsHttpOnlyRefreshCookie() throws Exception {
-        when(authService.login(any(LoginRequest.class))).thenReturn(new AuthSession(
+        when(authService.login(any(LoginRequest.class), anyString())).thenReturn(new AuthSession(
                 new AuthResponse("access.jwt", "Bearer", 900, USER), "raw-refresh"));
 
         mvc.perform(post("/api/auth/login")
@@ -125,7 +126,7 @@ class AuthControllerWebTest {
 
     @Test
     void loginFailureIsGeneric401() throws Exception {
-        when(authService.login(any())).thenThrow(
+        when(authService.login(any(), anyString())).thenThrow(
                 new AuthenticationFailedException(ErrorCode.INVALID_CREDENTIALS, "Email or password is incorrect"));
 
         mvc.perform(post("/api/auth/login")
