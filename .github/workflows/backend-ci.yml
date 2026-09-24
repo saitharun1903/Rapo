@@ -1,0 +1,45 @@
+name: backend-ci
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", ".github/workflows/backend-ci.yml"]
+  pull_request:
+    paths: ["backend/**", ".github/workflows/backend-ci.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # Unit, web-slice and ArchUnit tests (surefire), then Testcontainers integration tests (failsafe).
+      - name: Build and test
+        run: ./mvnw -B verify
+
+      # Integration tests skip themselves when Docker is missing; in CI that must never happen silently.
+      - name: Assert integration tests actually ran
+        run: |
+          summary=target/failsafe-reports/failsafe-summary.xml
+          grep -q "<skipped>0</skipped>" "$summary" || { cat "$summary"; echo "Integration tests were skipped"; exit 1; }
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: |
+            backend/target/surefire-reports
+            backend/target/failsafe-reports

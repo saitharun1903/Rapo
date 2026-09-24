@@ -1,0 +1,22 @@
+# Test-only values. The datasource is supplied by Testcontainers (@ServiceConnection) in integration tests.
+spring:
+  datasource:
+    password: provided-by-testcontainers
+  flyway:
+    # Integration tests share one database across Spring contexts with and without the "demo" profile,
+    # so the repeatable seed migration may be applied but absent from a later context's locations.
+    ignore-migration-patterns: "*:missing,*:future"
+
+rideflow:
+  scheduling:
+    enabled: false
+  security:
+    bcrypt-strength: 4
+    jwt:
+      secret: test-only-signing-secret-with-at-least-32-bytes
+    refresh-token:
+      cookie-secure: false
+
+management:
+  server:
+    port: 0

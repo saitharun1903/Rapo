@@ -1,0 +1,11 @@
+# Production profile: structured JSON logs and no public API docs by default.
+logging:
+  structured:
+    format:
+      console: logstash
+
+springdoc:
+  api-docs:
+    enabled: ${API_DOCS_ENABLED:false}
+  swagger-ui:
+    enabled: ${API_DOCS_ENABLED:false}

@@ -1,0 +1,7 @@
+# Demo profile: loads development seed accounts (never enable in production).
+# Seed passwords come from DEMO_USER_PASSWORD so no credential is committed to Git.
+spring:
+  flyway:
+    locations: classpath:db/migration,classpath:db/seed
+    placeholders:
+      demo_password: ${DEMO_USER_PASSWORD}

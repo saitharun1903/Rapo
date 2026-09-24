@@ -1,0 +1,86 @@
+# All secrets and environment-specific values come from environment variables (see /.env.example).
+# Variables without a default are required: the application refuses to start without them.
+
+spring:
+  application:
+    name: rideflow-backend
+  config:
+    # Local development convenience: read the repository's .env (KEY=VALUE) when running from the repo root
+    # or from backend/. Optional, so containers and production rely purely on real environment variables.
+    import: "optional:file:.env[.properties],optional:file:../.env[.properties]"
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/rideflow}
+    username: ${DATABASE_USERNAME:rideflow}
+    password: ${DATABASE_PASSWORD}
+    hikari:
+      maximum-pool-size: ${DATABASE_POOL_SIZE:10}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    locations: classpath:db/migration
+  jackson:
+    default-property-inclusion: always
+
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-stacktrace: never
+    include-message: never
+  forward-headers-strategy: framework
+
+management:
+  server:
+    port: ${MANAGEMENT_PORT:8081}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+springdoc:
+  api-docs:
+    enabled: ${API_DOCS_ENABLED:true}
+  swagger-ui:
+    enabled: ${API_DOCS_ENABLED:true}
+
+logging:
+  pattern:
+    correlation: "[%X{traceId:-}] "
+
+rideflow:
+  security:
+    bcrypt-strength: ${BCRYPT_STRENGTH:12}
+    jwt:
+      secret: ${JWT_SECRET}
+      issuer: ${JWT_ISSUER:rideflow}
+      access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:15m}
+    refresh-token:
+      ttl: ${REFRESH_TOKEN_TTL:14d}
+      cleanup-retention: 7d
+      cleanup-cron: "0 15 3 * * *"
+      cookie-name: rf_refresh
+      cookie-secure: ${REFRESH_COOKIE_SECURE:true}
+      cookie-same-site: ${REFRESH_COOKIE_SAME_SITE:Lax}
+      cookie-path: /api/auth
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  bootstrap:
+    admin:
+      email: ${BOOTSTRAP_ADMIN_EMAIL:}
+      password: ${BOOTSTRAP_ADMIN_PASSWORD:}
