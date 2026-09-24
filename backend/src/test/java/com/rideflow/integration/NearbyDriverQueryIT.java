@@ -46,10 +46,14 @@ class NearbyDriverQueryIT extends PostgisContainerSupport {
     private TransactionTemplate tx;
 
     private Actor place(VehicleCategory category, double northMeters, double eastMeters) {
+        return placeAt(category, northMeters, eastMeters, clock.instant());
+    }
+
+    private Actor placeAt(VehicleCategory category, double northMeters, double eastMeters, Instant reportedAt) {
         Actor driver = fixtures.verifiedDriver(category);
         jdbc.update("UPDATE drivers SET availability = 'AVAILABLE' WHERE id = ?", driver.id());
-        Instant now = clock.instant();
-        locations.upsert(driver.id(), offset(HITECH_CITY, northMeters, eastMeters), null, null, null, now, now);
+        locations.upsert(driver.id(), offset(HITECH_CITY, northMeters, eastMeters), null, null, null,
+                reportedAt, reportedAt);
         return driver;
     }
 
@@ -88,9 +92,8 @@ class NearbyDriverQueryIT extends PostgisContainerSupport {
     @Test
     void ignoresStaleOfflineAndUnverifiedDrivers() {
         Actor fresh = place(VehicleCategory.ECONOMY, 100, 0);
-        Actor stale = place(VehicleCategory.ECONOMY, 150, 0);
-        Instant old = clock.instant().minus(Duration.ofMinutes(2));
-        locations.upsert(stale.id(), offset(HITECH_CITY, 150, 0), null, null, null, old, old);
+        // Last report two minutes ago: beyond the 30 s freshness window.
+        placeAt(VehicleCategory.ECONOMY, 150, 0, clock.instant().minus(Duration.ofMinutes(2)));
         Actor offline = place(VehicleCategory.ECONOMY, 200, 0);
         jdbc.update("UPDATE drivers SET availability = 'OFFLINE' WHERE id = ?", offline.id());
         Actor suspended = place(VehicleCategory.ECONOMY, 250, 0);
