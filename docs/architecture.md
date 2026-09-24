@@ -49,6 +49,10 @@ Why not microservices: the domain has one consistency-critical aggregate (the ri
 | D13 | Map/routing/geocoding behind provider interfaces (MapLibre + OpenFreeMap, OSRM, Nominatim) | Google Maps SDK | No API key required for development; each provider replaceable via configuration. |
 | D14 | Kafka in **KRaft** mode | ZooKeeper | ZooKeeper was removed in Kafka 4.x; one fewer container. |
 | D15 | JSON event payloads with explicit `schemaVersion`, additive-only evolution | Avro + Schema Registry | Adequate for a single producer codebase; Schema Registry is listed as a future improvement. |
+| D16 | Fare quotes are **HMAC-signed tokens** (`base64url(json).base64url(hmac)`), bound to the passenger, with expiry | Quote rows in Redis | No storage, survives restarts, works across instances, tamper-proof. The key is derived from the JWT secret with a distinct label, so a quote can never be replayed as an access token. Double booking is already prevented by `ux_rides_passenger_active`. *(Changed in Phase 3.)* |
+| D17 | "One pending offer per driver" is a **partial unique index** (`ride_offers(driver_id) WHERE status='PENDING'`) with `INSERT … ON CONFLICT DO NOTHING` | Redis `SET NX` lock | Atomic with the offer insert, no second system that can disagree with the database. *(Changed in Phase 3.)* |
+| D18 | Rides store `lat`/`lng`; PostGIS **generated columns** derive `geography` from them | Hibernate Spatial / JTS mapping | Entities stay plain Java while every spatial query and GiST index still uses real PostGIS geography. |
+| D19 | **Lock ordering:** every transaction that mutates a ride locks the ride row (`SELECT … FOR UPDATE`) before touching its offers | Optimistic locking alone | Concurrent accept, cancel and matching serialise per ride and cannot deadlock; the optimistic `@Version` stays as a backstop. |
 
 ---
 
@@ -286,40 +290,43 @@ LIMIT  :candidateLimit;
 
 - `geography(Point, 4326)` gives distances in metres on the spheroid without manual projection.
 - `ST_DWithin` on geography uses the GiST index `ix_driver_locations_location`; `<->` gives index-ordered nearest-neighbour.
-- `EXPLAIN ANALYZE` output of this query against the seeded dataset will be captured in Phase 3 and added here.
+- `NearbyDriverQueryIT` verifies radius, ordering, true distances, freshness, category and eligibility filters against real PostGIS, and asserts that `EXPLAIN` of the proximity query uses `ix_driver_locations_location`. Implementation: `DriverLocationRepository.findAvailableNear`.
 
 ### 7.3 Matching flow
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant K as Kafka ride.requested
+    participant T as Trigger (after commit, async)
     participant M as DriverMatchingService
     participant PG as PostgreSQL/PostGIS
-    participant R as Redis
-    participant O as Outbox
-    participant S as MatchingSweeper
+    participant S as MatchingSweeper (every 5 s)
 
-    K->>M: RideRequested(rideId)
-    M->>PG: load ride, skip unless REQUESTED (idempotent)
-    M->>PG: REQUESTED -> MATCHING
-    M->>PG: nearby candidate query (radius R, round n)
-    M->>R: SET driver:{id}:offer-lock NX EX offerTtl (per candidate)
-    M->>PG: insert ride_offers PENDING (top N locked candidates)
-    M->>O: ride.driver.assigned(offers)
-    Note over O: realtime bridge pushes offer to each driver
+    T->>M: runNextRound(rideId)
+    M->>PG: SELECT ride FOR UPDATE, skip unless REQUESTED/MATCHING
+    M->>PG: skip if an offer is still open, else expire overdue offers
+    alt round > maxRounds
+        M->>PG: ride EXPIRED
+    else
+        M->>PG: REQUESTED -> MATCHING (first round), radius for round n
+        M->>PG: nearest eligible drivers (excludes drivers with a pending offer or already offered this ride)
+        M->>PG: INSERT offer ... ON CONFLICT DO NOTHING (up to N)
+    end
     alt a driver accepts
-        Note over PG: accept TX: optimistic version check, offer ACCEPTED,<br/>others CANCELLED, driver ON_TRIP, ride DRIVER_ASSIGNED
-    else all offers rejected or expired
-        S->>PG: claim stale MATCHING rides (FOR UPDATE SKIP LOCKED)
-        S->>M: next round, radius x growthFactor
-        M-->>O: ride.expired after maxRounds
+        Note over PG: accept TX locks the ride: offer ACCEPTED, others CANCELLED,<br/>driver ON_TRIP, ride DRIVER_ASSIGNED
+    else every offer rejected
+        Note over T: reject publishes MatchingRoundRequested, next round immediately
+    else offers expire / nobody in range
+        S->>PG: rides whose round started more than offerTtl ago and have no open offer
+        S->>M: runNextRound(rideId)
     end
 ```
 
-Tunables (`rideflow.matching.*`): initial radius 3 km, growth factor 1.5, max rounds 3, candidate limit 10, offers per round 3, offer TTL 20 s, location freshness 30 s. Sending up to three concurrent offers reduces passenger wait; the first valid accept wins via optimistic locking and the others receive an "offer withdrawn" push.
+Tunables (`rideflow.matching.*`): initial radius 3 km, growth factor 1.5 (3 km, 4.5 km, 6.75 km), max radius 8 km, max rounds 3, candidate limit 10, offers per round 3, offer TTL 20 s, location freshness 30 s. Sending up to three concurrent offers reduces passenger wait; the first accept wins (serialised on the ride row lock) and the others get `409 RIDE_ALREADY_ASSIGNED`.
 
-The sweeper uses `SELECT … FOR UPDATE SKIP LOCKED`, so multiple backend instances can run it without duplicate processing and without a separate scheduler-lock library.
+State lives entirely in PostgreSQL, so matching is restart-safe: if the after-commit trigger is lost, the sweeper picks the ride up. Every instance can run the sweeper, because `runNextRound` locks the ride and re-checks every precondition. A driver who withdraws before pickup puts the ride back into `MATCHING` from round one, and is never re-offered the same ride (`UNIQUE (ride_id, driver_id)`).
+
+*Phase 3 status:* the trigger is an in-process `@TransactionalEventListener(AFTER_COMMIT)` + `@Async` behind the `RideEventPublisher` port. Phase 6 replaces the adapter with the transactional outbox and Kafka `ride.requested`; the matching service is unchanged.
 
 ---
 
@@ -377,10 +384,8 @@ Redis holds **ephemeral, high-frequency or recomputable** state only. PostgreSQL
 |---|---|---|---|---|
 | `driver:{id}:location` | hash | 30 s | Latest position for tracking snapshot, arrival geofence, ETA | Overwritten on each update; expiry = stale |
 | `driver:{id}:active-ride` | string | 12 h safety | Hot-path lookup when routing a location to a ride | Set on accept; deleted on complete/cancel/re-dispatch (after commit) |
-| `driver:{id}:offer-lock` | string (`SET NX`) | offer TTL (20 s) | Guarantees one pending offer per driver across instances | Deleted on accept/reject; otherwise expires |
 | `ride:{id}:participants` | hash | 1 h | WebSocket subscription authorisation without a DB hit per SUBSCRIBE | Rewritten on assignment; deleted on terminal state |
 | `ride:{id}:eta` | string | 30 s | Throttles routed ETA recomputation during pickup | Expiry |
-| `fare:quote:{quoteId}` | string (JSON) | 5 min | Locks the quoted price and surge the passenger saw; `POST /rides` requires a valid quote | Deleted on use (single-use) |
 | `route:{sha1(from,to,profile)}` | string (JSON) | 15 min | Caches routing-provider responses (slow, rate-limited external call) | Expiry |
 | `geocode:{sha1(query)}` | string (JSON) | 24 h | Nominatim usage policy requires caching; cuts latency | Expiry |
 | `surge:{geohash6}` | string | 60 s | Surge multiplier per ~1 km cell; the demand/supply counts are PostGIS queries | Expiry (short enough to track demand) |
@@ -388,7 +393,7 @@ Redis holds **ephemeral, high-frequency or recomputable** state only. PostgreSQL
 
 Rate-limit scopes: login (5/min per IP + email), register (3/min per IP), ride creation (5/min per user), fare estimate (30/min per user), AI questions (10/hour per user). Location messages are throttled per WebSocket session in memory (≥ 1 s interval) because each driver has a single session.
 
-Redis failure behaviour: rate limiting fails **open** (logged and counted in a metric). Tracking snapshots degrade to "unavailable". Offer locks fail **closed**, so no offer is sent without a lock.
+Redis failure behaviour: rate limiting fails **open** (logged and counted in a metric). Tracking snapshots degrade to "unavailable". (Offer exclusivity and fare quotes deliberately do not depend on Redis; see D16 and D17.)
 
 Phase 5 will measure fare-estimate and geocoding latency with and without the cache using k6, and record the real numbers here.
 

@@ -34,9 +34,21 @@ jobs:
           summary=target/failsafe-reports/failsafe-summary.xml
           grep -q "<skipped>0</skipped>" "$summary" || { cat "$summary"; echo "Integration tests were skipped"; exit 1; }
 
+      # Surface each failing test class as an annotation so failures are readable on the PR/commit page.
+      - name: Annotate test failures
+        if: failure()
+        run: |
+          for report in target/surefire-reports/*.txt target/failsafe-reports/*.txt; do
+            [ -f "$report" ] || continue
+            grep -qE "FAILURE|ERROR" "$report" || continue
+            body=$(head -c 3500 "$report" | sed ':a;N;$!ba;s/%/%25/g;s//%0D/g;s/
+/%0A/g')
+            echo "::error title=$(basename "$report" .txt)::$body"
+          done
+
       - name: Upload test reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: backend-test-reports
           path: |

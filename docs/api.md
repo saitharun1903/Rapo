@@ -97,7 +97,9 @@ Password policy: 10–72 characters (BCrypt limit), at least one letter and one 
 }
 ```
 
-(The numbers above only illustrate the shape. Real values come from configuration and routing.)
+(The numbers above only illustrate the shape. Real values come from configuration and routing.) The response also contains `route`, the path to draw, as `[{lat, lng}]`.
+
+`quoteId` is an HMAC-signed token, not a database id: it carries the category, coordinates, route estimate, surge and full fare breakdown, is bound to the requesting passenger, and expires after 5 minutes (`rideflow.ride.quote-ttl`). Errors at booking time: `QUOTE_INVALID` (tampered, or issued to someone else), `QUOTE_EXPIRED`, `QUOTE_MISMATCH` (pickup/dropoff moved more than 50 m).
 
 ## Rides: passenger
 
@@ -107,10 +109,10 @@ Password policy: 10–72 characters (BCrypt limit), at least one letter and one 
 | GET | `/rides` | Caller's rides (passenger: own; driver: assigned). Filters: `status`, `from`, `to`. Sort: `requestedAt`, `completedAt` |
 | GET | `/rides/active` | Caller's active ride or `204` |
 | GET | `/rides/{id}` | Ride detail |
-| GET | `/rides/{id}/tracking` | Latest driver location snapshot `{point, headingDeg, recordedAt, stale, etaSeconds}` |
+| GET | `/rides/{id}/tracking` | Latest driver location snapshot `{point, headingDeg, recordedAt, stale, etaSeconds}` *(Phase 4)* |
 | GET | `/rides/{id}/timeline` | Status events |
-| POST | `/rides/{id}/cancel` | `{reason}`. Passenger → `CANCELLED`. Driver (pre-pickup) → re-dispatch to `MATCHING`. Driver after no-show wait → `CANCELLED` |
-| POST | `/rides/{id}/rating` | `{score 1-5, comment?}` → 201; only after `COMPLETED`, once per rater |
+| POST | `/rides/{id}/cancel` | Optional body `{reason}`. Passenger (before the trip starts) → `CANCELLED`, and the driver is released. Assigned driver before arrival → ride goes back to `MATCHING` and is re-offered to other drivers. Driver after arriving → `CANCELLED` only once the 5-minute no-show wait has passed, else `409 NO_SHOW_WAIT_NOT_ELAPSED` |
+| POST | `/rides/{id}/rating` | `{score 1-5, comment?}` → 201; only after `COMPLETED`, once per rater *(Phase 6)* |
 
 ```json
 // POST /rides
@@ -150,7 +152,9 @@ All require role DRIVER, the ride must be assigned to (or offered to) the caller
 | POST | `/rides/{id}/en-route` | `DRIVER_ASSIGNED → DRIVER_ARRIVING` |
 | POST | `/rides/{id}/arrive` | `DRIVER_ARRIVING → DRIVER_ARRIVED`; driver's latest location within pickup geofence, otherwise `422 NOT_AT_PICKUP` |
 | POST | `/rides/{id}/start` | `DRIVER_ARRIVED → IN_PROGRESS` |
-| POST | `/rides/{id}/complete` | `IN_PROGRESS → COMPLETED`; computes final fare |
+| POST | `/rides/{id}/complete` | `IN_PROGRESS → COMPLETED`. Distance = PostGIS length of the recorded GPS trail (`distanceSource: TRACKED`), or the routed estimate when the trail has fewer than two points (`ESTIMATED`). The final fare uses the surge locked at booking |
+
+Errors common to driver actions: `404 RIDE_NOT_FOUND` (not your ride or offer), `409 RIDE_INVALID_TRANSITION`, `409 OFFER_EXPIRED`, `409 DRIVER_UNAVAILABLE`, `422 LOCATION_UNAVAILABLE` (no fresh GPS position for the geofence check).
 
 ## Drivers
 
@@ -159,9 +163,9 @@ All require role DRIVER, the ride must be assigned to (or offered to) the caller
 | POST | `/drivers/me/profile` | DRIVER | Onboarding: `{licenseNumber, vehicle{make, model, color, plateNumber, modelYear, category, seats}}` → `PENDING` verification |
 | GET | `/drivers/me` | DRIVER | Profile, verification, availability, vehicle, rating |
 | PUT | `/drivers/me/vehicle` | DRIVER | Replace active vehicle (re-verification not required in v1) |
-| POST | `/drivers/online` | DRIVER (VERIFIED) | `{point}` initial location → `AVAILABLE` |
-| POST | `/drivers/offline` | DRIVER | `→ OFFLINE` (`409` if on a trip) → 204 |
-| POST | `/drivers/location` | DRIVER | REST fallback for a location update (same service as WebSocket) → 202 |
+| POST | `/drivers/online` | DRIVER (VERIFIED) | `{location{lat,lng}}` → `AVAILABLE` (`403 DRIVER_NOT_VERIFIED`, `409 NO_ACTIVE_VEHICLE`) |
+| POST | `/drivers/offline` | DRIVER | `→ OFFLINE`, releases any pending offer; `409 DRIVER_ON_TRIP` during a trip. Returns the driver profile |
+| POST | `/drivers/location` | DRIVER | `{location{lat,lng}, headingDeg?, speedMps?, accuracyMeters?, recordedAt}` → 202. `recordedAt` must be within 30 s in the past / 5 s in the future (`422 STALE_LOCATION`); driver must be online (`409 DRIVER_OFFLINE`). REST fallback for the WebSocket stream (Phase 4) |
 | GET | `/drivers/me/offers` | DRIVER | Pending offers (used on reconnect) |
 | GET | `/drivers/me/earnings?from=&to=&granularity=DAY` | DRIVER | `{total, tripCount, onlineSeconds?, series[{bucket, earnings, trips}]}` from `payments` |
 | GET | `/drivers/nearby?lat=&lng=&radiusMeters=&category=` | PASSENGER, ADMIN | Passenger: `[{point (≈100 m grid), category}]`, max 20, no identity. Admin: full detail |

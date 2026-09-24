@@ -129,40 +129,41 @@ WHERE driver_locations.recorded_at < EXCLUDED.recorded_at;   -- never regress to
 |---|---|---|
 | id | uuid PK | |
 | passenger_id | uuid NOT NULL FK users | |
-| driver_id | uuid NULL FK drivers | set on accept |
+| driver_id | uuid NULL FK drivers | set on accept, cleared on re-dispatch |
 | vehicle_id | uuid NULL FK vehicles | vehicle used for this ride |
 | status | varchar(20) NOT NULL | CHECK IN (REQUESTED, MATCHING, DRIVER_ASSIGNED, DRIVER_ARRIVING, DRIVER_ARRIVED, IN_PROGRESS, COMPLETED, CANCELLED, EXPIRED) |
 | vehicle_category | varchar(16) NOT NULL | |
-| pickup_location | geography(Point,4326) NOT NULL | |
-| pickup_address | varchar(255) NOT NULL | |
-| dropoff_location | geography(Point,4326) NOT NULL | |
-| dropoff_address | varchar(255) NOT NULL | |
+| pickup_lat, pickup_lng | double precision NOT NULL | written by the application; range CHECKs |
+| pickup_location | geography(Point,4326) **GENERATED ALWAYS AS** `ST_SetSRID(ST_MakePoint(pickup_lng, pickup_lat), 4326)::geography` STORED | used by spatial queries and indexes; never written by Hibernate |
+| pickup_address | varchar(255) NOT NULL | display label |
+| dropoff_lat, dropoff_lng, dropoff_location, dropoff_address | | same pattern as pickup |
 | payment_method | varchar(16) NOT NULL | CHECK IN (CASH, CARD) |
-| estimated_distance_m | integer NOT NULL | CHECK > 0 |
-| estimated_duration_s | integer NOT NULL | CHECK > 0 |
+| estimated_distance_m, estimated_duration_s | integer NOT NULL | CHECK > 0, from the fare quote |
 | estimate_source | varchar(16) NOT NULL | CHECK IN (ROUTED, APPROXIMATE) |
-| actual_distance_m | integer NULL | |
-| actual_duration_s | integer NULL | |
-| distance_source | varchar(16) NULL | CHECK IN (TRACKED, ROUTED) |
-| currency | char(3) NOT NULL | |
+| surge_multiplier | numeric(4,2) NOT NULL | locked at quote time; CHECK >= 1 |
+| currency | varchar(3) NOT NULL | |
+| actual_distance_m, actual_duration_s | integer NULL | set on completion |
+| distance_source | varchar(16) NULL | CHECK IN (TRACKED, ESTIMATED) |
 | matching_round | smallint NOT NULL DEFAULT 0 | |
+| matching_radius_m | integer NOT NULL DEFAULT 0 | radius of the current round |
+| round_started_at | timestamptz NULL | the sweeper advances rounds older than the offer TTL |
 | requested_at | timestamptz NOT NULL | |
-| accepted_at, arrived_at, started_at, completed_at, cancelled_at | timestamptz NULL | |
-| cancelled_by | varchar(16) NULL | CHECK IN (PASSENGER, DRIVER, SYSTEM) |
+| accepted_at, en_route_at, arrived_at, started_at, completed_at, cancelled_at, expired_at | timestamptz NULL | |
+| cancelled_by | varchar(16) NULL | CHECK IN (PASSENGER, DRIVER, SYSTEM, ADMIN) |
 | cancellation_reason | varchar(255) NULL | |
-| created_at, updated_at, version | | |
+| created_at, updated_at, version | | `version` = optimistic lock and realtime ordering |
 
 Constraints:
 - `CHECK (driver_id IS NOT NULL OR status IN ('REQUESTED','MATCHING','CANCELLED','EXPIRED'))`
-- `CHECK (status <> 'COMPLETED' OR (completed_at IS NOT NULL AND actual_distance_m IS NOT NULL))`
+- `CHECK (status <> 'COMPLETED' OR (completed_at, actual_distance_m, actual_duration_s all NOT NULL))`
 
 Indexes:
 - `ux_rides_passenger_active UNIQUE (passenger_id) WHERE status IN ('REQUESTED','MATCHING','DRIVER_ASSIGNED','DRIVER_ARRIVING','DRIVER_ARRIVED','IN_PROGRESS')`
 - `ux_rides_driver_active UNIQUE (driver_id) WHERE status IN ('DRIVER_ASSIGNED','DRIVER_ARRIVING','DRIVER_ARRIVED','IN_PROGRESS')`
-- `ix_rides_passenger_requested (passenger_id, requested_at DESC)` — trip history
-- `ix_rides_driver_requested (driver_id, requested_at DESC)` — driver history / earnings
-- `ix_rides_status_requested (status, requested_at)` — admin filters, sweeper
-- `ix_rides_pickup_open USING GIST (pickup_location) WHERE status IN ('REQUESTED','MATCHING')` — surge demand count
+- `ix_rides_passenger_requested (passenger_id, requested_at DESC)`: trip history
+- `ix_rides_driver_requested (driver_id, requested_at DESC)`: driver history and earnings
+- `ix_rides_status_requested (status, requested_at)`: admin filters, sweeper
+- `ix_rides_pickup_open USING GIST (pickup_location) WHERE status IN ('REQUESTED','MATCHING')`: surge demand count
 
 ### ride_offers
 | column | type | notes |
@@ -171,13 +172,18 @@ Indexes:
 | ride_id | uuid NOT NULL FK rides ON DELETE CASCADE | |
 | driver_id | uuid NOT NULL FK drivers | |
 | round | smallint NOT NULL | matching round |
-| distance_m | integer NOT NULL | driver → pickup at offer time |
+| distance_m | integer NOT NULL | driver to pickup at offer time |
 | status | varchar(16) NOT NULL | CHECK IN (PENDING, ACCEPTED, REJECTED, EXPIRED, CANCELLED) |
-| offered_at | timestamptz NOT NULL | |
-| expires_at | timestamptz NOT NULL | |
+| offered_at, expires_at | timestamptz NOT NULL | |
 | responded_at | timestamptz NULL | |
 
-Indexes: `UNIQUE (ride_id, driver_id)` (never re-offer the same ride to the same driver), `ix_offers_driver_pending (driver_id) WHERE status = 'PENDING'`, `ix_offers_pending_expiry (expires_at) WHERE status = 'PENDING'`, `ux_offers_one_accepted UNIQUE (ride_id) WHERE status = 'ACCEPTED'`.
+Indexes:
+- `UNIQUE (ride_id, driver_id)`: never re-offer the same ride to the same driver
+- `ux_ride_offers_one_pending_per_driver UNIQUE (driver_id) WHERE status = 'PENDING'`: a driver holds at most one pending offer
+- `ux_ride_offers_one_accepted_per_ride UNIQUE (ride_id) WHERE status = 'ACCEPTED'`
+- `ix_ride_offers_pending_expiry (expires_at) WHERE status = 'PENDING'`, `ix_ride_offers_ride_status (ride_id, status)`
+
+Offers are inserted with `INSERT … ON CONFLICT DO NOTHING`, so a race between two matching rounds that pick the same driver resolves inside the database (one insert wins, the other is skipped) instead of failing a transaction. A driver who withdraws after accepting has their offer set to `CANCELLED`, freeing the ride's single "accepted" slot.
 
 ### ride_status_events *(append-only)*
 | column | type | notes |
@@ -200,16 +206,15 @@ Index: `(ride_id, occurred_at)`.
 | id | uuid PK | |
 | ride_id | uuid NOT NULL FK rides ON DELETE CASCADE | |
 | kind | varchar(10) NOT NULL | CHECK IN (ESTIMATE, FINAL) |
-| base_fare, distance_charge, time_charge, booking_fee | numeric(10,2) NOT NULL | |
-| surge_multiplier | numeric(4,2) NOT NULL | CHECK >= 1.00 |
-| minimum_fare | numeric(10,2) NOT NULL | |
+| base_fare, distance_charge, time_charge, subtotal, booking_fee, minimum_fare, total | numeric(10,2) NOT NULL | |
+| surge_multiplier | numeric(4,2) NOT NULL | CHECK >= 1 |
 | minimum_fare_applied | boolean NOT NULL | |
-| total | numeric(10,2) NOT NULL | CHECK >= 0 |
+| currency | varchar(3) NOT NULL | |
 | distance_m, duration_s | integer NOT NULL | inputs used |
-| pricing_version | varchar(20) NOT NULL | config version used |
+| pricing_version | varchar(20) NOT NULL | `rideflow.pricing.version` at calculation time |
 | created_at | timestamptz | |
 
-Unique: `(ride_id, kind)`.
+Unique: `(ride_id, kind)`. The ESTIMATE row is copied from the signed quote; the FINAL row is recalculated on completion from measured distance and duration with the surge locked at booking.
 
 ### ride_track_points *(append-only, sampled while IN_PROGRESS)*
 | column | type | notes |
@@ -357,6 +362,6 @@ Purged after 7 days (longer than Kafka redelivery window).
 
 ## Migration plan
 
-Implemented: `V1__extensions.sql` → `V2__users_auth_audit.sql` (users, refresh_tokens, audit_logs) → `V3__drivers_vehicles_locations.sql`. Planned: `V4__rides_offers_status_fares.sql` → `V5__payments_ratings_notifications.sql` → `V6__ai.sql` → `V7__outbox_processed_events.sql`.
+Implemented: `V1__extensions.sql` → `V2__users_auth_audit.sql` (users, refresh_tokens, audit_logs) → `V3__drivers_vehicles_locations.sql` → `V4__rides_offers_fares.sql` (rides, ride_offers, ride_status_events, fare_breakdowns, ride_track_points). Planned: `V5__payments_ratings_notifications.sql` → `V6__ai.sql` → `V7__outbox_processed_events.sql`.
 
 Seed: `db/seed/R__demo_seed.sql` (repeatable, `demo` profile only). Seed passwords are never committed: they are hashed inside PostgreSQL with pgcrypto `crypt()` from the `${demo_password}` Flyway placeholder, which comes from the `DEMO_USER_PASSWORD` environment variable.
