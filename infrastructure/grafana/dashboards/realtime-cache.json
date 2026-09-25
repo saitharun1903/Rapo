@@ -602,7 +602,7 @@
       "type": "timeseries",
       "id": 12,
       "title": "Redis command latency",
-      "description": "Average time to complete a Redis command, by command (Lettuce client).",
+      "description": "Average time to complete a Redis command, by command (Lettuce observations).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -620,8 +620,8 @@
             "uid": "prometheus"
           },
           "refId": "A",
-          "expr": "sum by (command) (rate(lettuce_command_completion_seconds_sum{job=\"rideflow-backend\"}[$__rate_interval])) / sum by (command) (rate(lettuce_command_completion_seconds_count{job=\"rideflow-backend\"}[$__rate_interval]))",
-          "legendFormat": "{{command}}"
+          "expr": "sum by (db_operation) (rate(lettuce_seconds_sum{job=\"rideflow-backend\"}[$__rate_interval])) / sum by (db_operation) (rate(lettuce_seconds_count{job=\"rideflow-backend\"}[$__rate_interval]))",
+          "legendFormat": "{{db_operation}}"
         }
       ],
       "fieldConfig": {

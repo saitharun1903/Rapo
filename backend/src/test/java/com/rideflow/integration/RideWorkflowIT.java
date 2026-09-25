@@ -216,6 +216,8 @@ class RideWorkflowIT extends IntegrationTestContainers {
         assertThat(increase(before, after, "rideflow_offers_total", "outcome", "accepted")).isEqualTo(1);
         assertThat(increase(before, after, "rideflow_matching_duration_seconds_bucket", "le", "+Inf")).isEqualTo(1);
         assertThat(increase(before, after, "rideflow_location_updates_total", "result", "accepted")).isEqualTo(2);
+        // Redis command timings come from Lettuce's observations (the Real-time & cache dashboard).
+        assertThat(increase(before, after, "lettuce_seconds_count", "db_system", "redis")).isPositive();
     }
 
     private static double increase(PrometheusScrape before, PrometheusScrape after, String name, String label,

@@ -38,6 +38,7 @@ MUST_SHOW = {
     ("rideflow-realtime", "WebSocket sessions"): 1,
     ("rideflow-realtime", "Location reports"): 0,
     ("rideflow-realtime", "Cache lookups"): 0,
+    ("rideflow-realtime", "Redis command latency"): 0,
 }
 
 
