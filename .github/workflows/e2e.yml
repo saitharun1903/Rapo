@@ -34,8 +34,16 @@ jobs:
       - name: Validate the compose file
         run: docker compose --profile demo config --quiet
 
+      # On failure, the build's errors become annotations (readable without the raw log).
       - name: Build the images
-        run: docker compose --profile demo build
+        run: |
+          set -o pipefail
+          if ! docker compose --profile demo build --progress plain 2>&1 | tee build.log; then
+            encode() { head -c 3500 | tr -d '\r' | awk 'BEGIN { ORS = "%0A" } { gsub(/%/, "%25"); print }'; }
+            echo "::error title=Image build errors::$(grep -iE 'error|failed|denied|not found' build.log | tail -n 30 | encode)"
+            echo "::error title=Image build (last lines)::$(tail -n 30 build.log | encode)"
+            exit 1
+          fi
 
       - name: Start the stack
         run: |
