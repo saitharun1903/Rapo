@@ -693,12 +693,12 @@ Logs, metrics and errors are three separate signals:
 | Web slice | `@WebMvcTest` + Spring Security test | status codes, validation errors, role access, error shape |
 | Persistence | `@DataJpaTest` + Testcontainers `postgis/postgis` | nearby-driver query correctness and ordering, freshness filter, partial unique indexes, track-point distance |
 | Integration | `@SpringBootTest` + Testcontainers (PostGIS, Redis, Kafka) | outbox → Kafka → consumer; DLT routing; concurrent accept race (exactly one winner); Redis TTL and rate limits |
-| End-to-end workflow | same + STOMP test client | passenger requests → `ride.requested` → offer pushed → driver accepts → location pushed to passenger over WS → start → complete → payment + analysis rows |
+| End-to-end workflow | same + STOMP test client (`RideWorkflowIT`) | passenger requests → `ride.requested` → offer pushed → driver accepts → location pushed to passenger over WS → start → complete → payment + analysis rows, then ratings, earnings and the admin view |
 | AI | WireMock | timeout, 429 with `Retry-After`, 500, malformed JSON, ungrounded numbers, circuit open → ride unaffected |
-| Frontend | Vitest + Testing Library; Playwright smoke | forms, realtime hook reconnect logic; login → estimate → request against the compose stack |
+| Frontend | Vitest + Testing Library; Playwright | forms, realtime reconnect protocol, active-ride hook, driver trip controls; passenger, driver (onboarding to earnings), cancellation and admin journeys against the whole stack |
 | Load | k6 | §23 of requirements, results recorded only from real runs |
 
-Coverage is reported by JaCoCo, with a gate on `service` packages in CI (threshold set once a real baseline exists).
+Coverage is reported by JaCoCo from the unit and integration tests together. The first CI baseline (Phase 9) was 90.3 % of lines and 71.1 % of branches in the service layer; CI fails below 88 % and 70 %. The gate runs only where the integration tests do (a Maven profile that CI turns on), since without Docker they skip and the figure would mean nothing. Vitest reports frontend coverage without a gate: most of the frontend is pages, which Playwright covers and V8 coverage does not see.
 
 ---
 
@@ -716,7 +716,7 @@ Implemented in Phase 8 (`frontend/`, Next.js 16 App Router, React 19, TypeScript
 - **State and forms.** TanStack Query for server state (query keys in `lib/queryKeys.ts`), react-hook-form with zod schemas that mirror the backend's validation, sonner for toasts, next-themes for light and dark.
 - **UX states.** Skeletons for loading, explicit empty and error states with retry, an error boundary, a "Reconnecting…" banner, `aria-live` for ride status, labelled forms with errors announced, keyboard-reachable dialogs (native `<dialog>`), charts with a screen-reader table.
 - **Visual direction.** An original identity: violet for routes and primary actions, coral for destinations, Plus Jakarta Sans, rounded surfaces and a map-first layout (panel on the left, map on the right; stacked on phones). It deliberately avoids the black, pink, green and yellow of existing ride-hailing brands. Colours are CSS variables with light and dark values.
-- **Tests.** Vitest and Testing Library for the logic that is easy to get wrong: token refresh and retry, version gating, backoff, validation parity with the backend, error mapping, formatting. Playwright smoke tests (`frontend/e2e`) run against the whole stack in the `e2e` workflow: a new passenger registers; a passenger books a ride that a simulated driver completes, rates it and opens the trip; an admin sees the ride and the system state.
+- **Tests.** Vitest and Testing Library for the logic that is easy to get wrong: token refresh and retry, version gating, backoff, validation parity with the backend, error mapping, formatting. Playwright tests (`frontend/e2e`) run against the whole stack in the `e2e` workflow: a new passenger registers; a passenger books a ride that a simulated driver completes, rates it and opens the trip; a new driver onboards, is verified by an admin, goes online from emulated GPS and completes a ride through to earnings; a passenger cancels while matching; an admin sees rides and system state.
 
 ---
 

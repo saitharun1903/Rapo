@@ -61,12 +61,17 @@ themself on the map when the browser has no GPS.
 ```bash
 cd backend
 ./mvnw test      # unit, web-slice (MockMvc + real JWT security) and ArchUnit tests; no Docker needed
-./mvnw verify    # additionally runs *IT integration tests against a real PostGIS container
+./mvnw verify    # additionally runs *IT integration tests against real PostGIS, Redis and Kafka containers
 ```
 
-Integration tests extend `PostgisContainerSupport`. They are **skipped** (not failed) when Docker is
+Integration tests extend `IntegrationTestContainers`. They are **skipped** (not failed) when Docker is
 unavailable, so `verify` passing locally without Docker does not mean they ran: check the
-`Skipped:` count in the output. CI always runs them.
+`Skipped:` count in the output. CI always runs them, and fails if any was skipped.
+
+**Coverage.** `verify` writes a JaCoCo report of the unit and integration tests together to
+`target/site/jacoco/index.html`. In CI a floor on the service layer (`com.rideflow.service`, 88 % of lines
+and 70 % of branches) fails the build; the per-package figures are on the run page. The floor needs the
+integration tests, so it is off locally unless asked for: `./mvnw verify -Pcoverage-gate` (with Docker).
 
 | Suite | What it proves |
 |---|---|
@@ -77,6 +82,7 @@ unavailable, so `verify` passing locally without Docker does not mean they ran: 
 | `AuthAndOnboardingFlowIT` | End-to-end: register → login → refresh rotation → reuse detection; driver onboarding → admin verification; suspension |
 | `DemoSeedIT` | Seed loads and pgcrypto-hashed demo passwords work with the application's password encoder |
 | `ReportingIT` | Earnings, admin overview, analytics series, ride search and detail against a real completed and paid ride; vehicle replacement rules and its audit entry |
+| `RideWorkflowIT` | One ride from request to payment and AI insights the way the apps drive it: HTTP commands, a STOMP socket per participant, Kafka between every step; then ratings, earnings and the admin view agree |
 | `OpenApiContractTest` | `docs/openapi.json` matches the code (see below) |
 
 ### API contract
@@ -97,13 +103,27 @@ fails when the generated types are.
 ```bash
 cd frontend
 npm run lint && npm run typecheck && npm test && npm run build
+npm run test:coverage                   # the same tests with a V8 coverage report in coverage/
 cd ../simulator && npm run typecheck && npm test
 ```
 
+Vitest and Testing Library cover the logic that is easy to get wrong without a browser: token refresh and
+retry, the realtime reconnect protocol, the active-ride hook, forms and their server errors, and the driver's
+trip controls. Pages as a whole are covered by Playwright.
+
 ### End-to-end (Playwright)
 
-`frontend/e2e` holds smoke tests that need the whole stack: infrastructure, the backend with the `demo`
-profile and the simulator (the `e2e` workflow starts all of it). Locally, with those running:
+`frontend/e2e` holds tests that need the whole stack: infrastructure, the backend with the `demo` profile and
+the simulator (the `e2e` workflow starts all of it).
+
+| Spec | Journey |
+|---|---|
+| `smoke.spec.ts` | A passenger registers; a passenger books a ride that a simulated driver completes, rates it and opens the trip; an admin sees rides and system state |
+| `driver.spec.ts` | A new driver registers and onboards, an admin verifies them in a second session, they go online from emulated GPS, accept an offer, drive the ride step by step and find it in their earnings |
+| `passenger.spec.ts` | A passenger books from their own location, cancels while matching, and sees the ride in their history |
+
+The driver and cancellation tests work 15 to 20 km out of the city centre, beyond the simulator's drivers'
+reach, so those drivers never take their rides. Locally, with the stack running:
 
 ```bash
 cd frontend
