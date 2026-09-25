@@ -64,6 +64,8 @@ class KafkaEventFlowIT extends IntegrationTestContainers {
     private static final BigDecimal PLATFORM_FEE_RATE = new BigDecimal("0.20");
     /** Initial retry interval 1 s, multiplier 2, 3 retries (application.yml): 1 + 2 + 4 seconds. */
     private static final Duration RETRY_BACKOFF_TOTAL = Duration.ofSeconds(7);
+    /** Consumer groups subscribed to ride.completed; each handles, and dead-letters, its own copy of a record. */
+    private static final List<String> RIDE_COMPLETED_GROUPS = List.of("payments", "notifications", "trip-analysis");
 
     @Autowired
     private MockMvc mvc;
@@ -196,11 +198,11 @@ class KafkaEventFlowIT extends IntegrationTestContainers {
         try (TopicRecorder deadLetterTopic = new TopicRecorder(consumerFactory, List.of(KafkaNames.deadLetterTopic(topic)))) {
             kafkaTemplate.send(topic, key, garbage).get(10, TimeUnit.SECONDS);
 
-            // Both groups reading ride.completed fail on it, and each dead-letters its own copy.
+            // Every group reading ride.completed fails on it, and each dead-letters its own copy.
             List<ConsumerRecord<Object, Object>> dead = deadLetterTopic.awaitRecords(record -> key.equals(record.key()),
-                    records -> records.size() == 2);
+                    records -> records.size() == RIDE_COMPLETED_GROUPS.size());
             assertThat(dead).extracting(record -> header(record, KafkaHeaders.DLT_ORIGINAL_CONSUMER_GROUP))
-                    .containsExactlyInAnyOrder(names.group("payments"), names.group("notifications"));
+                    .containsExactlyInAnyOrderElementsOf(RIDE_COMPLETED_GROUPS.stream().map(names::group).toList());
             assertThat(dead).allSatisfy(record -> {
                 assertThat(record.value()).isEqualTo(garbage);
                 assertThat(header(record, KafkaHeaders.DLT_EXCEPTION_CAUSE_FQCN))
@@ -208,8 +210,8 @@ class KafkaEventFlowIT extends IntegrationTestContainers {
                 assertThat(header(record, KafkaHeaders.DLT_ORIGINAL_TOPIC)).isEqualTo(topic);
             });
         }
-        assertThat(deadLetters(topic)).isEqualTo(deadLettersBefore + 2);
-        // Both groups committed past the record instead of retrying it forever.
+        assertThat(deadLetters(topic)).isEqualTo(deadLettersBefore + RIDE_COMPLETED_GROUPS.size());
+        // Every group committed past the record instead of retrying it forever.
         kafka.awaitIdle();
     }
 
@@ -227,7 +229,8 @@ class KafkaEventFlowIT extends IntegrationTestContainers {
             long sentAt = System.nanoTime();
             kafkaTemplate.send(topic, rideId.toString(), replay).get(10, TimeUnit.SECONDS);
 
-            ConsumerRecord<Object, Object> dead = deadLetterTopic.awaitRecords(record -> replay.equals(record.value()))
+            ConsumerRecord<Object, Object> dead = deadLetterTopic.awaitRecords(record -> replay.equals(record.value())
+                    && names.group("payments").equals(header(record, KafkaHeaders.DLT_ORIGINAL_CONSUMER_GROUP)))
                     .getFirst();
             assertThat(Duration.ofNanos(System.nanoTime() - sentAt)).isGreaterThanOrEqualTo(RETRY_BACKOFF_TOTAL);
             assertThat(header(dead, KafkaHeaders.DLT_EXCEPTION_CAUSE_FQCN)).isEqualTo(IllegalStateException.class.getName());
@@ -257,8 +260,10 @@ class KafkaEventFlowIT extends IntegrationTestContainers {
             assertThat(payment.get("gateway_reference")).isEqualTo("sandbox_" + rideId);
         });
         assertThat(countNotifications(rideId)).isEqualTo(notificationsBefore);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM trip_analyses WHERE ride_id = ?", Long.class, rideId))
+                .isOne();
         assertThat(jdbc.queryForList("SELECT consumer FROM processed_events WHERE event_id = ?", String.class, eventId))
-                .containsExactlyInAnyOrder("payments", "notifications");
+                .containsExactlyInAnyOrderElementsOf(RIDE_COMPLETED_GROUPS);
     }
 
     // --- helpers ---

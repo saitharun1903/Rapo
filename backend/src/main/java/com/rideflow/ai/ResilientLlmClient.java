@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
  * Timeouts, server errors and rate limits count as circuit-breaker failures; refusals and rejected requests do
  * not, because the provider was reachable and answered.
  */
-public class ResilientLlmClient implements LlmClient {
+public final class ResilientLlmClient implements LlmClient {
 
     private static final Logger log = LoggerFactory.getLogger(ResilientLlmClient.class);
 
