@@ -12,6 +12,10 @@ describe("geo", () => {
     assert.equal(bearingDegrees(CENTER, moved), 90);
   });
 
+  it("a bearing just west of north rounds to 0, never 360", () => {
+    assert.equal(bearingDegrees(CENTER, offset(CENTER, 1_000, 359.8)), 0);
+  });
+
   it("random points stay inside the radius", () => {
     for (let i = 0; i < 200; i++) {
       assert.ok(distanceMeters(CENTER, randomPointNear(CENTER, 3_000)) <= 3_000 + TOLERANCE_METERS);

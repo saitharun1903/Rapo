@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { api, unwrap } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import type { GeoPoint } from "@/lib/api/types";
-import { useRealtime } from "@/lib/realtime/RealtimeProvider";
-import type { LocationReport } from "@/lib/realtime/types";
+import { compassHeading } from "@/lib/geolocation";
+import { useRealtime, useRealtimeSubscription } from "@/lib/realtime/RealtimeProvider";
+import { Destinations, type LocationReport } from "@/lib/realtime/types";
 
 /**
  * How often an online driver reports. The server accepts one per second; two minutes of silence takes a
@@ -55,7 +56,7 @@ export function useDriverLocation(online: boolean) {
       setGpsError(null);
       setPosition({
         point: { lat: fix.coords.latitude, lng: fix.coords.longitude },
-        headingDeg: fix.coords.heading === null || Number.isNaN(fix.coords.heading) ? null : Math.round(fix.coords.heading),
+        headingDeg: compassHeading(fix.coords.heading),
         speedMps: fix.coords.speed,
         accuracyMeters: fix.coords.accuracy,
       });
@@ -63,6 +64,13 @@ export function useDriverLocation(online: boolean) {
     { enableHighAccuracy: true, maximumAge: GPS_MAX_AGE_MS, timeout: GPS_TIMEOUT_MS });
     return () => navigator.geolocation.clearWatch(watch);
   }, [mode]);
+
+  // A report sent over the socket that the server refuses comes back on the error queue, not as a failed request.
+  useRealtimeSubscription(Destinations.errors, (message) => {
+    if (message.destination === Destinations.driverLocation) {
+      setReportError(message.message);
+    }
+  }, online);
 
   useEffect(() => {
     if (!online) {

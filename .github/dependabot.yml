@@ -16,6 +16,10 @@ updates:
     directory: /frontend
     schedule: { interval: weekly }
     open-pull-requests-limit: 5
+    ignore:
+      # Node's types follow the Node line the images run (24 LTS), which moves only with the Dockerfiles.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       frontend-minor:
         update-types: [minor, patch]
@@ -24,6 +28,9 @@ updates:
     directory: /simulator
     schedule: { interval: weekly }
     open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       simulator-minor:
         update-types: [minor, patch]
@@ -38,6 +45,13 @@ updates:
   - package-ecosystem: docker
     directories: [/backend, /frontend, /simulator]
     schedule: { interval: weekly }
+    ignore:
+      # Runtime lines are chosen, not bumped: Node and Java move to the next LTS release together with the
+      # code, the setup-node/setup-java versions in CI and the docs, never to a non-LTS release.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eclipse-temurin"
+        update-types: ["version-update:semver-major"]
     groups:
       base-images:
         update-types: [minor, patch]

@@ -6,6 +6,8 @@ const POSITION_MAX_AGE_MS = 30_000;
 
 export class GeolocationUnavailableError extends Error {}
 
+const DEGREES_IN_CIRCLE = 360;
+
 const REASONS: Record<number, string> = {
   1: "Location permission was denied.",
   2: "Your position is not available right now.",
@@ -27,4 +29,16 @@ export function currentPosition(): Promise<GeolocationPosition> {
 
 export function toPoint(position: GeolocationPosition): GeoPoint {
   return { lat: position.coords.latitude, lng: position.coords.longitude };
+}
+
+/**
+ * A device heading as whole compass degrees, 0–359 (what the backend accepts), or null when the device has
+ * none. Rounding can reach 360, which is north.
+ */
+export function compassHeading(heading: number | null): number | null {
+  if (heading === null || !Number.isFinite(heading)) {
+    return null;
+  }
+  const whole = Math.round(heading) % DEGREES_IN_CIRCLE;
+  return whole < 0 ? whole + DEGREES_IN_CIRCLE : whole;
 }

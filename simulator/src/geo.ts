@@ -18,7 +18,8 @@ export function bearingDegrees(a: Point, b: Point): number {
   const y = Math.sin(toRadians(b.lng - a.lng)) * Math.cos(toRadians(b.lat));
   const x = Math.cos(toRadians(a.lat)) * Math.sin(toRadians(b.lat))
     - Math.sin(toRadians(a.lat)) * Math.cos(toRadians(b.lat)) * Math.cos(toRadians(b.lng - a.lng));
-  return Math.round((toDegrees(Math.atan2(y, x)) + DEGREES_IN_CIRCLE) % DEGREES_IN_CIRCLE);
+  // Rounded, then wrapped: 359.5 and above rounds to 360, which is north again (the backend accepts 0–359).
+  return Math.round((toDegrees(Math.atan2(y, x)) + DEGREES_IN_CIRCLE) % DEGREES_IN_CIRCLE) % DEGREES_IN_CIRCLE;
 }
 
 /** The point `meters` from `origin` towards `bearing` (degrees). */
