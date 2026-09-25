@@ -72,7 +72,7 @@ export async function clickMap(page: Page, mapName: string, x: number, y: number
   await map.click({ position: { x: box.width * x, y: box.height * y } });
 }
 
-/** How long a capture waits for MapLibre to draw its first frame of style and tiles (data-drawn on the map). */
+/** How long a capture waits for MapLibre to draw its first frame of style and tiles (data-map-stage "drawn"). */
 const MAP_DRAWN_TIMEOUT_MS = 15_000;
 /** Markers and a route layer can follow the first frame; a short pause lets them settle. */
 const CAPTURE_SETTLE_MS = 1_000;
@@ -88,9 +88,16 @@ export async function capture(page: Page, name: string, options: { fullPage?: bo
   if (!directory) {
     return;
   }
-  const maps = page.locator("[data-drawn]");
-  if (await maps.count() > 0) {
-    await expect(maps.first(), `the map in ${name} draws`).toHaveAttribute("data-drawn", "true", { timeout: MAP_DRAWN_TIMEOUT_MS });
+  const map = page.locator("[data-map-stage]").first();
+  if (await map.count() > 0) {
+    try {
+      await expect(map).toHaveAttribute("data-map-stage", "drawn", { timeout: MAP_DRAWN_TIMEOUT_MS });
+    } catch {
+      const stage = await map.getAttribute("data-map-stage");
+      const error = await map.getAttribute("data-map-error");
+      throw new Error(`The map in ${name} did not draw within ${MAP_DRAWN_TIMEOUT_MS} ms: stage ${stage}, `
+        + `last map error ${error ?? "none"}`);
+    }
   }
   await page.waitForTimeout(CAPTURE_SETTLE_MS);
   await page.screenshot({ path: path.join(directory, `${name}.png`), fullPage: options.fullPage ?? false });

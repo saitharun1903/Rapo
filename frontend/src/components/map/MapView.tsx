@@ -5,6 +5,7 @@ import { Car } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Map, { Layer, Marker, NavigationControl, Source, type MapLayerMouseEvent, type MapRef } from "react-map-gl/maplibre";
+import { setWorkerUrl } from "maplibre-gl";
 import type { GeoPoint } from "@/lib/api/types";
 import { config } from "@/lib/config";
 
@@ -28,6 +29,12 @@ export type MapViewProps = {
   onPick?: (point: GeoPoint) => void;
   className?: string;
 };
+
+/**
+ * MapLibre's worker, served from public/maplibre by scripts/copy-maplibre-worker.mjs. Left to itself, bundled
+ * MapLibre looks for it next to its own chunk, where the build never puts it, and no map would ever draw.
+ */
+setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
 
 /** Used until the stylesheet is readable; matches --brand in globals.css. */
 const FALLBACK_BRAND = "#5b4bdb";
@@ -60,8 +67,10 @@ export default function MapView({ label, center = config.mapCenter, pickup, drop
                                   fitTo = [], onPick, className }: MapViewProps) {
   const mapRef = useRef<MapRef>(null);
   const colors = useTokenColors();
-  // True once MapLibre has drawn the style and tiles for the first time; exposed as data-drawn for tests.
-  const [drawn, setDrawn] = useState(false);
+  // How far MapLibre got (loading, then its style loaded, then fully drawn once) and its last error, exposed as
+  // data attributes: tests wait for "drawn", and a map that never gets there says why.
+  const [stage, setStage] = useState<"loading" | "loaded" | "drawn">("loading");
+  const [lastError, setLastError] = useState<string | null>(null);
   const fitKey = fitTo.map((point) => `${point.lat.toFixed(5)},${point.lng.toFixed(5)}`).join("|");
 
   useEffect(() => {
@@ -90,9 +99,15 @@ export default function MapView({ label, center = config.mapCenter, pickup, drop
   const onClick = (event: MapLayerMouseEvent) => onPick?.({ lat: event.lngLat.lat, lng: event.lngLat.lng });
 
   return (
-    <div role="region" aria-label={label} data-drawn={drawn} className={clsx("relative size-full min-h-72", className)}>
+    <div role="region" aria-label={label} data-map-stage={stage} data-map-error={lastError ?? undefined}
+      className={clsx("relative size-full min-h-72", className)}>
       <Map ref={mapRef} mapStyle={config.mapStyleUrl} initialViewState={{ latitude: center.lat, longitude: center.lng, zoom: DEFAULT_ZOOM }}
-        onIdle={() => setDrawn(true)} onClick={onPick ? onClick : undefined} cursor={onPick ? "crosshair" : undefined} style={{ position: "absolute", inset: 0 }}>
+        onLoad={() => setStage((current) => (current === "drawn" ? current : "loaded"))} onIdle={() => setStage("drawn")}
+        onError={(event) => {
+          console.error("Map error", event.error);
+          setLastError(event.error?.message ?? String(event.error));
+        }}
+        onClick={onPick ? onClick : undefined} cursor={onPick ? "crosshair" : undefined} style={{ position: "absolute", inset: 0 }}>
         <NavigationControl position="bottom-right" showCompass={false} />
         {routeData && (
           <Source id="route" type="geojson" data={routeData}>

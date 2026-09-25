@@ -21,7 +21,6 @@ permissions:
 
 env:
   COMPOSE_FILE: docker-compose.yml:infrastructure/free-tier/compose.yml
-  ADMIN_EMAIL: fit-admin@example.com
   VUS: "2"
   DURATION_SECONDS: "60"
   # Copied from render.yaml, so this run uses exactly the deployed values.
@@ -52,11 +51,23 @@ jobs:
           set_env RATE_LIMIT_ENABLED false
           set_env ROUTING_PROVIDER straight-line
           set_env GEOCODING_PROVIDER disabled
-          set_env BOOTSTRAP_ADMIN_EMAIL "$ADMIN_EMAIL"
-          set_env BOOTSTRAP_ADMIN_PASSWORD "$admin_password"
+          # k6 verifies its drivers as an admin. With the demo profile (as on the deployment) that is the seeded
+          # admin, and the bootstrap admin is never created, since an admin already exists; otherwise it is the
+          # bootstrap admin.
+          case ",$(grep '^SPRING_PROFILES_ACTIVE=' .env | cut -d= -f2-)," in
+            *,demo,*)
+              admin_email=admin@rideflow.example.com
+              admin_password=$(grep '^DEMO_USER_PASSWORD=' .env | cut -d= -f2-) ;;
+            *)
+              admin_email=fit-admin@example.com
+              set_env BOOTSTRAP_ADMIN_EMAIL "$admin_email"
+              set_env BOOTSTRAP_ADMIN_PASSWORD "$admin_password" ;;
+          esac
           for name in POSTGRES_PASSWORD REDIS_PASSWORD JWT_SECRET DEMO_USER_PASSWORD GRAFANA_ADMIN_PASSWORD BOOTSTRAP_ADMIN_PASSWORD; do
-            echo "::add-mask::$(grep "^$name=" .env | cut -d= -f2-)"
+            value=$(grep "^$name=" .env | cut -d= -f2-)
+            if [ -n "$value" ]; then echo "::add-mask::$value"; fi
           done
+          echo "ADMIN_EMAIL=$admin_email" >> "$GITHUB_ENV"
           echo "ADMIN_PASSWORD=$admin_password" >> "$GITHUB_ENV"
 
       - name: Build the backend image
