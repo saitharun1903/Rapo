@@ -2506,8 +2506,8 @@
         "description" : "Requires header X-Requested-With: rideflow",
         "operationId" : "logout",
         "responses" : {
-          "200" : {
-            "description" : "OK"
+          "204" : {
+            "description" : "No Content"
           }
         },
         "security" : [ ],
@@ -2550,7 +2550,7 @@
           "required" : true
         },
         "responses" : {
-          "200" : {
+          "201" : {
             "content" : {
               "*/*" : {
                 "schema" : {
@@ -2558,7 +2558,7 @@
                 }
               }
             },
-            "description" : "OK"
+            "description" : "Created"
           }
         },
         "security" : [ ],
@@ -2580,8 +2580,8 @@
           "required" : true
         },
         "responses" : {
-          "200" : {
-            "description" : "OK"
+          "202" : {
+            "description" : "Accepted"
           }
         },
         "summary" : "Report the current GPS position (REST fallback for the WebSocket stream)",
@@ -2688,7 +2688,7 @@
           "required" : true
         },
         "responses" : {
-          "200" : {
+          "201" : {
             "content" : {
               "*/*" : {
                 "schema" : {
@@ -2696,7 +2696,7 @@
                 }
               }
             },
-            "description" : "OK"
+            "description" : "Created"
           }
         },
         "summary" : "Submit licence and vehicle for verification",
@@ -2904,7 +2904,17 @@
                 }
               }
             },
-            "description" : "OK"
+            "description" : "The address"
+          },
+          "204" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PlaceResponse"
+                }
+              }
+            },
+            "description" : "No address at this point"
           }
         },
         "summary" : "Address at a point, or 204 if there is none (for example at sea)",
@@ -3084,8 +3094,8 @@
       "post" : {
         "operationId" : "markAllRead",
         "responses" : {
-          "200" : {
-            "description" : "OK"
+          "204" : {
+            "description" : "No Content"
           }
         },
         "tags" : [ "Notifications" ]
@@ -3104,8 +3114,8 @@
           }
         } ],
         "responses" : {
-          "200" : {
-            "description" : "OK"
+          "204" : {
+            "description" : "No Content"
           }
         },
         "tags" : [ "Notifications" ]
@@ -3180,7 +3190,7 @@
           "required" : true
         },
         "responses" : {
-          "200" : {
+          "201" : {
             "content" : {
               "*/*" : {
                 "schema" : {
@@ -3188,7 +3198,7 @@
                 }
               }
             },
-            "description" : "OK"
+            "description" : "Created"
           }
         },
         "summary" : "Book a ride from a fare quote; matching starts asynchronously",
@@ -3207,7 +3217,17 @@
                 }
               }
             },
-            "description" : "OK"
+            "description" : "The ongoing ride"
+          },
+          "204" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RideResponse"
+                }
+              }
+            },
+            "description" : "No ongoing ride"
           }
         },
         "summary" : "The caller's ongoing ride, or 204 if none (used to restore state after reload)",
@@ -3413,7 +3433,7 @@
           "required" : true
         },
         "responses" : {
-          "200" : {
+          "201" : {
             "content" : {
               "*/*" : {
                 "schema" : {
@@ -3421,7 +3441,7 @@
                 }
               }
             },
-            "description" : "OK"
+            "description" : "Created"
           }
         },
         "summary" : "Rate the other participant of a completed ride (once per participant)",
@@ -3441,8 +3461,8 @@
           }
         } ],
         "responses" : {
-          "200" : {
-            "description" : "OK"
+          "204" : {
+            "description" : "No Content"
           }
         },
         "summary" : "Decline an open offer",
@@ -3644,7 +3664,7 @@
           }
         } ],
         "responses" : {
-          "200" : {
+          "202" : {
             "content" : {
               "*/*" : {
                 "schema" : {
@@ -3652,7 +3672,7 @@
                 }
               }
             },
-            "description" : "OK"
+            "description" : "Accepted"
           }
         },
         "summary" : "Run a FAILED, UNAVAILABLE or abandoned analysis again (asynchronously)",
@@ -3719,8 +3739,8 @@
           "required" : true
         },
         "responses" : {
-          "200" : {
-            "description" : "OK"
+          "204" : {
+            "description" : "No Content"
           }
         },
         "summary" : "Change password; signs out all sessions",

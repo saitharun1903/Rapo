@@ -20,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -38,9 +39,9 @@ public class AuthController {
 
     @PostMapping("/register")
     @Operation(summary = "Create a passenger or driver account")
-    public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request,
-                                                 HttpServletRequest http) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request, http.getRemoteAddr()));
+    @ResponseStatus(HttpStatus.CREATED)
+    public UserResponse register(@Valid @RequestBody RegisterRequest request, HttpServletRequest http) {
+        return authService.register(request, http.getRemoteAddr());
     }
 
     @PostMapping("/login")
@@ -62,6 +63,7 @@ public class AuthController {
     @PostMapping("/logout")
     @Operation(summary = "Revoke the current session and clear the refresh-token cookie",
             description = "Requires header X-Requested-With: rideflow")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     public ResponseEntity<Void> logout(HttpServletRequest request) {
         refreshTokenCookies.requireCsrfHeader(request);
         refreshTokenCookies.read(request).ifPresent(authService::logout);

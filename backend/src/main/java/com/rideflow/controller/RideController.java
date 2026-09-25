@@ -18,6 +18,7 @@ import com.rideflow.service.ride.RideQueryService;
 import com.rideflow.service.ride.RideTrackingService;
 import com.rideflow.utility.PageRequests;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -35,6 +36,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -64,6 +66,7 @@ public class RideController {
 
     @PostMapping
     @Operation(summary = "Book a ride from a fare quote; matching starts asynchronously")
+    @ResponseStatus(HttpStatus.CREATED)
     public ResponseEntity<RideResponse> book(
             @AuthenticationPrincipal AuthenticatedUser passenger, @Valid @RequestBody BookRideRequest request) {
         RideResponse ride = bookingService.book(passenger.id(), request);
@@ -83,6 +86,8 @@ public class RideController {
 
     @GetMapping("/active")
     @Operation(summary = "The caller's ongoing ride, or 204 if none (used to restore state after reload)")
+    @ApiResponse(responseCode = "200", description = "The ongoing ride", useReturnTypeSchema = true)
+    @ApiResponse(responseCode = "204", description = "No ongoing ride")
     public ResponseEntity<RideResponse> active(@AuthenticationPrincipal AuthenticatedUser user) {
         return queryService.active(user).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.noContent().build());
     }
@@ -108,11 +113,12 @@ public class RideController {
 
     @PostMapping("/{rideId}/rating")
     @Operation(summary = "Rate the other participant of a completed ride (once per participant)")
-    public ResponseEntity<RatingResponse> rate(
+    @ResponseStatus(HttpStatus.CREATED)
+    public RatingResponse rate(
             @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable UUID rideId,
             @Valid @RequestBody RateRideRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(ratingService.rate(user, rideId, request));
+        return ratingService.rate(user, rideId, request);
     }
 
     @PostMapping("/{rideId}/cancel")

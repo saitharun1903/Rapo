@@ -9,10 +9,42 @@ export function demoPassword(): string {
   return password;
 }
 
+/** Seeded accounts (backend db/seed/R__demo_seed.sql). Each test uses its own passenger, so no ride is left over. */
 export const DEMO = {
   admin: "admin@rideflow.example.com",
   passenger: "ananya@rideflow.example.com",
+  driverTestPassenger: "rahul@rideflow.example.com",
+  cancellingPassenger: "meera@rideflow.example.com",
 } as const;
+
+export type Point = { lat: number; lng: number };
+
+/**
+ * Places for tests that must not meet the simulator's drivers, which start within 3 km of the city centre
+ * (17.385, 78.4867). Both are 15 to 20 km out: beyond the widest matching radius (8 km) from anything the
+ * simulator does, and inside the 40 km service area.
+ */
+export const OUTSKIRTS = {
+  north: { lat: 17.52, lng: 78.4867 },
+  southWest: { lat: 17.26, lng: 78.36 },
+} as const;
+
+const METERS_PER_DEGREE_LAT = 111_320;
+
+/** Playwright's geolocation for a point. */
+export function gps(point: Point): { latitude: number; longitude: number } {
+  return { latitude: point.lat, longitude: point.lng };
+}
+
+/** A point `meters` north of `from`. */
+export function north(from: Point, meters: number): Point {
+  return { lat: from.lat + meters / METERS_PER_DEGREE_LAT, lng: from.lng };
+}
+
+/** A unique suffix for emails, licences and plates, so repeated runs against one database never collide. */
+export function unique(): string {
+  return `${Date.now()}`;
+}
 
 export async function signIn(page: Page, email: string, password: string, landing: RegExp): Promise<void> {
   await page.goto("/login");

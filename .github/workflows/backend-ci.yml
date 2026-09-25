@@ -36,14 +36,15 @@ jobs:
 
       # The merged unit + integration report: a table on the run page, notices readable through the checks API,
       # and the HTML report as an artifact.
+      # Also when the coverage gate failed, so the numbers that failed it are on the run page.
       - name: Coverage summary
-        if: success()
+        if: always() && hashFiles('backend/target/site/jacoco/jacoco.csv') != ''
         run: |
           python3 ../.github/scripts/coverage_summary.py target/site/jacoco/jacoco.csv >> "$GITHUB_STEP_SUMMARY"
           python3 ../.github/scripts/coverage_summary.py target/site/jacoco/jacoco.csv --annotate
 
       - name: Upload coverage report
-        if: success()
+        if: always() && hashFiles('backend/target/site/jacoco/jacoco.csv') != ''
         uses: actions/upload-artifact@v5
         with:
           name: backend-coverage

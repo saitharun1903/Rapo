@@ -20,13 +20,14 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.util.List;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -64,10 +65,10 @@ public class DriverOperationsController {
 
     @PostMapping("/location")
     @Operation(summary = "Report the current GPS position (REST fallback for the WebSocket stream)")
-    public ResponseEntity<Void> reportLocation(
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void reportLocation(
             @AuthenticationPrincipal AuthenticatedUser driver, @Valid @RequestBody LocationUpdateRequest request) {
         locationService.report(driver.id(), request);
-        return ResponseEntity.accepted().build();
     }
 
     @GetMapping("/me/offers")

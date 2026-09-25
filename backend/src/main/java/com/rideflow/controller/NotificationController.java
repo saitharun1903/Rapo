@@ -11,13 +11,14 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /** The caller's in-app notifications; new ones are also pushed to {@code /user/queue/notifications}. */
@@ -46,15 +47,14 @@ public class NotificationController {
     }
 
     @PostMapping("/{notificationId}/read")
-    public ResponseEntity<Void> markRead(
-            @AuthenticationPrincipal AuthenticatedUser user, @PathVariable UUID notificationId) {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void markRead(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable UUID notificationId) {
         notificationService.markRead(user.id(), notificationId);
-        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/read-all")
-    public ResponseEntity<Void> markAllRead(@AuthenticationPrincipal AuthenticatedUser user) {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void markAllRead(@AuthenticationPrincipal AuthenticatedUser user) {
         notificationService.markAllRead(user.id());
-        return ResponseEntity.noContent().build();
     }
 }

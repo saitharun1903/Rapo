@@ -8,6 +8,7 @@ import com.rideflow.security.AuthenticatedUser;
 import com.rideflow.service.geo.GeocodingService;
 import com.rideflow.service.geo.RouteService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -61,6 +62,8 @@ public class GeoController {
 
     @GetMapping("/reverse")
     @Operation(summary = "Address at a point, or 204 if there is none (for example at sea)")
+    @ApiResponse(responseCode = "200", description = "The address", useReturnTypeSchema = true)
+    @ApiResponse(responseCode = "204", description = "No address at this point")
     public ResponseEntity<PlaceResponse> reverse(
             @AuthenticationPrincipal AuthenticatedUser user,
             @RequestParam @DecimalMin("-90.0") @DecimalMax("90.0") double lat,

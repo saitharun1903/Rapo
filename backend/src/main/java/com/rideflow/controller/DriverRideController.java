@@ -6,11 +6,12 @@ import com.rideflow.service.ride.DriverRideService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /** Driver-side ride lifecycle. Every transition is validated by the ride state machine. */
@@ -33,9 +34,9 @@ public class DriverRideController {
 
     @PostMapping("/reject")
     @Operation(summary = "Decline an open offer")
-    public ResponseEntity<Void> reject(@AuthenticationPrincipal AuthenticatedUser driver, @PathVariable UUID rideId) {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reject(@AuthenticationPrincipal AuthenticatedUser driver, @PathVariable UUID rideId) {
         driverRideService.reject(driver.id(), rideId);
-        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/en-route")
