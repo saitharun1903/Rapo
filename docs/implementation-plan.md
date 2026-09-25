@@ -42,6 +42,7 @@ Each phase ends with: compile → tests → lint/static checks → self-review �
 | 3 Ride system | ✅ Verified | GitHub Actions `backend-ci` run 36036099948: 120 unit/web/ArchUnit tests and 29 PostGIS integration tests passed (full ride lifecycle over HTTP, three-driver simultaneous accept race, offer expiry with radius growth, ride expiry, re-dispatch, quote tampering/expiry, proximity query correctness and GiST index use) |
 | 4 Real-time | ✅ Verified | GitHub Actions `backend-ci` run 36040434543: 153 unit/web/ArchUnit tests and 35 PostGIS integration tests passed, including `RealtimeIT` with a real STOMP client against the running server (offer, status and driver location reach only the ride's participants; offers withdrawn from losing drivers; unauthenticated, forged-token, foreign-origin, admin-topic, foreign-queue and spoofed-send frames refused with ERROR and closed; invalid location messages answered without closing; flood throttling; silent drivers taken offline while drivers on a trip are not; sockets closed at token expiry) |
 | 5 Redis | ✅ Verified | GitHub Actions `backend-ci` run 36044436417: 175 unit/web/ArchUnit tests and 42 integration tests passed against real PostGIS and Redis (`RedisCachingIT`: TTLs, fallback routes not cached, hashed keys, ETA eviction on status change; `RateLimitIT`: login per IP and email, register per IP, 429 with `Retry-After`, shared geocoder budget). `cache-benchmark` run 36044436543: before/after k6 numbers in [performance.md](performance.md) |
+| 6 Kafka | ✅ Verified | GitHub Actions `backend-ci` run 36050446683: 200 unit/web/ArchUnit tests and all integration tests (49 test methods, 0 skipped) passed against real PostGIS, Redis and Kafka. `KafkaEventFlowIT` checks each exit criterion. **Full lifecycle over Kafka:** every ride step read back from its topic by an independent consumer, keyed by ride and in `aggregateVersion` order, then payment and notifications. **DLT:** an undecodable record is dead-lettered at once by each group that reads it; a failing handler is retried 1 s, 2 s, 4 s and then dead-lettered. **Redelivery:** the same `ride.completed` record delivered twice more creates no second payment or notification. The earlier run 36050273822 failed only on a wrong test expectation, corrected in 74574a2 (see below) |
 
 **Phase 2 delivered:** Spring Boot 4.1.1 / Java 21 skeleton; Flyway V1–V3; JWT access tokens and rotating refresh tokens with reuse detection; role-based security with JSON 401/403; `GlobalExceptionHandler`; request-id correlation; OpenAPI; auth, profile, driver onboarding, admin driver verification and user suspension; admin bootstrap; demo seed; docker-compose; `.env.example`; backend CI.
 
@@ -77,9 +78,21 @@ Each phase ends with: compile → tests → lint/static checks → self-review �
 - **D22:** Redis is optional at runtime.
 - **D23:** driver-location keys wait for the Kafka batch writer, instead of duplicating every write now.
 
+**Phase 6 delivered:**
+- **Outbox:** domain events are written to `outbox_events` in the transaction that caused them and relayed to Kafka by a relay thread that each commit wakes (with a 250 ms poll as a backstop). Rows are marked published only when the broker acknowledges them.
+- **Topics:** 17 topics, one per ride status plus dispatch, offers, positions, presence, payments and notifications, each with a `.DLT`. All are declared by the application and can take an environment prefix.
+- **Consumers:** matching (`ride.requested`, `ride.dispatch.requested`), payments (cash, and a labelled sandbox card with no real money; 20 % platform fee), notifications (stored, then pushed on `/user/queue/notifications`), batched position persistence, and a realtime bridge with one consumer group per instance that feeds the existing STOMP destinations.
+- **Reliability:** `processed_events` idempotency in the handler's transaction; retries with backoff, then dead-lettering; undecodable records dead-lettered at once; metrics for outbox backlog, relay failures, dead letters and dropped positions.
+- **Location hot path (D23):** positions and driver state live in Redis. A report touches Redis and Kafka only, and PostgreSQL gets one upsert per driver per batch.
+- **API:** `POST /api/rides/{id}/rating`, the notifications list and read endpoints, and `payment` in the ride view.
+
+**Design changes made in Phase 6** (D24 to D27): payloads are the domain records in a versioned envelope; one topic per ride status; a commit-woken relay thread; driver state written after commit with `SET NX` loads.
+
+**Found while verifying Phase 6:** a malformed record on `ride.completed` is dead-lettered once per consumer group that reads the topic (payments and notifications), not once. The test first expected one copy; the DLT header `kafka_dlt-original-consumer-group` tells the copies apart.
+
 **Carried forward:**
-- **Phase 6:** Redis location and active-ride keys, together with the batched PostgreSQL writer.
-- **Phase 6:** swaps the in-process event adapter for the outbox and Kafka (the realtime bridge feeds the same destinations), and adds payments, ratings and `/user/queue/notifications`.
+- **Phase 7:** `trip-analysis` consumer on `ride.completed` (AI), migration `V7__ai.sql`.
+- **Phase 11:** Grafana panels for outbox backlog, consumer lag and dead letters.
 
 ## Phases
 
