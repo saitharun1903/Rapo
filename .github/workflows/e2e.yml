@@ -50,6 +50,7 @@ jobs:
           start=$SECONDS
           docker compose --profile demo up -d --wait --wait-timeout 300
           echo "::notice title=Stack startup::healthy after $(( SECONDS - start )) s"
+          echo "::notice title=Image sizes::$(docker image ls --format '{{.Repository}} {{.Size}}' 'rideflow-*' | paste -sd ',' - | sed 's/,/, /g')"
           docker compose ps
 
       # Straight through the frontend container: its /api rewrite reaches the backend container.
