@@ -22,7 +22,6 @@ import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import org.apache.kafka.clients.admin.Admin;
-import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.TopicDescription;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -148,7 +147,6 @@ class ManagedKafkaIT {
         String jaas = (String) config.get(SaslConfigs.SASL_JAAS_CONFIG);
         assertThat(jaas).contains("password=\"" + PASSWORD + "\"");
         config.put(SaslConfigs.SASL_JAAS_CONFIG, jaas.replace(PASSWORD, "not-" + PASSWORD));
-        config.put(AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, (int) AWAIT.toMillis());
 
         try (Admin intruder = Admin.create(config)) {
             assertThatThrownBy(() -> intruder.describeCluster().nodes().get(AWAIT.toSeconds(), TimeUnit.SECONDS))
