@@ -1,0 +1,15 @@
+# Scrapes the backend's Actuator endpoint on the compose network. The management port (8081) is not public:
+# compose publishes it on 127.0.0.1 only, and inside the network only Prometheus needs it.
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  - job_name: rideflow-backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["backend:8081"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

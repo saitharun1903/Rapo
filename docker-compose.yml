@@ -4,6 +4,9 @@
 #   docker compose up --build               # PostGIS, Redis, Kafka, backend, frontend on http://localhost:3000
 #   docker compose --profile demo up --build   # the same plus the driver simulator
 #
+# Prometheus (http://localhost:9090) scrapes the backend; Grafana (http://localhost:3001, user admin, password
+# GRAFANA_ADMIN_PASSWORD from .env) shows the RideFlow dashboards. Both listen on this machine only.
+#
 # For backend or frontend development on the host, start only the infrastructure:
 #   docker compose up -d postgres redis kafka
 #
@@ -121,6 +124,9 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AI_EXTERNAL_MODEL: ${AI_EXTERNAL_MODEL:-claude-opus-5}
       API_DOCS_ENABLED: ${API_DOCS_ENABLED:-true}
+      # Error reporting is off unless a DSN is set.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-local}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -135,6 +141,8 @@ services:
         # The server forwards /api to the backend service; the browser opens the WebSocket on the published port.
         BACKEND_URL: http://backend:8080
         NEXT_PUBLIC_WS_URL: ws://localhost:${BACKEND_PORT:-8080}/ws
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+        NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-local}
     image: rideflow-frontend:local
     depends_on:
       backend: { condition: service_healthy }
@@ -156,6 +164,49 @@ services:
       SIM_BOARDING_MS: ${SIM_BOARDING_MS:-5000}
     restart: on-failure
 
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-7d}
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/-/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  grafana:
+    image: grafana/grafana:13.2.2
+    depends_on:
+      prometheus: { condition: service_healthy }
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/service-overview.json
+    volumes:
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
 volumes:
   postgres-data:
   kafka-data:
+  prometheus-data:
+  grafana-data:

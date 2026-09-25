@@ -37,6 +37,29 @@ frontend image is Next's standalone server on Node 24, and both run as non-root 
 (`BACKEND_PORT`). Both are fixed when the frontend image is built (Next inlines them), so changing
 `BACKEND_PORT` needs `--build`.
 
+### Monitoring
+
+The compose stack includes Prometheus and Grafana, both reachable from this machine only:
+
+- Grafana: http://localhost:3001, user `admin`, password `GRAFANA_ADMIN_PASSWORD` from `.env`. The RideFlow
+  folder holds four dashboards (service overview, ride pipeline, real-time and cache, AI). They are provisioned
+  from `infrastructure/grafana/dashboards` and read-only in the UI: change the JSON and restart Grafana.
+- Prometheus: http://localhost:9090. It scrapes the backend's `/actuator/prometheus` every 10 seconds and keeps
+  `PROMETHEUS_RETENTION` (7 days) of data.
+
+With `--profile demo` the simulator keeps drivers online and the passengers' rides flowing, so every ride and
+real-time panel shows live data within a minute; the AI dashboard stays empty unless `AI_PROVIDER` is set.
+An `.env` created before Phase 11 lacks `GRAFANA_ADMIN_PASSWORD`, and compose refuses to start until it is
+added (any strong value).
+
+### Error reporting (Sentry)
+
+Off by default. To turn it on, create a backend and a frontend project in Sentry and set `SENTRY_DSN` (backend,
+read at startup) and `NEXT_PUBLIC_SENTRY_DSN` (frontend, inlined at build time, so rebuild the frontend image
+after changing it) in `.env`. Personal data and credentials are removed before anything is sent
+([architecture.md](architecture.md) §15). To check delivery, sign in as the admin, open **System**, and use
+**Send backend test error** or **Send browser test error**: each shows the Sentry event id to search for.
+
 ### Apps on the host
 
 ```bash
@@ -141,7 +164,9 @@ trip controls. Pages as a whole are covered by Playwright.
 `frontend/e2e` holds tests that need the whole stack: infrastructure, the backend with the `demo` profile and
 the simulator. The `e2e` workflow runs them against the Docker Compose stack from a clean checkout:
 `init-env.sh`, `docker compose --profile demo up --build --wait`, a login through the frontend container, then
-Playwright.
+Playwright. Afterwards `.github/scripts/check_dashboards.py` runs every Grafana panel query against the
+Prometheus that watched those rides: a query error fails the run, and so does an empty panel that the rides
+must have filled.
 
 | Spec | Journey |
 |---|---|
@@ -218,6 +243,12 @@ startup if one is missing.
 | `FRONTEND_PORT` / `BACKEND_PORT` | no | `3000` / `8080` | Host ports of the compose frontend and backend. A different frontend port needs `CORS_ALLOWED_ORIGINS` to match |
 | `DOCKER_AI_LOCAL_BASE_URL` | no | `http://host.docker.internal:11434` | Where the backend container reaches Ollama on the host (`AI_LOCAL_BASE_URL` is for a backend on the host) |
 | `SIM_SPEED_MPS` / `SIM_BOARDING_MS` | no | `11` / `5000` | Simulated drivers' speed and boarding wait, compose `demo` profile |
+| `GRAFANA_ADMIN_PASSWORD` | **yes** (compose) | — | Password of Grafana's `admin` user |
+| `GRAFANA_PORT` / `PROMETHEUS_PORT` | no | `3001` / `9090` | Host ports of Grafana and Prometheus, bound to 127.0.0.1 |
+| `PROMETHEUS_RETENTION` | no | `7d` | How long Prometheus keeps samples |
+| `SENTRY_DSN` | no | (empty: off) | Backend error reporting to Sentry |
+| `NEXT_PUBLIC_SENTRY_DSN` | no | (empty: off) | Frontend error reporting; fixed when the frontend is built |
+| `SENTRY_ENVIRONMENT` | no | `local` | Environment name on Sentry events (backend and frontend) |
 
 ## Conventions
 

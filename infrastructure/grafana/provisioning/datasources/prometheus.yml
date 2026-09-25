@@ -1,0 +1,14 @@
+# The fixed uid is what the provisioned dashboards reference.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      # Matches the scrape interval, so $__rate_interval covers at least four scrapes.
+      timeInterval: 10s

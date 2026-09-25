@@ -2,14 +2,15 @@ name: e2e
 
 # The Docker Compose stack from a clean checkout, the way the README says to run it: init-env.sh writes .env,
 # `docker compose --profile demo up --build` builds the three images and starts everything, and the Playwright
-# suite then runs against the containers (frontend on :3000, backend on :8080, simulated drivers).
+# suite then runs against the containers (frontend on :3000, backend on :8080, simulated drivers). Afterwards
+# every Grafana panel query runs against the Prometheus that watched those rides.
 on:
   push:
     paths: ["frontend/**", "backend/**", "simulator/**", "docs/openapi.json", "docker-compose.yml", ".env.example",
-            "scripts/init-env.sh", ".github/workflows/e2e.yml", ".github/scripts/**"]
+            "scripts/init-env.sh", "infrastructure/**", ".github/workflows/e2e.yml", ".github/scripts/**"]
   pull_request:
     paths: ["frontend/**", "backend/**", "simulator/**", "docs/openapi.json", "docker-compose.yml", ".env.example",
-            "scripts/init-env.sh", ".github/workflows/e2e.yml", ".github/scripts/**"]
+            "scripts/init-env.sh", "infrastructure/**", ".github/workflows/e2e.yml", ".github/scripts/**"]
 
 # A newer push to the same branch or pull request makes a running check obsolete, so it is cancelled.
 # On main every commit keeps its own run (the SHA is part of the group), so nothing there is cancelled.
@@ -31,7 +32,7 @@ jobs:
       - name: Create .env
         run: |
           ./scripts/init-env.sh
-          for name in POSTGRES_PASSWORD REDIS_PASSWORD JWT_SECRET DEMO_USER_PASSWORD; do
+          for name in POSTGRES_PASSWORD REDIS_PASSWORD JWT_SECRET DEMO_USER_PASSWORD GRAFANA_ADMIN_PASSWORD; do
             echo "::add-mask::$(grep "^$name=" .env | cut -d= -f2-)"
           done
           # Fast simulated drivers, so a whole ride fits in a test.
@@ -86,6 +87,12 @@ jobs:
           PLAYWRIGHT_BASE_URL: http://localhost:3000
         run: |
           DEMO_USER_PASSWORD=$(grep '^DEMO_USER_PASSWORD=' ../.env | cut -d= -f2-) npx playwright test
+
+      # The rides above were scraped by Prometheus: the dashboards must show them.
+      - name: Dashboards show live data
+        run: |
+          GRAFANA_PASSWORD=$(grep '^GRAFANA_ADMIN_PASSWORD=' .env | cut -d= -f2-) \
+            python3 .github/scripts/check_dashboards.py http://localhost:3001
 
       # A backend that is slow or stuck: SIGQUIT makes the JVM print a thread dump to its log (the JRE image has
       # no jcmd), which is condensed into annotations with the recent warnings and the simulator's log.

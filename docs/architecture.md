@@ -433,7 +433,7 @@ Limits return `429 RATE_LIMITED` with `Retry-After`. A busy geocoding budget ret
 - `rideflow_ratelimit_errors_total`
 - `rideflow_redis_available`
 
-Redis command latency dashboards are Phase 11.
+The *Real-time & cache* dashboard (section 15) charts these next to the Lettuce client's command latency.
 
 **Not in Redis.** Nearby-driver search stays in PostGIS (D2), because it joins spatial filters with verification, availability and vehicle category. Positions reach PostGIS through the batch consumer (section 8).
 
@@ -669,22 +669,64 @@ Logs, metrics and errors are three separate signals:
 
 | Signal | Tool | Answers | Content |
 |---|---|---|---|
-| **Logs** | Structured JSON logs (Spring Boot structured logging) → stdout | *What happened in this request?* | Event-level context, `traceId`/`spanId` in MDC, no PII (emails masked, no tokens, no coordinates at INFO) |
+| **Logs** | Structured JSON logs (Spring Boot structured logging) → stdout | *What happened in this request?* | Event-level context, `traceId` in MDC, no PII (emails masked, no tokens, no coordinates at INFO) |
 | **Metrics** | Micrometer → `/actuator/prometheus` → Prometheus → Grafana | *How is the system behaving over time?* | Aggregated numbers |
-| **Errors / traces** | Sentry (backend `sentry-spring-boot` starter, frontend `@sentry/nextjs`) | *What broke, for whom, how often, with which stack?* | Unhandled exceptions, 5xx, failed consumers; `sendDefaultPii=false` + `beforeSend` scrubber |
+| **Errors** | Sentry (backend `sentry-spring-boot-4-starter` + `sentry-logback`, frontend `@sentry/nextjs`) | *What broke, how often, with which stack?* | ERROR log events and unhandled frontend errors, scrubbed before sending |
 
-**Metrics (all real, emitted by the running application):**
+**Metrics (all real, emitted by the running application).** Prometheus scrapes the management port
+(`backend:8081/actuator/prometheus`, every 10 s); the port is never published beyond 127.0.0.1.
 
-- HTTP: `http_server_requests_seconds` (count, latency histogram, status → error rate), auto-instrumented.
-- JVM / CPU / GC / threads, Hikari pool (`hikaricp_connections_*`), Lettuce Redis command latency, Kafka client and consumer-lag metrics, all through Micrometer binders.
-- Custom (`monitoring/RideFlowMetrics`): `rideflow_rides_total{event}`, `rideflow_matching_duration_seconds` (requested → assigned), `rideflow_offers_total{outcome}`, `rideflow_ws_sessions_active{role}`, `rideflow_location_updates_total{result}`, `rideflow_outbox_pending`, `rideflow_outbox_published_total`, `rideflow_outbox_failures_total`, `rideflow_kafka_dead_letters_total{topic}`, `rideflow_location_publish_failures_total`, `rideflow_ai_requests_total{operation,provider,outcome}`, `rideflow_ai_latency_seconds`, `rideflow_ai_circuit_open`, `rideflow_rate_limit_rejections_total{scope}`.
+- HTTP: `http_server_requests_seconds` (count, latency histogram, `outcome` → error rate), auto-instrumented.
+- JVM / CPU / GC / threads, Hikari pool (`hikaricp_connections_*`) and Kafka client metrics (consumer lag:
+  `kafka_consumer_fetch_manager_records_lag_max`), all through Micrometer binders.
+- Ride pipeline (`monitoring/RideMetrics`, counted only after the transaction commits, so a rolled-back accept
+  is never counted): `rideflow_rides_total{event}` (the status entered, from `RideTransitionRecorder`, the single
+  path every status change takes), `rideflow_matching_duration_seconds` (request → acceptance; histogram up to
+  5 min), `rideflow_offers_total{outcome}` (`created`, then `accepted`, `rejected`, `expired` or `cancelled`).
+- Where the work happens: `rideflow_location_updates_total{result}` (`accepted`, `superseded`, `stale`,
+  `offline`), `rideflow_ws_sessions_active{role}`, `rideflow_ws_location_dropped_total`,
+  `rideflow_ws_push_failures_total`, `rideflow_outbox_pending`, `rideflow_outbox_published_total`,
+  `rideflow_outbox_failures_total`, `rideflow_kafka_dead_letters_total{topic}`,
+  `rideflow_location_publish_failures_total`, `rideflow_redis_available`, `rideflow_cache_requests_total{cache,result}`,
+  `rideflow_ratelimit_rejected_total{scope}`, `rideflow_ratelimit_errors_total`,
+  `rideflow_ai_requests_total{operation,provider,outcome}`, `rideflow_ai_latency_seconds{operation,provider}`,
+  `rideflow_ai_circuit_open`, `rideflow_ai_calls_active`.
 
-**Grafana (provisioned from `infrastructure/grafana/`):**
+Latencies charted as percentiles publish histogram buckets (`management.metrics.distribution`), which, unlike
+client-side percentiles, aggregate across instances with `histogram_quantile`.
 
-1. *Service overview*: RED (rate, errors, duration p50/p95/p99), JVM, CPU, Hikari.
-2. *Ride pipeline*: ride funnel, matching latency, offer acceptance rate, outbox backlog, consumer lag, DLT.
-3. *Real-time & cache*: WebSocket sessions, location update throughput, Redis latency, rate-limit rejections.
-4. *AI*: request outcomes, latency, circuit-breaker state.
+**Grafana (provisioned from `infrastructure/grafana/`, read-only in the UI):**
+
+1. *Service overview*: request rate, 5xx share, latency p50/p95/p99 and the slowest endpoints, rate-limit
+   rejections, heap, CPU, GC, Hikari pool, threads.
+2. *Ride pipeline*: requested/completed/cancelled/expired, time to match, offers by outcome and acceptance rate,
+   outbox backlog and throughput, consumer lag, dead letters by topic.
+3. *Real-time & cache*: WebSocket sessions by role, location reports by result (and throttled), socket push and
+   location publish failures, Redis availability and command latency, cache hit ratio and lookups per cache.
+4. *AI*: operations by outcome, latency, success rate, circuit state, calls in flight, AI rate-limit rejections.
+
+The e2e workflow runs every panel query through Grafana after its rides (`.github/scripts/check_dashboards.py`):
+a query error fails the run, and so does an empty panel that a simulator run must fill.
+
+**Errors (Sentry).** Off unless `SENTRY_DSN` (backend) or `NEXT_PUBLIC_SENTRY_DSN` (frontend, fixed at build
+time) is set. Backend: `GlobalExceptionHandler` answers every exception itself, so Sentry's own exception
+resolver never sees one; instead ERROR log events become Sentry events (INFO and above are their
+breadcrumbs). Frontend: uncaught browser errors, `error.tsx`/`global-error.tsx` boundaries and server request
+errors (`onRequestError`). Tracing and session replay stay off: Prometheus covers latency, and replays would
+record what users type. Scrubbing, on top of `sendDefaultPii=false`, in `SentryScrubber` and
+`lib/monitoring/sentry.ts`:
+
+- requests keep method, path and a few harmless headers; cookies, bodies, query strings, `Authorization` and
+  every other header are dropped;
+- the user is reduced to its id;
+- email addresses, JWTs and bearer tokens are masked in messages, their arguments, exception messages and
+  breadcrumbs (nested data included); URLs in breadcrumbs lose their query strings, which carry searched
+  addresses.
+
+Admin → System shows whether reporting is on and sends a deliberate test error from the backend
+(`POST /api/admin/system/test-error`, answering with the Sentry event id) or the browser, to confirm delivery.
+`ErrorReportingIT` checks the backend path against a stand-in Sentry: the event arrives with the id returned
+and without the caller's token.
 
 ---
 

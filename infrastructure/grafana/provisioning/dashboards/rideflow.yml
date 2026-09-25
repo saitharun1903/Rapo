@@ -1,0 +1,12 @@
+# Loads the dashboards in /var/lib/grafana/dashboards (infrastructure/grafana/dashboards) into a RideFlow
+# folder. They are files in Git: edits made in the UI cannot be saved over them, so change the JSON instead.
+apiVersion: 1
+
+providers:
+  - name: rideflow
+    folder: RideFlow
+    type: file
+    allowUiUpdates: false
+    disableDeletion: true
+    options:
+      path: /var/lib/grafana/dashboards
