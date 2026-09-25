@@ -103,6 +103,11 @@ services:
       REFRESH_COOKIE_SAME_SITE: ${REFRESH_COOKIE_SAME_SITE:-Lax}
       BCRYPT_STRENGTH: ${BCRYPT_STRENGTH:-12}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      # Empty: no proxy's forwarding headers are trusted. The frontend container is not a trusted proxy (its
+      # /api rewrite passes a browser's X-Forwarded-For on unchanged), and the published 8080 is reachable directly.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      # The frontend's signed browser address (architecture.md section 9); empty turns it off.
+      CLIENT_IP_SIGNING_SECRET: ${CLIENT_IP_SIGNING_SECRET:-}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       # Required by the demo profile only (the seeded accounts' password).
@@ -146,6 +151,11 @@ services:
     image: rideflow-frontend:local
     depends_on:
       backend: { condition: service_healthy }
+    environment:
+      # Read at runtime by src/proxy.ts: both or neither. Off by default, since without an edge in front of the
+      # frontend there is no trustworthy browser address to sign.
+      CLIENT_IP_SIGNING_SECRET: ${CLIENT_IP_SIGNING_SECRET:-}
+      CLIENT_IP_SOURCE_HEADER: ${CLIENT_IP_SOURCE_HEADER:-}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
 

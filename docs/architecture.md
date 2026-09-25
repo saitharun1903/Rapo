@@ -418,7 +418,31 @@ Redis holds **ephemeral, recomputable or protective** state only; PostgreSQL rem
 | GEOCODING | 30/min | user |
 | GEOCODING_UPSTREAM | 1/s | whole application; only cache misses count |
 
-Limits return `429 RATE_LIMITED` with `Retry-After`. A busy geocoding budget returns `503 GEOCODING_UNAVAILABLE` with `Retry-After`. A fixed window allows up to twice the limit across a window boundary; that is acceptable for abuse protection and cheaper than a sliding window. The client IP is the servlet's remote address. `forward-headers-strategy: framework` makes that the first `X-Forwarded-For` hop, so in production the reverse proxy must overwrite that header, or clients could spoof their IP. Location messages are throttled per WebSocket session in memory (at least 1 s apart), because each driver has one session.
+Limits return `429 RATE_LIMITED` with `Retry-After`. A busy geocoding budget returns `503 GEOCODING_UNAVAILABLE` with `Retry-After`. A fixed window allows up to twice the limit across a window boundary; that is acceptable for abuse protection and cheaper than a sliding window. Location messages are throttled per WebSocket session in memory (at least 1 s apart), because each driver has one session.
+
+**Client address (per-IP limits).** The client IP is the servlet's remote address, which Tomcat's `RemoteIpValve` sets (`forward-headers-strategy: native`):
+
+- Forwarding headers count only on a connection from a proxy in `TRUSTED_PROXIES` (CIDR ranges; empty by default, so none). The client is then the right-most `X-Forwarded-For` hop that is not a trusted proxy. The same proxy's `X-Forwarded-Proto`, `-Host` and `-Port` set the request's scheme, host and port.
+- From anyone else, those headers are ignored. RFC 7239 `Forwarded` is never read.
+- Why: the previous `framework` strategy (Spring's `ForwardedHeaderFilter`) took the *first* `X-Forwarded-For` hop from any sender. The backend's port is reachable directly: browsers open the WebSocket to it, and `docker-compose.yml` publishes it. The frontend's `/api` rewrite (Next 16) never adds the browser's address and passes on a browser-supplied `X-Forwarded-For` unchanged. So a login attacker could claim a new address on every request and get a fresh bucket each time.
+- **Trade-off: the container valve rather than resolving the address in application code.** One trust decision covers the address, scheme, host and port for every consumer: the rate limits, CORS and the WebSocket Origin check (both compare `Origin` with the request's scheme, host and port), `isSecure()` for HSTS, and the WebSocket handshake itself. It is Tomcat's maintained implementation, not ours. The costs:
+  - It is configuration that MockMvc never runs, so `ForwardedHeadersTest` and `RateLimitIT` use a real server.
+  - Trust is by address, so every trusted proxy needs a stable range.
+- **Consequence for the frontend hop.** Trusting the Next server would only hand the backend the browser's own header, so it must not be listed on its own. Browser REST calls through it are keyed on the frontend server's address. Every browser then shares that address's REGISTER budget and each email's LOGIN budget: limits fail tight, not open.
+  - This already held for honest browsers, which Next never identified. It changes a deployment where an edge in front of Next (for example Vercel's) supplies the real client address.
+  - Per-browser limits behind the frontend come from the signed client address below. The alternative, an edge that overwrites `X-Forwarded-For` and reaches the backend from ranges in `TRUSTED_PROXIES`, needs static egress addresses, which Vercel's functions do not have.
+
+**Signed client address (per-browser limits behind the frontend).** The frontend vouches for the browser's address with a shared secret, so trust no longer depends on where the frontend connects from.
+
+- **Frontend (`frontend/src/proxy.ts`, Next 16 Proxy, before the `/api` rewrite).** It removes any `X-RideFlow-Client-IP` and `X-RideFlow-Client-IP-Signature` the browser sent. When `CLIENT_IP_SIGNING_SECRET` and `CLIENT_IP_SOURCE_HEADER` are set, it reads the browser's address from that header and adds both headers.
+  - The source header must be one the hosting edge overwrites. On Vercel that is `x-vercel-forwarded-for`: Vercel overwrites `X-Forwarded-For` to prevent spoofing, and this copy survives a proxy in front of Vercel.
+  - A value that is not exactly one IP address is not signed.
+- **Signature.** `v1.<unix seconds>.<base64url HMAC-SHA256 over "v1\n<seconds>\n<ip>">`. The frontend (`lib/clientIp.ts`) and the backend (`SignedClientIp`) tests pin the same vector.
+- **Backend (`SignedClientIpFilter`, after `RequestIdFilter`, before Spring Security).** A valid signature within `max-age` (60 s, either way, which bounds replay and clock skew) makes the signed address the request's remote address.
+  - Anything else leaves the address as Tomcat resolved it: a failed check never widens trust.
+  - Outcomes are counted in `rideflow_client_ip_signatures_total{result=valid|malformed|bad_signature|expired}`. A steady `bad_signature` or `expired` count means the secrets differ or the clocks drift.
+  - Off unless `CLIENT_IP_SIGNING_SECRET` is set (at least 32 bytes, checked at startup on both sides).
+- **What it does not cover.** The WebSocket and direct callers (the simulator) reach the backend without the frontend. They keep the Tomcat-resolved address, which is fine because only REST is rate limited per IP. Anyone holding the secret can claim any address, so it is a credential like `JWT_SECRET`: rotate it by redeploying both sides.
 
 **Failure behaviour (D22).**
 - **Caches:** fall back to computing the value.
@@ -431,6 +455,7 @@ Limits return `429 RATE_LIMITED` with `Retry-After`. A busy geocoding budget ret
 - `rideflow_cache_requests_total{cache, result=hit|miss|error|bypass}`
 - `rideflow_ratelimit_rejected_total{scope}`
 - `rideflow_ratelimit_errors_total`
+- `rideflow_client_ip_signatures_total{result}`
 - `rideflow_redis_available`
 
 The *Real-time & cache* dashboard (section 15) charts these next to the Lettuce client's command latency.
@@ -638,7 +663,7 @@ sequenceDiagram
 
 ### 13.3 Hardening checklist
 
-CORS allow-list from `CORS_ALLOWED_ORIGINS` · security headers (HSTS in prod, `X-Content-Type-Options`, `Referrer-Policy`, `frame-ancestors 'none'`) · Bean Validation on every request DTO · only parameterised JPA/native queries · sort-field allow-list for pagination · Redis rate limiting · Actuator exposing only `health`, `info`, `prometheus` on a separate management port · secrets only from environment · gitleaks secret scan in CI · stack traces never serialised (§14) · PII scrubbed from logs and Sentry events.
+CORS allow-list from `CORS_ALLOWED_ORIGINS` · forwarding headers honoured only from `TRUSTED_PROXIES` (§9) · security headers (HSTS in prod, `X-Content-Type-Options`, `Referrer-Policy`, `frame-ancestors 'none'`) · Bean Validation on every request DTO · only parameterised JPA/native queries · sort-field allow-list for pagination · Redis rate limiting · Actuator exposing only `health`, `info`, `prometheus` on a separate management port · secrets only from environment · gitleaks secret scan in CI · stack traces never serialised (§14) · PII scrubbed from logs and Sentry events.
 
 ---
 
@@ -753,7 +778,7 @@ Coverage is reported by JaCoCo from the unit and integration tests together. The
 Implemented in Phase 8 (`frontend/`, Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4).
 
 - **Routes.** Route groups decide who sees a page: `(auth)` → `/login`, `/register`; `(passenger)` → `/ride`, `/trips`, `/trips/[rideId]`; `(driver)` → `/drive`, `/drive/earnings`, `/drive/onboarding`; `(admin)` → `/admin`, `/admin/rides[/id]`, `/admin/drivers`, `/admin/users`, `/admin/system`, `/admin/audit`; `(account)` → `/settings`. Each group's layout is a `RoleGate`: signed-out users go to `/login?next=…` (same-site paths only), other roles to their own home. This is navigation only; the backend authorises every request.
-- **Same-origin API.** The browser calls `/api/*` on the frontend and a Next rewrite forwards it to `BACKEND_URL`. The refresh cookie (`HttpOnly`, `Path=/api/auth`) is then first-party and REST needs no CORS. The WebSocket connects to the backend directly; the backend's Origin check allows the frontend.
+- **Same-origin API.** The browser calls `/api/*` on the frontend and a Next rewrite forwards it to `BACKEND_URL`. The refresh cookie (`HttpOnly`, `Path=/api/auth`) is then first-party, and the browser sends no CORS preflight. The backend does not trust the rewrite's forwarding headers (§9). It therefore sees a write's `Origin` as cross-origin and checks it against `CORS_ALLOWED_ORIGINS`, which must list the frontend. The WebSocket connects to the backend directly; the same allow-list admits the frontend there.
 - **Contract.** `src/lib/api/schema.d.ts` is generated from `docs/openapi.json` (`npm run api:types`), which the backend build keeps equal to the code. `openapi-fetch` checks every path, parameter and body at compile time. Required and nullable fields come from the Java records (§ API contract in development.md).
 - **Session.** The access token lives in memory only (`SessionStore`), never in `localStorage`. A reload restores it from the refresh cookie. The authenticated fetch adds the token, refreshes it 30 s before expiry, and after a 401 refreshes once and repeats the request. Refreshes are single-flight, because the backend treats reuse of a rotated refresh token as theft and would revoke the session. Signing out clears every cached query.
 - **Realtime.** `RealtimeProvider` holds one STOMP connection per tab and implements events.md §2.5: backoff with full jitter (1 s to 30 s, computed by `reconnectDelay` and applied in `beforeConnect`, since stompjs's own backoff has no jitter), a token refresh before connecting when it expires within 60 s or the server closed with 4001, re-subscription, then a refetch of every query tagged `REALTIME_SNAPSHOT`. Ride pushes are applied only when their `version` is newer (`newerRide`); location pushes are ordered by `recordedAt`, and "Location signal lost" shows after 15 s of silence or when the snapshot is stale.
@@ -804,8 +829,14 @@ All endpoints and credentials come from environment variables, and there is no p
 same image runs in compose and on Render, and the managed services differ only in TLS and SASL settings
 (`REDIS_SSL_ENABLED`, `KAFKA_SECURITY_PROTOCOL` and the SCRAM credentials). The backend serves status-only
 `/livez` and `/readyz` on its public port for hosts that can probe only that port; the actuator stays on the
-management port. [deployment.md](deployment.md) has the setup, the free-tier limits as checked, and their
-trade-offs: Kafka is a 30-day trial, the backend sleeps when idle, and there is no metrics scraping.
+management port.
+
+`TRUSTED_PROXIES` lists the address ranges of any load balancer or edge in front of the backend. Without it,
+TLS termination at a proxy is invisible to the backend (`isSecure()` false, no HSTS), and per-IP limits key on
+the proxy (§9). With the frontend on Vercel, set the same `CLIENT_IP_SIGNING_SECRET` on both and
+`CLIENT_IP_SOURCE_HEADER=x-vercel-forwarded-for` on the frontend, so per-IP limits key on the browser (§9).
+[deployment.md](deployment.md) has the setup, the free-tier limits as checked, and their trade-offs: Kafka is a
+30-day trial, the backend sleeps when idle, and there is no metrics scraping.
 
 ---
 
