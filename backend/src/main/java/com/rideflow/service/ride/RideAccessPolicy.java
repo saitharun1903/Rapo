@@ -1,5 +1,6 @@
 package com.rideflow.service.ride;
 
+import com.rideflow.entity.OfferStatus;
 import com.rideflow.entity.Ride;
 import com.rideflow.entity.Role;
 import com.rideflow.exception.ErrorCode;
@@ -7,12 +8,15 @@ import com.rideflow.exception.ResourceNotFoundException;
 import com.rideflow.repository.RideOfferRepository;
 import com.rideflow.repository.RideRepository;
 import com.rideflow.security.AuthenticatedUser;
+import java.time.Clock;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 /**
  * Resource-level authorisation for rides. A ride is visible to its passenger, its assigned driver, a
- * driver it was offered to, and admins. Everyone else gets 404, so ride ids cannot be probed.
+ * driver holding an open offer for it (pending and unexpired), and admins. Everyone else gets 404, so ride ids
+ * cannot be probed. A driver whose offer expired, was declined or went to someone else no longer sees the ride:
+ * it names the passenger, the places and later the next driver.
  *
  * <p>Methods used before a mutation lock the ride row ({@code SELECT ... FOR UPDATE}). Every ride-mutating
  * transaction therefore locks the ride before touching its offers, so lock order is consistent and
@@ -23,10 +27,12 @@ public class RideAccessPolicy {
 
     private final RideRepository rides;
     private final RideOfferRepository offers;
+    private final Clock clock;
 
-    public RideAccessPolicy(RideRepository rides, RideOfferRepository offers) {
+    public RideAccessPolicy(RideRepository rides, RideOfferRepository offers, Clock clock) {
         this.rides = rides;
         this.offers = offers;
+        this.clock = clock;
     }
 
     public Ride loadVisible(AuthenticatedUser user, UUID rideId) {
@@ -34,7 +40,8 @@ public class RideAccessPolicy {
         boolean visible = switch (user.role()) {
             case ADMIN -> true;
             case PASSENGER -> ride.getPassengerId().equals(user.id());
-            case DRIVER -> ride.isAssignedTo(user.id()) || offers.existsByRideIdAndDriverId(rideId, user.id());
+            case DRIVER -> ride.isAssignedTo(user.id()) || offers.existsByRideIdAndDriverIdAndStatusAndExpiresAtAfter(
+                    rideId, user.id(), OfferStatus.PENDING, clock.instant());
         };
         if (!visible) {
             throw notFound();

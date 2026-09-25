@@ -71,6 +71,10 @@ class MatchingConcurrencyIT extends IntegrationTestContainers {
         api = new RideApi(mvc);
     }
 
+    private int rideSeenBy(Actor driver, UUID rideId) throws Exception {
+        return api.call(driver, "GET", "/api/rides/" + rideId, null).getResponse().getStatus();
+    }
+
     private String rideStatus(UUID rideId) {
         return jdbc.queryForObject("SELECT status FROM rides WHERE id = ?", String.class, rideId);
     }
@@ -135,8 +139,10 @@ class MatchingConcurrencyIT extends IntegrationTestContainers {
         UUID rideId = api.book(passenger, HITECH_CITY, HUSSAIN_SAGAR);
         await().atMost(AWAIT).until(() -> api.openOfferCount(ignoring) == 1);
         assertThat(api.openOfferCount(distant)).isZero();
+        assertThat(rideSeenBy(ignoring, rideId)).isEqualTo(200); // an open offer shows the ride
 
         clock.advance(PAST_OFFER_TTL);
+        assertThat(rideSeenBy(ignoring, rideId)).isEqualTo(404); // expired, even before the sweeper marks it
         api.reportLocation(distant, offset(HITECH_CITY, 3_800, 0), clock.instant()); // keep position fresh
         kafka.awaitIdle(); // matching reads positions from PostgreSQL, which the location consumer writes
         sweeper.sweep();
@@ -180,6 +186,7 @@ class MatchingConcurrencyIT extends IntegrationTestContainers {
 
         assertThat(api.call(rejecting, "POST", "/api/rides/" + rideId + "/reject", null).getResponse().getStatus())
                 .isEqualTo(204);
+        assertThat(rideSeenBy(rejecting, rideId)).isEqualTo(404);
 
         await().atMost(AWAIT).until(() -> api.openOfferCount(other) == 1);
     }
