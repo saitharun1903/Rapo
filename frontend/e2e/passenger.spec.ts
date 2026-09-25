@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { clickMap, DEMO, demoPassword, gps, OUTSKIRTS, signIn } from "./support";
+import { clickMap, DEMO, demoPassword, gps, OUTSKIRTS, PUBLIC_SERVICES_TIMEOUT_MS, signIn } from "./support";
 
 const BOOKING_MAP = "Map for choosing pickup and destination";
 const REASON = "Plans changed";
@@ -13,13 +13,13 @@ test("a passenger books from their own location, cancels while matching, and see
   await page.getByRole("button", { name: "Use my location" }).click();
   const chooseOnMap = page.getByRole("button", { name: "Choose on map" });
   // Both fields offer "Choose on map" once the pickup is set.
-  await expect(chooseOnMap).toHaveCount(2);
+  await expect(chooseOnMap).toHaveCount(2, { timeout: PUBLIC_SERVICES_TIMEOUT_MS });
   await chooseOnMap.nth(1).click();
   // The map has zoomed to the pickup; a corner is well over the 200 m minimum trip away.
   await clickMap(page, BOOKING_MAP, 0.9, 0.15);
 
   const request = page.getByRole("button", { name: /^Request / });
-  await expect(request).toBeEnabled();
+  await expect(request).toBeEnabled({ timeout: PUBLIC_SERVICES_TIMEOUT_MS });
   await request.click();
   await expect(page.getByRole("heading", { name: /Request received|Finding you a driver/ })).toBeVisible();
 

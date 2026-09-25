@@ -20,6 +20,12 @@ export const DEMO = {
 export type Point = { lat: number; lng: number };
 
 /**
+ * For steps that wait on the public OSRM and Nominatim servers (addresses, routes, fare estimates). They are
+ * shared, rate-limited and sometimes slow; the backend falls back when they fail, but that can take a while.
+ */
+export const PUBLIC_SERVICES_TIMEOUT_MS = 30_000;
+
+/**
  * Places for tests that must not meet the simulator's drivers, which start within 3 km of the city centre
  * (17.385, 78.4867). Both are 15 to 20 km out: beyond the widest matching radius (8 km) from anything the
  * simulator does, and inside the 40 km service area.

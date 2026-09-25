@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { clickMap, DEMO, demoPassword, signIn } from "./support";
+import { clickMap, DEMO, demoPassword, PUBLIC_SERVICES_TIMEOUT_MS, signIn } from "./support";
 
 const BOOKING_MAP = "Map for choosing pickup and destination";
 /** The simulator's drivers accept after a short delay, drive to the pickup, wait for boarding, then drive. */
@@ -26,12 +26,12 @@ test("a passenger books a ride that a simulated driver completes, then sees the 
   await chooseOnMap.first().click();
   await clickMap(page, BOOKING_MAP, 0.45, 0.55);
   // Both fields offer "Choose on map" again only once the pickup is set.
-  await expect(chooseOnMap).toHaveCount(2);
+  await expect(chooseOnMap).toHaveCount(2, { timeout: PUBLIC_SERVICES_TIMEOUT_MS });
   await chooseOnMap.nth(1).click();
   await clickMap(page, BOOKING_MAP, 0.65, 0.3);
 
   const request = page.getByRole("button", { name: /^Request / });
-  await expect(request).toBeEnabled();
+  await expect(request).toBeEnabled({ timeout: PUBLIC_SERVICES_TIMEOUT_MS });
   await request.click();
 
   // Matching, then the live ride view with the assigned driver.
@@ -50,7 +50,7 @@ test("a passenger books a ride that a simulated driver completes, then sees the 
 
 test("an admin sees the platform's rides and system state", async ({ page }) => {
   await signIn(page, DEMO.admin, demoPassword(), /\/admin$/);
-  await expect(page.getByText("Rides requested")).toBeVisible();
+  await expect(page.getByText("Rides requested", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "Rides", exact: true }).click();
   await expect(page.getByRole("table", { name: "Rides" })).toBeVisible();
