@@ -202,7 +202,7 @@ backend and simulator you run on the host.
 |---|---|---|
 | `backend-ci` | changes to `backend/` or the API contract | Build, unit, web and ArchUnit tests, integration tests on Testcontainers, merged coverage with a gate on the service layer |
 | `frontend-ci` | changes to `frontend/`, `simulator/` or the API contract | Generated API types match `docs/openapi.json`, ESLint, `tsc`, Vitest with coverage, production build; simulator typecheck and tests |
-| `e2e` | changes to any app, the compose file or `infrastructure/` | The compose stack from a clean checkout, the Playwright suite, every Grafana panel; on `main`, publishes the tested images to GHCR and deploys the backend image ([deployment.md](deployment.md#updates-and-rollback)) |
+| `e2e` | changes to any app, the compose file or `infrastructure/` | The compose stack from a clean checkout, the Playwright suite (including the Grafana dashboards), every Grafana panel's query; the README's screenshots, pushed to the branch `screenshots/<branch>`; on `main`, publishes the tested images to GHCR and deploys the backend image ([deployment.md](deployment.md#updates-and-rollback)) |
 | `secret-scan` | every push and pull request | gitleaks over the whole history |
 | `load-test` | changes to `load-tests/scenarios/`, or by hand | k6 scenarios at 10/50/100 VUs ([performance.md](performance.md)) |
 | `cache-benchmark` | changes to `load-tests/cache-benchmark/`, or by hand | Cache on/off comparison |
@@ -224,10 +224,18 @@ stack's URLs, so a deployment builds its own:
 `docker build --build-arg BACKEND_URL=... --build-arg NEXT_PUBLIC_WS_URL=... frontend`. The public
 deployment builds the frontend on Vercel instead ([deployment.md](deployment.md)).
 
+**Screenshots:** the Playwright tests save the README's screenshots when `SCREENSHOTS_DIR` is set, which
+the `e2e` workflow does; the dashboards test also needs `GRAFANA_URL` and `GRAFANA_PASSWORD`. After a
+passing run on a push, the images are on the branch `screenshots/<branch>`, replaced each run, with the run
+and commit in its README. To refresh the committed copies:
+`git fetch origin screenshots/main` and copy the PNGs from `FETCH_HEAD` into `docs/screenshots/`.
+
 ## Environment variables
 
 Defined in `.env.example`. Variables without a default are required; the application fails fast at
-startup if one is missing.
+startup if one is missing. Under the `prod` profile, `DATABASE_URL`, `DATABASE_USERNAME`, `REDIS_HOST`,
+`KAFKA_BOOTSTRAP_SERVERS` and `CORS_ALLOWED_ORIGINS` are required too, and under `demo` a strong
+`DEMO_USER_PASSWORD`. "build" marks frontend settings that are fixed when the frontend is built.
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
@@ -293,6 +301,14 @@ startup if one is missing.
 | `SENTRY_DSN` | no | (empty: off) | Backend error reporting to Sentry |
 | `NEXT_PUBLIC_SENTRY_DSN` | no | (empty: off) | Frontend error reporting; fixed when the frontend is built |
 | `SENTRY_ENVIRONMENT` | no | `local` | Environment name on Sentry events (backend and frontend) |
+| `SERVICE_AREA_CENTER_LAT` / `SERVICE_AREA_CENTER_LNG` / `SERVICE_AREA_RADIUS_METERS` | no | `17.3850` / `78.4867` / `40000` | Where rides may start and end. For another city also change `NEXT_PUBLIC_MAP_CENTER_*` and the simulator's `SIM_CENTER_*` |
+| `SURGE_ENABLED` | no | `true` | Surge pricing from local supply and demand |
+| `PORT` | no | — | Used for the API port when `SERVER_PORT` is not set (hosts such as Render set it) |
+| `BACKEND_URL` | build | `http://localhost:8080` | Frontend: where `/api` is forwarded. Fixed at build time; a Vercel build requires `https://` |
+| `NEXT_PUBLIC_WS_URL` | build | `ws://localhost:8080/ws` | Frontend: the browser's WebSocket URL. Fixed at build time; `wss://` on an https site (a Vercel build requires it) |
+| `NEXT_PUBLIC_MAP_STYLE_URL` / `NEXT_PUBLIC_MAP_CENTER_LAT` / `NEXT_PUBLIC_MAP_CENTER_LNG` | build | OpenFreeMap Liberty / Hyderabad | Map style and starting centre; empty means the default |
+| `NEXT_PUBLIC_SENTRY_ENVIRONMENT` | build | `local` | Environment name on the frontend's Sentry events |
+| `NEXT_PUBLIC_API_BASE_URL` | build | (empty: same origin) | Frontend: a different API origin instead of the `/api` rewrite. Leave empty; the refresh cookie is first-party only through the rewrite |
 
 ## Conventions
 

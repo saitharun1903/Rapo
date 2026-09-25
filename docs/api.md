@@ -72,7 +72,7 @@ Password policy: 10–72 characters (BCrypt limit), at least one letter and one 
 |---|---|---|
 | GET | `/geo/search?q=&lat=&lng=` | Place search (`q` 2–200 chars), biased towards `lat`/`lng` when given → `[{name, address, point}]`. Call on submit, not per keystroke (Nominatim policy). `429 RATE_LIMITED` (30/min per user), `503 GEOCODING_UNAVAILABLE` with `Retry-After` when the provider is down or the shared upstream budget (1 req/s) is used up |
 | GET | `/geo/reverse?lat=&lng=` | Address at a point → `{name, address, point}`, or `204` when there is none. Same limits |
-| GET | `/geo/route?fromLat=&fromLng=&toLat=&toLng=` | `{distanceMeters, durationSeconds, geometry (GeoJSON LineString), source}`; used to draw routes and by the simulator |
+| GET | `/geo/route?fromLat=&fromLng=&toLat=&toLng=` | `{distanceMeters, durationSeconds, source, path[{lat, lng}]}`; used to draw routes and by the simulator. The end must be inside the service area and the start within the widest matching radius of it, else `422 OUTSIDE_SERVICE_AREA`; `429 RATE_LIMITED` beyond 60 a minute per user |
 
 ## Fares
 
@@ -108,9 +108,9 @@ Password policy: 10–72 characters (BCrypt limit), at least one letter and one 
 | Method | Path | Description |
 |---|---|---|
 | POST | `/rides` | Create ride from a quote → `201 RideResponse` (status `REQUESTED`) |
-| GET | `/rides` | Caller's rides (passenger: own; driver: assigned). Filters: `status`, `from`, `to`. Sort: `requestedAt`, `completedAt` |
+| GET | `/rides` | Caller's rides (passenger: own; driver: assigned). Filter: `status`. Sort: `requestedAt`, `completedAt` |
 | GET | `/rides/active` | Caller's active ride or `204` |
-| GET | `/rides/{id}` | Ride detail |
+| GET | `/rides/{id}` | Ride detail: its passenger, its assigned driver, a driver holding a pending unexpired offer for it, or an admin; anyone else `404 RIDE_NOT_FOUND` |
 | GET | `/rides/{id}/tracking` | Snapshot after load or reconnect: `{rideId, status, driverLocation{point, headingDeg, recordedAt}?, stale, eta{target: PICKUP\|DROPOFF, seconds, distanceMeters, source: ROUTED\|APPROXIMATE}?}`. Passenger or assigned driver; a driver who only got an offer gets 404. `409 TRACKING_UNAVAILABLE` unless a driver is assigned (DRIVER_ASSIGNED to IN_PROGRESS). `stale` when the last position is older than 30 s; `eta` is `null` when stale or while the driver waits at the pickup. Live updates then arrive over WebSocket ([events.md](events.md) §2) |
 | GET | `/rides/{id}/timeline` | Status events |
 | POST | `/rides/{id}/cancel` | Optional body `{reason}`. Passenger (before the trip starts) → `CANCELLED`, and the driver is released. Assigned driver before arrival → ride goes back to `MATCHING` and is re-offered to other drivers. Driver after arriving → `CANCELLED` only once the 5-minute no-show wait has passed, else `409 NO_SHOW_WAIT_NOT_ELAPSED` |
@@ -145,7 +145,7 @@ The quote pins category, distance/time estimate and surge. Its pickup/dropoff mu
 
 ## Rides: driver actions
 
-All require role DRIVER, the ride must be assigned to (or offered to) the caller, and they return `200 RideResponse`.
+All require role DRIVER and a ride assigned to the caller (accept and reject: offered to the caller). They return `200 RideResponse`, except reject (`204`).
 
 | Method | Path | Transition / rule |
 |---|---|---|
@@ -154,7 +154,7 @@ All require role DRIVER, the ride must be assigned to (or offered to) the caller
 | POST | `/rides/{id}/en-route` | `DRIVER_ASSIGNED → DRIVER_ARRIVING` |
 | POST | `/rides/{id}/arrive` | `DRIVER_ARRIVING → DRIVER_ARRIVED`; driver's latest location within pickup geofence, otherwise `422 NOT_AT_PICKUP` |
 | POST | `/rides/{id}/start` | `DRIVER_ARRIVED → IN_PROGRESS` |
-| POST | `/rides/{id}/complete` | `IN_PROGRESS → COMPLETED`. Distance = PostGIS length of the recorded GPS trail (`distanceSource: TRACKED`), or the routed estimate when the trail has fewer than two points (`ESTIMATED`). The final fare uses the surge locked at booking |
+| POST | `/rides/{id}/complete` | `IN_PROGRESS → COMPLETED`. Distance = PostGIS length of the recorded GPS trail (`distanceSource: TRACKED`), or the routed estimate (`ESTIMATED`) when no point was reported between start and completion (the trail would be a straight line). The final fare uses the surge locked at booking |
 
 Errors common to driver actions: `404 RIDE_NOT_FOUND` (not your ride or offer), `409 RIDE_INVALID_TRANSITION`, `409 OFFER_EXPIRED`, `409 DRIVER_UNAVAILABLE`, `422 LOCATION_UNAVAILABLE` (no fresh GPS position for the geofence check).
 
@@ -170,7 +170,7 @@ Errors common to driver actions: `404 RIDE_NOT_FOUND` (not your ride or offer), 
 | POST | `/drivers/location` | DRIVER | `{location{lat,lng}, headingDeg?, speedMps?, accuracyMeters?, recordedAt}` → 202. `recordedAt` must be within 30 s in the past / 5 s in the future (`422 STALE_LOCATION`); driver must be online (`409 DRIVER_OFFLINE`). REST fallback for the WebSocket stream `/app/drivers/location`, with the same rules and the same push to the passenger |
 | GET | `/drivers/me/offers` | DRIVER | Pending offers (used on reconnect) |
 | GET | `/drivers/me/earnings?from=&to=&granularity=DAY` | DRIVER | `{from, to, granularity, timeZone, total, tripCount, series[{start, earnings, trips}]}`: the driver's share of captured payments for rides completed in `[from, to)`. `granularity` is `HOUR` or `DAY`; buckets are cut at local hours or days of `REPORTING_TIME_ZONE` and every bucket is present, empty ones included. At most 400 buckets, else `400 INVALID_DATE_RANGE` |
-| GET | `/drivers/nearby?lat=&lng=&radiusMeters=&category=` | PASSENGER, ADMIN | Passenger: `[{point (≈100 m grid), category}]`, max 20, no identity. Admin: full detail |
+| GET | `/drivers/nearby?lat=&lng=&radiusMeters=&category=` | PASSENGER, ADMIN | `[{position, category, driverId, distanceMeters}]`, max 20. Passenger: `position` on a ≈100 m grid, `driverId` and `distanceMeters` null. Admin: exact |
 
 ## Trips: AI Trip Intelligence
 
@@ -227,7 +227,7 @@ Notifications are created asynchronously by the notifications consumer (ride pro
 | GET | `/admin/analytics/rides?from=&to=&granularity=HOUR\|DAY` | Per bucket, empty ones included: rides requested, completed, cancelled and expired (each by when it happened) and captured revenue (by completion). Same bucket rules and limit as earnings |
 | GET | `/admin/users?role=&status=&q=` | Paged user search |
 | PATCH | `/admin/users/{id}/status` | `{status: ACTIVE\|SUSPENDED, reason}` (suspension revokes sessions) |
-| GET | `/admin/drivers?verificationStatus=&availability=` | Paged drivers |
+| GET | `/admin/drivers?verificationStatus=` | Paged drivers |
 | POST | `/admin/drivers/{id}/verify` | → `VERIFIED`, emits `notification.requested` |
 | POST | `/admin/drivers/{id}/reject` | `{reason}` → `REJECTED` |
 | POST | `/admin/drivers/{id}/suspend` | `{reason}` → `SUSPENDED`, forces `OFFLINE` |
@@ -235,7 +235,9 @@ Notifications are created asynchronously by the notifications consumer (ride pro
 | GET | `/admin/rides/{id}` | `{ride, passenger{id, fullName, email}, timeline, offers[{driverId, round, distanceMeters, status, offeredAt, expiresAt, respondedAt}], analysis{status, failureCode, updatedAt}}`; `analysis` is `null` until recorded |
 | GET | `/admin/system` | Health status and component statuses (no details), outbox backlog, dead letters by topic since start, AI circuit state and calls in flight, WebSocket sessions, Redis availability. Read from the same health indicators and meters as Actuator and Prometheus, for the instance that serves the request; a value is `null` when its meter is not registered |
 | GET | `/admin/audit-logs?action=&entityType=&from=&to=` | Paged audit log, newest first by default |
+| POST | `/admin/system/test-error` | Sends a deliberate error to Sentry → `202 {eventId}`; `409 ERROR_REPORTING_DISABLED` without a DSN |
 
-## Operational (management port, not public)
+## Operational
 
-`/actuator/health` (liveness/readiness groups), `/actuator/info`, `/actuator/prometheus`.
+- Management port (not public): `/actuator/health` (liveness/readiness groups), `/actuator/info`, `/actuator/prometheus`.
+- Public port: `GET /livez` and `GET /readyz`, anonymous, `{"status"}` only, for hosts that probe the port they route to.
