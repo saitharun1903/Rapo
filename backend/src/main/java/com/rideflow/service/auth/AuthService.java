@@ -64,8 +64,9 @@ public class AuthService {
     }
 
     /**
-     * @param clientIp the caller's address, for the per-IP rate limit (behind a proxy, only correct if the proxy
-     *                 overwrites {@code X-Forwarded-For}; see docs/architecture.md section 9)
+     * @param clientIp the caller's address, for the per-IP rate limit: the connection's peer, or the right-most
+     *                 untrusted {@code X-Forwarded-For} hop when the peer is in {@code TRUSTED_PROXIES}
+     *                 (see docs/architecture.md section 9)
      */
     @Transactional
     public UserResponse register(RegisterRequest request, String clientIp) {

@@ -64,6 +64,9 @@ class RealtimeIT extends IntegrationTestContainers {
     private static final String DRIVER_LOCATION = "/app/drivers/location";
     private static final Duration PRESENCE_TIMEOUT = Duration.ofMinutes(2);
     private static final Duration ACCESS_TOKEN_TTL = Duration.ofMinutes(15);
+    /** The default CORS_ALLOWED_ORIGINS. */
+    private static final String FRONTEND_ORIGIN = "http://localhost:3000";
+    private static final String FOREIGN_ORIGIN = "https://evil.example";
 
     @LocalServerPort
     private int port;
@@ -248,7 +251,7 @@ class RealtimeIT extends IntegrationTestContainers {
         forged.awaitClosed();
 
         Actor passenger = fixtures.passenger();
-        Connection foreignOrigin = stomp.connectFromOrigin(passenger, "https://evil.example");
+        Connection foreignOrigin = stomp.connectFromOrigin(passenger, FOREIGN_ORIGIN);
         foreignOrigin.awaitClosed();
         assertThat(foreignOrigin.isConnected()).isFalse();
 
@@ -282,6 +285,21 @@ class RealtimeIT extends IntegrationTestContainers {
         JsonNode activity = adminSocket.next(ADMIN_ACTIVITY, message -> isRide(message, rideId));
         assertThat(activity.get("status").asString()).isIn("REQUESTED", "MATCHING");
         assertThat(activity.has("passengerId")).isFalse();
+    }
+
+    @Test
+    void theHandshakeOriginCheckIgnoresForwardingHeadersFromUntrustedClients() throws Exception {
+        Actor passenger = fixtures.passenger();
+
+        // Forwarding headers naming the foreign site would make the handshake look same-origin if they were trusted.
+        Connection spoofed = stomp.connectFromOrigin(passenger, FOREIGN_ORIGIN, Map.of(
+                "X-Forwarded-Proto", "https", "X-Forwarded-Host", "evil.example", "X-Forwarded-Port", "443"));
+        spoofed.awaitClosed();
+        assertThat(spoofed.isConnected()).isFalse();
+
+        Connection frontend = stomp.connectFromOrigin(passenger, FRONTEND_ORIGIN);
+        frontend.awaitConnected();
+        assertThat(frontend.isConnected()).isTrue();
     }
 
     @Test
