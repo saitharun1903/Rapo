@@ -251,6 +251,7 @@ Each phase ends with: compile → tests → lint/static checks → self-review �
 
 **Found while verifying Phase 14:**
 - **Login at 0.1 CPU:** p50 8.5 s with two logins at once (BCrypt strength 12). Lowering the strength for the free tier is left to the owner (deployment.md).
+- **The flaky passenger test, explained (Phase 13's open item):** it failed again in e2e run 36138938060 on 8943afc, and this time the page-snapshot annotation showed the pickup set but no destination, with neither field choosing on the map. Setting any field cleared the map-choosing mode of both, so when "Use my location" answered (after a slow reverse geocode) after the destination's "Choose on map" was pressed, the next map click was ignored. Users hit the same thing. The test's wait for two "Choose on map" buttons never waited, since both are always shown. Now a field's answer ends only its own choosing mode (BookingView.test.tsx reproduces the race and failed before the fix), and the test waits until the pickup is set.
 
 ## Phases
 

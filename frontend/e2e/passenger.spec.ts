@@ -11,10 +11,10 @@ test("a passenger books from their own location, cancels while matching, and see
   await signIn(page, DEMO.cancellingPassenger, demoPassword(), /\/ride$/);
 
   await page.getByRole("button", { name: "Use my location" }).click();
-  const chooseOnMap = page.getByRole("button", { name: "Choose on map" });
-  // Both fields offer "Choose on map" once the pickup is set.
-  await expect(chooseOnMap).toHaveCount(2, { timeout: PUBLIC_SERVICES_TIMEOUT_MS });
-  await chooseOnMap.nth(1).click();
+  // The pickup is set once its address lookup answers; the field then offers to search for another place.
+  await expect(page.getByRole("textbox", { name: "Pickup" }))
+    .toHaveAttribute("placeholder", "Search for another place", { timeout: PUBLIC_SERVICES_TIMEOUT_MS });
+  await page.getByRole("button", { name: "Choose on map" }).nth(1).click();
   // The map has zoomed to the pickup; a corner is well over the 200 m minimum trip away.
   await clickMap(page, BOOKING_MAP, 0.9, 0.15);
 

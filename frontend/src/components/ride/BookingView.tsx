@@ -98,9 +98,11 @@ export function BookingView() {
     },
   });
 
+  // Setting a field ends choosing that field on the map, not the other one: "Use my location" can answer
+  // after the passenger has started choosing the destination.
   const set = (field: Field, place: Place) => {
     (field === "pickup" ? setPickup : setDropoff)(place);
-    setPicking(null);
+    setPicking((current) => (current === field ? null : current));
   };
 
   const onPick = async (point: GeoPoint) => {
