@@ -17,7 +17,8 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   forbidOnly: Boolean(process.env.CI),
-  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
+  // In CI, "github" turns each failure into an annotation on the run page.
+  reporter: process.env.CI ? [["list"], ["github"], ["html", { open: "never" }]] : "list",
   use: {
     baseURL: BASE_URL,
     trace: "retain-on-failure",

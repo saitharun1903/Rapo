@@ -18,9 +18,11 @@ import jakarta.validation.Validation;
 import jakarta.validation.ValidatorFactory;
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -32,6 +34,8 @@ import tools.jackson.databind.json.JsonMapper;
  *     -Dsurefire.failIfNoSpecifiedTests=false</pre>
  */
 @Tag("local-model")
+// Three model calls of up to MODEL_TIMEOUT each, with a corrective retry: far over the suite's 5-minute default.
+@Timeout(value = 45, unit = TimeUnit.MINUTES)
 class LocalModelSmokeTest {
 
     private static final Duration MODEL_TIMEOUT = Duration.ofMinutes(5);
