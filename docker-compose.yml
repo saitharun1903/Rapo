@@ -1,6 +1,13 @@
-# Local development infrastructure. Start with:  docker compose up -d
-# Application containers (backend, frontend), Prometheus and Grafana are added in later phases.
-# All credentials come from .env (copy .env.example); compose refuses to start if required ones are missing.
+# The whole RideFlow stack. From a clean clone:
+#
+#   ./scripts/init-env.sh                   # writes .env with fresh random secrets (once)
+#   docker compose up --build               # PostGIS, Redis, Kafka, backend, frontend on http://localhost:3000
+#   docker compose --profile demo up --build   # the same plus the driver simulator
+#
+# For backend or frontend development on the host, start only the infrastructure:
+#   docker compose up -d postgres redis kafka
+#
+# All credentials come from .env; compose refuses to start if a required one is missing.
 
 name: rideflow
 
@@ -42,7 +49,7 @@ services:
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      # INTERNAL for other containers, EXTERNAL for the backend running on the host.
+      # INTERNAL for other containers, EXTERNAL for a backend running on the host.
       KAFKA_LISTENERS: INTERNAL://:9092,EXTERNAL://:29092,CONTROLLER://:9093
       KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:${KAFKA_HOST_PORT:-29092}
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
@@ -63,6 +70,90 @@ services:
       interval: 10s
       timeout: 10s
       retries: 20
+
+  backend:
+    build: ./backend
+    image: rideflow-backend:local
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-demo}
+      # Infrastructure is reached by service name on the compose network.
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-rideflow}
+      DATABASE_USERNAME: ${POSTGRES_USER:-rideflow}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC_PREFIX: ${KAFKA_TOPIC_PREFIX:-}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_ISSUER: ${JWT_ISSUER:-rideflow}
+      JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-15m}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-14d}
+      # The stack is served over plain http on localhost; a Secure cookie would never be sent back.
+      REFRESH_COOKIE_SECURE: ${REFRESH_COOKIE_SECURE:-false}
+      REFRESH_COOKIE_SAME_SITE: ${REFRESH_COOKIE_SAME_SITE:-Lax}
+      BCRYPT_STRENGTH: ${BCRYPT_STRENGTH:-12}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      # Required by the demo profile only (the seeded accounts' password).
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-}
+      CACHE_ENABLED: ${CACHE_ENABLED:-true}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      ROUTING_PROVIDER: ${ROUTING_PROVIDER:-osrm}
+      ROUTING_BASE_URL: ${ROUTING_BASE_URL:-https://router.project-osrm.org}
+      GEOCODING_PROVIDER: ${GEOCODING_PROVIDER:-nominatim}
+      GEOCODING_BASE_URL: ${GEOCODING_BASE_URL:-https://nominatim.openstreetmap.org}
+      GEOCODING_USER_AGENT: ${GEOCODING_USER_AGENT:-RideFlow/0.1 (+https://github.com/saitharun1903/Rapo)}
+      GEOCODING_COUNTRY_CODES: ${GEOCODING_COUNTRY_CODES:-in}
+      REPORTING_TIME_ZONE: ${REPORTING_TIME_ZONE:-Asia/Kolkata}
+      AI_PROVIDER: ${AI_PROVIDER:-disabled}
+      # A backend in a container reaches Ollama on the host through host.docker.internal, not localhost.
+      AI_LOCAL_BASE_URL: ${DOCKER_AI_LOCAL_BASE_URL:-http://host.docker.internal:11434}
+      AI_LOCAL_MODEL: ${AI_LOCAL_MODEL:-llama3.2}
+      AI_LOCAL_TIMEOUT: ${AI_LOCAL_TIMEOUT:-120s}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_EXTERNAL_MODEL: ${AI_EXTERNAL_MODEL:-claude-opus-5}
+      API_DOCS_ENABLED: ${API_DOCS_ENABLED:-true}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+      # Actuator: bound to this machine only.
+      - "127.0.0.1:${MANAGEMENT_PORT:-8081}:8081"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # The server forwards /api to the backend service; the browser opens the WebSocket on the published port.
+        BACKEND_URL: http://backend:8080
+        NEXT_PUBLIC_WS_URL: ws://localhost:${BACKEND_PORT:-8080}/ws
+    image: rideflow-frontend:local
+    depends_on:
+      backend: { condition: service_healthy }
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+
+  # Demo only: seeded drivers go online and complete rides, so the app has something to show.
+  simulator:
+    build: ./simulator
+    image: rideflow-simulator:local
+    profiles: ["demo"]
+    depends_on:
+      backend: { condition: service_healthy }
+    environment:
+      API_BASE_URL: http://backend:8080
+      WS_URL: ws://backend:8080/ws
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:?Set DEMO_USER_PASSWORD in .env}
+      SIM_SPEED_MPS: ${SIM_SPEED_MPS:-11}
+      SIM_BOARDING_MS: ${SIM_BOARDING_MS:-5000}
+    restart: on-failure
 
 volumes:
   postgres-data:

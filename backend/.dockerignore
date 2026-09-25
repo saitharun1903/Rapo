@@ -1,0 +1,7 @@
+# Only what the image build needs: keeps the context small and host builds (target/) out of it.
+target/
+.idea/
+*.iml
+*.log
+Dockerfile
+.dockerignore

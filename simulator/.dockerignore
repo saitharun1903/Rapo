@@ -1,0 +1,5 @@
+# Only what the image needs.
+node_modules/
+src/**/*.test.ts
+Dockerfile
+.dockerignore

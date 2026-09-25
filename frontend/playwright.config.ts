@@ -1,12 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * End-to-end smoke tests against a running stack: backend (demo profile), infrastructure and the driver
- * simulator are started by the e2e workflow (or by hand, see docs/development.md). Playwright starts the
- * built frontend itself.
+ * End-to-end tests against a running stack: infrastructure, the backend (demo profile) and the driver
+ * simulator. With PLAYWRIGHT_BASE_URL set, the frontend is already running there too (the e2e workflow tests
+ * the Docker Compose stack this way); otherwise Playwright starts the built frontend itself.
  */
-const PORT = 3000;
-const BASE_URL = `http://localhost:${PORT}`;
+const LOCAL_PORT = 3000;
+const EXTERNAL_BASE_URL = process.env.PLAYWRIGHT_BASE_URL;
+const BASE_URL = EXTERNAL_BASE_URL ?? `http://localhost:${LOCAL_PORT}`;
 const SERVER_START_TIMEOUT_MS = 120_000;
 const TEST_TIMEOUT_MS = 8 * 60_000;
 
@@ -26,7 +27,7 @@ export default defineConfig({
     viewport: { width: 1440, height: 900 },
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } }],
-  webServer: {
+  webServer: EXTERNAL_BASE_URL ? undefined : {
     command: "npm run start",
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,

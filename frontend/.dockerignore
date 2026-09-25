@@ -1,0 +1,14 @@
+# Only what the image build needs: host node_modules and build output must never be copied in.
+node_modules/
+.next/
+coverage/
+test-results/
+playwright-report/
+e2e/
+*.tsbuildinfo
+next-env.d.ts
+.env*
+Dockerfile
+.dockerignore
+AGENTS.md
+CLAUDE.md

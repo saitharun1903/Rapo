@@ -1,132 +1,102 @@
 name: e2e
 
-# Playwright smoke tests against the whole stack: PostGIS, Redis and Kafka from docker-compose, the backend
-# with the demo profile, the driver simulator, and the built frontend.
+# The Docker Compose stack from a clean checkout, the way the README says to run it: init-env.sh writes .env,
+# `docker compose --profile demo up --build` builds the three images and starts everything, and the Playwright
+# suite then runs against the containers (frontend on :3000, backend on :8080, simulated drivers).
 on:
   push:
-    paths: ["frontend/**", "backend/**", "simulator/**", "docs/openapi.json", "docker-compose.yml", ".github/workflows/e2e.yml", ".github/scripts/**"]
+    paths: ["frontend/**", "backend/**", "simulator/**", "docs/openapi.json", "docker-compose.yml", ".env.example",
+            "scripts/init-env.sh", ".github/workflows/e2e.yml", ".github/scripts/**"]
   pull_request:
-    paths: ["frontend/**", "backend/**", "simulator/**", "docs/openapi.json", "docker-compose.yml", ".github/workflows/e2e.yml", ".github/scripts/**"]
+    paths: ["frontend/**", "backend/**", "simulator/**", "docs/openapi.json", "docker-compose.yml", ".env.example",
+            "scripts/init-env.sh", ".github/workflows/e2e.yml", ".github/scripts/**"]
 
 permissions:
   contents: read
 
 jobs:
-  smoke:
+  compose:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      SPRING_PROFILES_ACTIVE: demo
-      REFRESH_COOKIE_SECURE: "false"
-      CORS_ALLOWED_ORIGINS: http://localhost:3000
-      BACKEND_URL: http://localhost:8080
-      NEXT_PUBLIC_WS_URL: ws://localhost:8080/ws
-      API_BASE_URL: http://localhost:8080
-      WS_URL: ws://localhost:8080/ws
-      # Fast simulated drivers so a whole ride fits in a smoke test.
-      SIM_SPEED_MPS: "60"
-      SIM_BOARDING_MS: "2000"
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v5
 
-      # Credentials for this run only, generated here and masked in the logs; nothing is stored in the repo.
-      - name: Generate throwaway credentials
+      # The clean-clone path: random secrets for this run only, masked in the logs, never stored.
+      - name: Create .env
         run: |
-          for name in POSTGRES_PASSWORD REDIS_PASSWORD DEMO_USER_PASSWORD; do
-            value="e2e$(openssl rand -hex 16)"
-            echo "::add-mask::$value"
-            echo "$name=$value" >> "$GITHUB_ENV"
+          ./scripts/init-env.sh
+          for name in POSTGRES_PASSWORD REDIS_PASSWORD JWT_SECRET DEMO_USER_PASSWORD; do
+            echo "::add-mask::$(grep "^$name=" .env | cut -d= -f2-)"
           done
-          jwt=$(openssl rand -base64 48 | tr -d '\n')
-          echo "::add-mask::$jwt"
-          echo "JWT_SECRET=$jwt" >> "$GITHUB_ENV"
+          # Fast simulated drivers, so a whole ride fits in a test.
+          printf 'SIM_SPEED_MPS=60\nSIM_BOARDING_MS=2000\n' >> .env
 
-      - name: Start PostGIS, Redis and Kafka
-        run: docker compose up -d --wait postgres redis kafka
+      - name: Validate the compose file
+        run: docker compose --profile demo config --quiet
 
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "21"
-          cache: maven
+      - name: Build the images
+        run: docker compose --profile demo build
 
-      - name: Build and start the backend
-        working-directory: backend
+      - name: Start the stack
         run: |
-          ./mvnw -B -q -DskipTests package
-          jar=$(find target -maxdepth 1 -name "rideflow-backend-*.jar" ! -name "*-plain.jar" | head -n 1)
-          DATABASE_PASSWORD="$POSTGRES_PASSWORD" nohup java -jar "$jar" > ../backend.log 2>&1 &
-          pid=$!
-          # Ready in well under a minute normally. A slow start gets one thread dump (summarised below) to show
-          # what it is waiting for; five minutes is a failure.
           start=$SECONDS
-          dumped=""
-          while (( SECONDS - start < 300 )); do
-            if curl -fsS --max-time 5 http://localhost:8081/actuator/health/readiness > /dev/null; then
-              echo "::notice title=Backend startup::ready after $(( SECONDS - start )) s"; exit 0
-            fi
-            if [ -z "$dumped" ] && (( SECONDS - start > 90 )); then
-              jcmd "$pid" Thread.print > "$GITHUB_WORKSPACE/threads.txt" 2>&1 || true
-              dumped=1
-            fi
-            sleep 2
-          done
-          echo "backend did not become ready"; tail -n 100 ../backend.log; exit 1
+          docker compose --profile demo up -d --wait --wait-timeout 300
+          echo "::notice title=Stack startup::healthy after $(( SECONDS - start )) s"
+          docker compose ps
+
+      # Straight through the frontend container: its /api rewrite reaches the backend container.
+      - name: Smoke check
+        run: |
+          curl -fsS -o /dev/null http://localhost:3000/
+          password=$(grep '^DEMO_USER_PASSWORD=' .env | cut -d= -f2-)
+          status=$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \
+            -d "{\"email\":\"admin@rideflow.example.com\",\"password\":\"$password\"}" http://localhost:3000/api/auth/login)
+          [ "$status" = 200 ] || { echo "Login through the frontend returned $status"; exit 1; }
 
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: |
-            frontend/package-lock.json
-            simulator/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
-      - name: Start the driver simulator
-        working-directory: simulator
-        run: |
-          npm ci
-          nohup node src/index.ts > ../simulator.log 2>&1 &
-          for attempt in $(seq 1 30); do
-            if grep -q "drivers online" ../simulator.log; then echo "simulator ready"; exit 0; fi
-            sleep 2
-          done
-          echo "simulator did not start"; cat ../simulator.log; exit 1
-
-      - name: Build the frontend
+      - name: Install Playwright
         working-directory: frontend
         run: |
           npm ci
-          npm run build
+          npx playwright install --with-deps chromium
 
-      - name: Install Playwright's browser
+      - name: Playwright against the compose stack
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+        run: |
+          DEMO_USER_PASSWORD=$(grep '^DEMO_USER_PASSWORD=' ../.env | cut -d= -f2-) npx playwright test
 
-      - name: Playwright smoke tests
-        working-directory: frontend
-        run: npx playwright test
-
-      - name: Summarise a slow backend start
-        if: always() && hashFiles('threads.txt') != ''
-        run: python3 .github/scripts/thread_dump_summary.py threads.txt
-
-      - name: Show service logs
+      # A backend that is slow or stuck: SIGQUIT makes the JVM print a thread dump to its log (the JRE image has
+      # no jcmd), which is condensed into annotations with the recent warnings and the simulator's log.
+      - name: Diagnose a failure
         if: failure()
         run: |
-          echo "--- backend (last 150 lines)"; tail -n 150 backend.log || true
-          echo "--- simulator (last 100 lines)"; tail -n 100 simulator.log || true
-          # Also as annotations, readable on the run page and through the checks API without the raw log.
+          docker compose ps
+          docker compose kill -s SIGQUIT backend || true
+          sleep 2
+          docker compose logs --no-color --no-log-prefix backend > backend.log 2>&1 || true
+          docker compose logs --no-color --no-log-prefix simulator > simulator.log 2>&1 || true
+          echo "--- backend (last 150 lines)"; tail -n 150 backend.log
+          echo "--- simulator (last 100 lines)"; tail -n 100 simulator.log
           encode() { head -c 3500 | tr -d '\r' | awk 'BEGIN { ORS = "%0A" } { gsub(/%/, "%25"); print }'; }
           echo "::warning title=Backend warnings and errors::$(grep -E ' (WARN|ERROR) ' backend.log | tail -n 25 | encode)"
           echo "::warning title=Simulator log::$(tail -n 25 simulator.log | encode)"
+          python3 .github/scripts/thread_dump_summary.py backend.log
 
-      - name: Upload report and logs
+      - name: Upload the Playwright report
         if: failure()
         uses: actions/upload-artifact@v5
         with:
           name: e2e-report
-          path: |
-            frontend/playwright-report
-            frontend/test-results
-            backend.log
-            simulator.log
+          path: frontend/playwright-report
+          if-no-files-found: ignore
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose --profile demo down -v
