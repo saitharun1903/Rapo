@@ -45,7 +45,8 @@ COPY --from=build --chown=node:node /app/public ./public
 
 USER node
 EXPOSE 3000
+# 127.0.0.1, not localhost: in this image localhost resolves to ::1 first, and the server listens on IPv4.
 HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=6 \
-    CMD wget -q -O /dev/null "http://localhost:${PORT}/" || exit 1
+    CMD wget -q -O /dev/null "http://127.0.0.1:${PORT}/" || exit 1
 
 CMD ["node", "server.js"]

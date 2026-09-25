@@ -35,7 +35,7 @@ EXPOSE 8080 8081
 
 # Readiness, not liveness: the container counts as healthy once it can take traffic.
 HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=6 \
-    CMD wget -q -O /dev/null "http://localhost:${MANAGEMENT_PORT:-8081}/actuator/health/readiness" || exit 1
+    CMD wget -q -O /dev/null "http://127.0.0.1:${MANAGEMENT_PORT:-8081}/actuator/health/readiness" || exit 1
 
 # Exec form: the JVM is PID 1 and receives SIGTERM directly, so Spring shuts down gracefully.
 ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher"]
