@@ -19,6 +19,7 @@ import com.rideflow.entity.VehicleCategory;
 import com.rideflow.geospatial.GeoPoint;
 import com.rideflow.support.IntegrationTestContainers;
 import com.rideflow.support.MutableClock;
+import com.rideflow.support.PrometheusScrape;
 import com.rideflow.support.RealtimeTestConfig;
 import com.rideflow.support.RideApi;
 import com.rideflow.support.RideFixtures;
@@ -32,6 +33,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -39,6 +41,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
@@ -56,7 +59,8 @@ import tools.jackson.databind.json.JsonMapper;
  * participant for what happens next, and Kafka between every step. The passenger books; matching offers the
  * ride to the driver over the socket; the driver accepts, streams GPS over the socket, arrives, starts and
  * completes; the passenger hears each step and each position; then payment, notifications, the AI analysis
- * (a WireMock server playing Ollama), ratings, earnings and the admin view all agree on the same ride.
+ * (a WireMock server playing Ollama), ratings, earnings and the admin view all agree on the same ride, and the
+ * Prometheus scrape counted it.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
@@ -94,6 +98,8 @@ class RideWorkflowIT extends IntegrationTestContainers {
 
     @LocalServerPort
     private int port;
+    @LocalManagementPort
+    private int managementPort;
     @Autowired
     private MockMvc mvc;
     @Autowired
@@ -142,6 +148,7 @@ class RideWorkflowIT extends IntegrationTestContainers {
         Connection driverSocket = subscribed(driver, RIDE_OFFERS, RIDES);
         Connection passengerSocket = subscribed(passenger, RIDES, RIDE_LOCATION, NOTIFICATIONS);
         Instant booked = clock.instant();
+        PrometheusScrape before = PrometheusScrape.of(managementPort);
 
         // Booking goes out as ride.requested; the matching consumer offers the ride over the driver's socket.
         UUID rideId = api.book(passenger, HITECH_CITY, HUSSAIN_SAGAR, PaymentMethod.CARD);
@@ -198,6 +205,22 @@ class RideWorkflowIT extends IntegrationTestContainers {
                 "DRIVER_ARRIVED", "IN_PROGRESS", "COMPLETED");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE published_at IS NULL", Long.class))
                 .isZero();
+
+        // The series the Grafana dashboards query moved by exactly this ride.
+        PrometheusScrape after = PrometheusScrape.of(managementPort);
+        for (String status : timeline) {
+            assertThat(increase(before, after, "rideflow_rides_total", "event", status.toLowerCase(Locale.ROOT)))
+                    .as(status).isEqualTo(1);
+        }
+        assertThat(increase(before, after, "rideflow_offers_total", "outcome", "created")).isEqualTo(1);
+        assertThat(increase(before, after, "rideflow_offers_total", "outcome", "accepted")).isEqualTo(1);
+        assertThat(increase(before, after, "rideflow_matching_duration_seconds_bucket", "le", "+Inf")).isEqualTo(1);
+        assertThat(increase(before, after, "rideflow_location_updates_total", "result", "accepted")).isEqualTo(2);
+    }
+
+    private static double increase(PrometheusScrape before, PrometheusScrape after, String name, String label,
+                                   String value) {
+        return after.value(name, label, value) - before.value(name, label, value);
     }
 
     private Connection subscribed(Actor actor, String... destinations) throws Exception {

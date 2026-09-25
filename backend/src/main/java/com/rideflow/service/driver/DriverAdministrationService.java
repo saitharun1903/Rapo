@@ -12,7 +12,6 @@ import com.rideflow.exception.ErrorCode;
 import com.rideflow.exception.ResourceNotFoundException;
 import com.rideflow.mapper.DriverMapper;
 import com.rideflow.repository.DriverRepository;
-import com.rideflow.repository.RideOfferRepository;
 import com.rideflow.repository.VehicleRepository;
 import com.rideflow.service.audit.AuditService;
 import com.rideflow.service.driver.event.DriverWentOfflineEvent;
@@ -38,7 +37,7 @@ public class DriverAdministrationService {
 
     private final DriverRepository drivers;
     private final VehicleRepository vehicles;
-    private final RideOfferRepository offers;
+    private final DriverOfferWithdrawal offerWithdrawal;
     private final DriverMapper driverMapper;
     private final AuditService auditService;
     private final DriverStateCache driverStates;
@@ -48,7 +47,7 @@ public class DriverAdministrationService {
     public DriverAdministrationService(
             DriverRepository drivers,
             VehicleRepository vehicles,
-            RideOfferRepository offers,
+            DriverOfferWithdrawal offerWithdrawal,
             DriverMapper driverMapper,
             AuditService auditService,
             DriverStateCache driverStates,
@@ -56,7 +55,7 @@ public class DriverAdministrationService {
             Clock clock) {
         this.drivers = drivers;
         this.vehicles = vehicles;
-        this.offers = offers;
+        this.offerWithdrawal = offerWithdrawal;
         this.driverMapper = driverMapper;
         this.auditService = auditService;
         this.driverStates = driverStates;
@@ -100,7 +99,7 @@ public class DriverAdministrationService {
         boolean wasOnline = driver.isOnline();
         Instant now = clock.instant();
         driver.suspend(reason.trim());
-        offers.cancelPendingForDriver(driverId, now);
+        offerWithdrawal.withdrawPending(driverId, now);
         driverStates.refreshAfterCommit(driverId);
         if (wasOnline) {
             events.publish(new DriverWentOfflineEvent(driverId, OfflineReason.ACCOUNT_SUSPENDED, now));

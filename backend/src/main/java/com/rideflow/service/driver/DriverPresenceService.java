@@ -4,7 +4,6 @@ import com.rideflow.entity.Driver;
 import com.rideflow.entity.DriverAvailability;
 import com.rideflow.entity.OfflineReason;
 import com.rideflow.repository.DriverRepository;
-import com.rideflow.repository.RideOfferRepository;
 import com.rideflow.service.driver.event.DriverWentOfflineEvent;
 import com.rideflow.service.event.DomainEventPublisher;
 import java.time.Instant;
@@ -26,15 +25,15 @@ public class DriverPresenceService {
     private final DriverRepository drivers;
     private final DriverPositions positions;
     private final DriverStateCache driverStates;
-    private final RideOfferRepository offers;
+    private final DriverOfferWithdrawal offerWithdrawal;
     private final DomainEventPublisher events;
 
     public DriverPresenceService(DriverRepository drivers, DriverPositions positions, DriverStateCache driverStates,
-                                 RideOfferRepository offers, DomainEventPublisher events) {
+                                 DriverOfferWithdrawal offerWithdrawal, DomainEventPublisher events) {
         this.drivers = drivers;
         this.positions = positions;
         this.driverStates = driverStates;
-        this.offers = offers;
+        this.offerWithdrawal = offerWithdrawal;
         this.events = events;
     }
 
@@ -59,7 +58,7 @@ public class DriverPresenceService {
             return false;
         }
         driver.goOffline();
-        offers.cancelPendingForDriver(driverId, now);
+        offerWithdrawal.withdrawPending(driverId, now);
         driverStates.refreshAfterCommit(driverId);
         events.publish(new DriverWentOfflineEvent(driverId, OfflineReason.LOCATION_TIMEOUT, now));
         log.info("Driver {} taken offline: no location update since {}", driverId, silentSince);

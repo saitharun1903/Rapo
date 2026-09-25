@@ -18,6 +18,7 @@ import com.rideflow.exception.InvalidStateException;
 import com.rideflow.exception.ResourceNotFoundException;
 import com.rideflow.exception.RideFlowException;
 import com.rideflow.geospatial.GeoMath;
+import com.rideflow.monitoring.RideMetrics;
 import com.rideflow.repository.DriverRepository;
 import com.rideflow.repository.FareBreakdownRepository;
 import com.rideflow.repository.RideOfferRepository;
@@ -60,6 +61,7 @@ public class DriverRideService {
     private final RideTransitionRecorder recorder;
     private final DomainEventPublisher events;
     private final RideViewAssembler views;
+    private final RideMetrics metrics;
     private final RideProperties rideProperties;
     private final MatchingProperties matchingProperties;
     private final Clock clock;
@@ -69,7 +71,8 @@ public class DriverRideService {
                              VehicleRepository vehicles, DriverPositions positions,
                              RideTrackPointRepository trackPoints, FareBreakdownRepository fareBreakdowns,
                              FareCalculator fareCalculator, RideTransitionRecorder recorder,
-                             DomainEventPublisher events, RideViewAssembler views, RideProperties rideProperties,
+                             DomainEventPublisher events, RideViewAssembler views, RideMetrics metrics,
+                             RideProperties rideProperties,
                              MatchingProperties matchingProperties, Clock clock) {
         this.access = access;
         this.offers = offers;
@@ -83,6 +86,7 @@ public class DriverRideService {
         this.recorder = recorder;
         this.events = events;
         this.views = views;
+        this.metrics = metrics;
         this.rideProperties = rideProperties;
         this.matchingProperties = matchingProperties;
         this.clock = clock;
@@ -107,6 +111,7 @@ public class DriverRideService {
             throw new InvalidStateException(ErrorCode.OFFER_EXPIRED, "This ride is no longer available");
         }
         offer.accept(now);
+        metrics.offersClosed(OfferStatus.ACCEPTED, 1);
         Driver driver = loadDriver(driverId);
         driver.startTrip();
         Vehicle vehicle = vehicles.findByDriverIdAndActiveTrue(driverId).orElseThrow(() ->
@@ -126,6 +131,7 @@ public class DriverRideService {
         Instant now = clock.instant();
         RideOffer offer = offers.findByRideIdAndDriverId(rideId, driverId).orElseThrow(RideAccessPolicy::notFound);
         offer.reject(now);
+        metrics.offersClosed(OfferStatus.REJECTED, 1);
         if (!offers.existsByRideIdAndStatusAndExpiresAtAfter(rideId, OfferStatus.PENDING, now)) {
             events.publish(new MatchingRoundRequestedEvent(rideId));
         }

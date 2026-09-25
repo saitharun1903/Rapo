@@ -12,7 +12,6 @@ import com.rideflow.mapper.DriverMapper;
 import com.rideflow.repository.DriverLocationRepository;
 import com.rideflow.repository.DriverPosition;
 import com.rideflow.repository.DriverRepository;
-import com.rideflow.repository.RideOfferRepository;
 import com.rideflow.repository.VehicleRepository;
 import com.rideflow.service.driver.event.DriverWentOfflineEvent;
 import com.rideflow.service.event.DomainEventPublisher;
@@ -30,7 +29,7 @@ public class DriverAvailabilityService {
     private final DriverRepository drivers;
     private final VehicleRepository vehicles;
     private final DriverLocationRepository driverLocations;
-    private final RideOfferRepository offers;
+    private final DriverOfferWithdrawal offerWithdrawal;
     private final DriverMapper driverMapper;
     private final DriverPositions positions;
     private final DriverStateCache driverStates;
@@ -38,13 +37,13 @@ public class DriverAvailabilityService {
     private final Clock clock;
 
     public DriverAvailabilityService(DriverRepository drivers, VehicleRepository vehicles,
-                                     DriverLocationRepository driverLocations, RideOfferRepository offers,
+                                     DriverLocationRepository driverLocations, DriverOfferWithdrawal offerWithdrawal,
                                      DriverMapper driverMapper, DriverPositions positions,
                                      DriverStateCache driverStates, DomainEventPublisher events, Clock clock) {
         this.drivers = drivers;
         this.vehicles = vehicles;
         this.driverLocations = driverLocations;
-        this.offers = offers;
+        this.offerWithdrawal = offerWithdrawal;
         this.driverMapper = driverMapper;
         this.positions = positions;
         this.driverStates = driverStates;
@@ -72,7 +71,7 @@ public class DriverAvailabilityService {
     public DriverResponse goOffline(UUID driverId) {
         Driver driver = load(driverId);
         driver.goOffline();
-        offers.cancelPendingForDriver(driverId, clock.instant());
+        offerWithdrawal.withdrawPending(driverId, clock.instant());
         driverStates.refreshAfterCommit(driverId);
         return driverMapper.toResponse(driver, vehicles.findByDriverIdAndActiveTrue(driverId).orElse(null));
     }
@@ -83,7 +82,7 @@ public class DriverAvailabilityService {
             boolean wasOnline = driver.isOnline();
             Instant now = clock.instant();
             driver.goOffline();
-            offers.cancelPendingForDriver(driverId, now);
+            offerWithdrawal.withdrawPending(driverId, now);
             driverStates.refreshAfterCommit(driverId);
             if (wasOnline) {
                 events.publish(new DriverWentOfflineEvent(driverId, OfflineReason.ACCOUNT_SUSPENDED, now));

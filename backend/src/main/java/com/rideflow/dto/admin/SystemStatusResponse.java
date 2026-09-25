@@ -15,6 +15,7 @@ import org.jspecify.annotations.Nullable;
  * @param aiCallsActive      AI calls in flight on this instance
  * @param webSocketSessions  open STOMP sessions on this instance
  * @param redisAvailable     {@code false} while Redis is being bypassed
+ * @param errorReporting     {@code true} when errors are reported to Sentry (SENTRY_DSN is set)
  */
 public record SystemStatusResponse(
         String health,
@@ -24,5 +25,6 @@ public record SystemStatusResponse(
         @Nullable Boolean aiCircuitOpen,
         @Nullable Long aiCallsActive,
         @Nullable Long webSocketSessions,
-        @Nullable Boolean redisAvailable) {
+        @Nullable Boolean redisAvailable,
+        boolean errorReporting) {
 }

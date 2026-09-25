@@ -1,6 +1,7 @@
 package com.rideflow.service.ride;
 
 import com.rideflow.entity.OfferStatus;
+import com.rideflow.monitoring.RideMetrics;
 import com.rideflow.repository.RideOfferRepository;
 import com.rideflow.service.event.DomainEventPublisher;
 import com.rideflow.service.ride.event.RideOffersWithdrawnEvent;
@@ -21,10 +22,12 @@ public class RideOfferWithdrawal {
 
     private final RideOfferRepository offers;
     private final DomainEventPublisher events;
+    private final RideMetrics metrics;
 
-    public RideOfferWithdrawal(RideOfferRepository offers, DomainEventPublisher events) {
+    public RideOfferWithdrawal(RideOfferRepository offers, DomainEventPublisher events, RideMetrics metrics) {
         this.offers = offers;
         this.events = events;
+        this.metrics = metrics;
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -33,7 +36,7 @@ public class RideOfferWithdrawal {
         if (driverIds.isEmpty()) {
             return;
         }
-        offers.cancelPendingForRide(rideId, now);
+        metrics.offersClosed(OfferStatus.CANCELLED, offers.cancelPendingForRide(rideId, now));
         events.publish(new RideOffersWithdrawnEvent(rideId, driverIds));
     }
 }

@@ -1518,6 +1518,9 @@
             },
             "type" : "object"
           },
+          "errorReporting" : {
+            "type" : "boolean"
+          },
           "health" : {
             "type" : "string"
           },
@@ -1533,7 +1536,16 @@
             "type" : [ "integer", "null" ]
           }
         },
-        "required" : [ "components", "deadLettersByTopic", "health" ],
+        "required" : [ "components", "deadLettersByTopic", "errorReporting", "health" ],
+        "type" : "object"
+      },
+      "TestErrorResponse" : {
+        "properties" : {
+          "eventId" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "eventId" ],
         "type" : "object"
       },
       "Timestamps" : {
@@ -2356,6 +2368,25 @@
           }
         },
         "summary" : "Health, outbox backlog, dead letters, AI circuit and WebSocket sessions of this instance",
+        "tags" : [ "Admin: reports" ]
+      }
+    },
+    "/api/admin/system/test-error" : {
+      "post" : {
+        "operationId" : "testError",
+        "responses" : {
+          "202" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TestErrorResponse"
+                }
+              }
+            },
+            "description" : "Handed to Sentry; search for the event id there"
+          }
+        },
+        "summary" : "Report a deliberate test error to Sentry (409 ERROR_REPORTING_DISABLED without SENTRY_DSN)",
         "tags" : [ "Admin: reports" ]
       }
     },

@@ -154,6 +154,11 @@ class ReportingIT extends IntegrationTestContainers {
         assertThat(system.read("$.outboxPending", Integer.class)).isNotNull().isNotNegative();
         assertThat(system.read("$.webSocketSessions", Integer.class)).isNotNull();
         assertThat(system.read("$.aiCircuitOpen", Boolean.class)).isFalse();
+        // No SENTRY_DSN here, so there is nowhere to send a test error.
+        assertThat(system.read("$.errorReporting", Boolean.class)).isFalse();
+        MvcResult testError = api.call(fixtures.admin(), "POST", "/api/admin/system/test-error", null);
+        assertThat(testError.getResponse().getStatus()).isEqualTo(409);
+        assertThat(json(testError).read("$.code", String.class)).isEqualTo("ERROR_REPORTING_DISABLED");
     }
 
     @Test

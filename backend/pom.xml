@@ -26,6 +26,7 @@
         <resilience4j.version>2.4.0</resilience4j.version>
         <wiremock.version>3.13.2</wiremock.version>
         <jacoco.version>0.8.15</jacoco.version>
+        <sentry.version>8.58.0</sentry.version>
         <!-- Set by JaCoCo's prepare-agent goals; empty when JaCoCo is skipped (-Djacoco.skip=true). -->
         <jacocoUnitArgLine/>
         <jacocoItArgLine/>
@@ -123,6 +124,17 @@
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <!-- Error reporting: inert unless SENTRY_DSN is set; ERROR log events become Sentry events (logback) -->
+        <dependency>
+            <groupId>io.sentry</groupId>
+            <artifactId>sentry-spring-boot-4-starter</artifactId>
+            <version>${sentry.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.sentry</groupId>
+            <artifactId>sentry-logback</artifactId>
+            <version>${sentry.version}</version>
         </dependency>
 
         <!-- API docs -->

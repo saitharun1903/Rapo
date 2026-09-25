@@ -2,13 +2,16 @@ package com.rideflow.service.ride;
 
 import com.rideflow.entity.ActorType;
 import com.rideflow.entity.Ride;
+import com.rideflow.entity.RideStatus;
 import com.rideflow.entity.RideStatusEvent;
+import com.rideflow.monitoring.RideMetrics;
 import com.rideflow.repository.RideRepository;
 import com.rideflow.repository.RideStatusEventRepository;
 import com.rideflow.service.driver.DriverStateCache;
 import com.rideflow.service.event.DomainEventPublisher;
 import com.rideflow.service.ride.event.RideStatusChangedEvent;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -18,7 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Persists a status change together with its history row and domain event, in the caller's transaction.
  * Flushing first surfaces optimistic-lock conflicts immediately and yields the ride's new version. Once the
- * change commits, the ride's cached ETA is dropped and the cached state of the drivers involved is rewritten.
+ * change commits, the ride's cached ETA is dropped, the cached state of the drivers involved is rewritten and
+ * the change is counted.
  */
 @Component
 public class RideTransitionRecorder {
@@ -28,16 +32,18 @@ public class RideTransitionRecorder {
     private final DomainEventPublisher events;
     private final LiveEtaService liveEta;
     private final DriverStateCache driverStates;
+    private final RideMetrics metrics;
     private final Clock clock;
 
     public RideTransitionRecorder(RideRepository rides, RideStatusEventRepository statusEvents,
                                   DomainEventPublisher events, LiveEtaService liveEta,
-                                  DriverStateCache driverStates, Clock clock) {
+                                  DriverStateCache driverStates, RideMetrics metrics, Clock clock) {
         this.rides = rides;
         this.statusEvents = statusEvents;
         this.events = events;
         this.liveEta = liveEta;
         this.driverStates = driverStates;
+        this.metrics = metrics;
         this.clock = clock;
     }
 
@@ -51,6 +57,10 @@ public class RideTransitionRecorder {
                 saved.getPassengerId(), saved.getDriverId(), change.releasedDriverId(), actor, reason, now));
         liveEta.evictAfterCommit(saved.getId());
         driverStates.refreshAfterCommit(saved.getDriverId(), change.releasedDriverId());
+        metrics.rideEntered(change.to());
+        if (change.to() == RideStatus.DRIVER_ASSIGNED) {
+            metrics.rideMatched(Duration.between(saved.getRequestedAt(), now));
+        }
         return saved;
     }
 }

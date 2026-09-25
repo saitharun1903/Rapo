@@ -1,8 +1,12 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import * as Sentry from "@sentry/nextjs";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { Badge, Card, CardTitle, ErrorState, LoadingBlock, PageHeader, Stat, type Tone } from "@/components/ui/surface";
 import { api, unwrap } from "@/lib/api/client";
+import { errorMessage } from "@/lib/api/errors";
 import { formatTime } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 
@@ -12,6 +16,9 @@ const REFRESH_MS = REFRESH_SECONDS * 1_000;
 function healthTone(status: string): Tone {
   return status === "UP" ? "success" : status === "DOWN" || status === "OUT_OF_SERVICE" ? "danger" : "warning";
 }
+
+/** Its own message, so the issue is recognisable in Sentry and can be resolved without a second look. */
+const BROWSER_TEST_ERROR = "Deliberate test error from the RideFlow admin console (browser); safe to resolve";
 
 function flag(value: boolean | null | undefined, whenTrue: string, whenFalse: string): string {
   return value === null || value === undefined ? "Not reported" : value ? whenTrue : whenFalse;
@@ -23,6 +30,16 @@ export default function AdminSystemPage() {
     queryFn: () => unwrap(api.GET("/api/admin/system")),
     refetchInterval: REFRESH_MS,
   });
+  const backendTestError = useMutation({
+    mutationFn: () => unwrap(api.POST("/api/admin/system/test-error")),
+    onSuccess: ({ eventId }) => toast.success(`Backend test error sent to Sentry as event ${eventId}.`),
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+  const browserReporting = Sentry.getClient() !== undefined;
+  const sendBrowserTestError = () => {
+    const eventId = Sentry.captureException(new Error(BROWSER_TEST_ERROR));
+    toast.success(`Browser test error sent to Sentry as event ${eventId}.`);
+  };
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -64,6 +81,24 @@ export default function AdminSystemPage() {
                     ))}
                   </ul>
                 )}
+            </Card>
+            <Card>
+              <CardTitle>Error reporting</CardTitle>
+              <p className="text-sm text-fg-muted">
+                Errors go to Sentry with personal data and credentials removed. Send a test error to check that it
+                arrives, then search Sentry for the event id.
+              </p>
+              <ul className="mt-3 flex flex-col gap-3">
+                <li className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span>Backend <Badge tone={system.data.errorReporting ? "success" : "neutral"}>{system.data.errorReporting ? "On" : "Off: SENTRY_DSN not set"}</Badge></span>
+                  <Button size="sm" variant="secondary" disabled={!system.data.errorReporting} loading={backendTestError.isPending}
+                    onClick={() => backendTestError.mutate()}>Send backend test error</Button>
+                </li>
+                <li className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span>Browser <Badge tone={browserReporting ? "success" : "neutral"}>{browserReporting ? "On" : "Off: NEXT_PUBLIC_SENTRY_DSN not set"}</Badge></span>
+                  <Button size="sm" variant="secondary" disabled={!browserReporting} onClick={sendBrowserTestError}>Send browser test error</Button>
+                </li>
+              </ul>
             </Card>
           </div>
         </div>

@@ -94,6 +94,18 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+    distribution:
+      # Histogram buckets for the latencies the dashboards chart as percentiles; buckets (unlike client-side
+      # percentiles) can be aggregated across instances with histogram_quantile.
+      percentiles-histogram:
+        http.server.requests: true
+        rideflow.matching.duration: true
+        rideflow.ai.latency: true
+      # Matching runs up to max-rounds offer rounds and a local model may take its full timeout; the default
+      # upper bucket (30 s) would lump those together.
+      maximum-expected-value:
+        rideflow.matching.duration: 5m
+        rideflow.ai.latency: 2m
 
 springdoc:
   api-docs:
@@ -104,6 +116,19 @@ springdoc:
 logging:
   pattern:
     correlation: "[%X{traceId:-}] "
+
+# Error reporting. Without SENTRY_DSN (the default) nothing is sent anywhere. ERROR log events become Sentry
+# events and INFO+ ones their breadcrumbs; SentryScrubber strips personal data and credentials before sending.
+# Metrics and latency live in Prometheus, so Sentry tracing stays off.
+sentry:
+  dsn: ${SENTRY_DSN:}
+  environment: ${SENTRY_ENVIRONMENT:local}
+  send-default-pii: false
+  max-request-body-size: none
+  in-app-includes: com.rideflow
+  logging:
+    minimum-event-level: error
+    minimum-breadcrumb-level: info
 
 rideflow:
   security:

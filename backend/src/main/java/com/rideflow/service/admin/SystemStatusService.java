@@ -4,6 +4,7 @@ import com.rideflow.dto.admin.SystemStatusResponse;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.sentry.Sentry;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -56,7 +57,8 @@ public class SystemStatusService {
                 aiCircuit == null ? null : aiCircuit > 0,
                 whole(sum(AI_CALLS_ACTIVE)),
                 whole(sum(WS_SESSIONS)),
-                redis == null ? null : redis > 0);
+                redis == null ? null : redis > 0,
+                Sentry.isEnabled());
     }
 
     /** Sum over every tag combination (sessions are counted per role); {@code null} if not registered. */

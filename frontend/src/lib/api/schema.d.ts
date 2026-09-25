@@ -174,6 +174,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/system/test-error": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Report a deliberate test error to Sentry (409 ERROR_REPORTING_DISABLED without SENTRY_DSN) */
+        post: operations["testError"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/users": {
         parameters: {
             query?: never;
@@ -1431,12 +1448,16 @@ export interface components {
             deadLettersByTopic: {
                 [key: string]: number;
             };
+            errorReporting: boolean;
             health: string;
             /** Format: int64 */
             outboxPending?: number | null;
             redisAvailable?: boolean | null;
             /** Format: int64 */
             webSocketSessions?: number | null;
+        };
+        TestErrorResponse: {
+            eventId: string;
         };
         Timestamps: {
             /** Format: date-time */
@@ -1806,6 +1827,26 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["SystemStatusResponse"];
+                };
+            };
+        };
+    };
+    testError: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Handed to Sentry; search for the event id there */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TestErrorResponse"];
                 };
             };
         };

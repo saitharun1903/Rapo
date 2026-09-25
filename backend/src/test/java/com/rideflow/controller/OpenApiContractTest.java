@@ -8,6 +8,7 @@ import com.rideflow.config.OpenApiConfig;
 import com.rideflow.security.RefreshTokenCookies;
 import com.rideflow.service.admin.AdminReportService;
 import com.rideflow.service.admin.AdminRideService;
+import com.rideflow.service.admin.ErrorReportingService;
 import com.rideflow.service.admin.SystemStatusService;
 import com.rideflow.service.ai.TripInsightsService;
 import com.rideflow.service.audit.AuditService;
@@ -72,11 +73,12 @@ import tools.jackson.databind.json.JsonMapper;
 @MockitoBean(types = {
     AdminReportService.class, AdminRideService.class, AuditService.class, AuthService.class,
     DriverAdministrationService.class, DriverAvailabilityService.class, DriverEarningsService.class,
-    DriverLocationService.class, DriverOnboardingService.class, DriverRideService.class, FareQuoteService.class,
-    GeocodingService.class, NearbyDriverService.class, NotificationService.class, OfferQueryService.class,
-    RatingService.class, RefreshTokenCookies.class, RideBookingService.class, RideCancellationService.class,
-    RideQueryService.class, RideTrackingService.class, RouteService.class, SystemStatusService.class,
-    TripInsightsService.class, UserAdministrationService.class, UserService.class})
+    DriverLocationService.class, DriverOnboardingService.class, DriverRideService.class,
+    ErrorReportingService.class, FareQuoteService.class, GeocodingService.class, NearbyDriverService.class,
+    NotificationService.class, OfferQueryService.class, RatingService.class, RefreshTokenCookies.class,
+    RideBookingService.class, RideCancellationService.class, RideQueryService.class, RideTrackingService.class,
+    RouteService.class, SystemStatusService.class, TripInsightsService.class, UserAdministrationService.class,
+    UserService.class})
 class OpenApiContractTest {
 
     private static final Path CONTRACT = Path.of("..", "docs", "openapi.json");

@@ -5,6 +5,7 @@ import com.rideflow.entity.ActorType;
 import com.rideflow.entity.OfferStatus;
 import com.rideflow.entity.Ride;
 import com.rideflow.entity.RideStatus;
+import com.rideflow.monitoring.RideMetrics;
 import com.rideflow.repository.DriverLocationRepository;
 import com.rideflow.repository.NearbyDriver;
 import com.rideflow.repository.RideOfferRepository;
@@ -41,12 +42,13 @@ public class DriverMatchingService {
     private final RideTransitionRecorder recorder;
     private final DomainEventPublisher events;
     private final ProcessedEvents processedEvents;
+    private final RideMetrics metrics;
     private final MatchingProperties properties;
     private final Clock clock;
 
     public DriverMatchingService(RideRepository rides, RideOfferRepository offers,
                                  DriverLocationRepository driverLocations, RideTransitionRecorder recorder,
-                                 DomainEventPublisher events, ProcessedEvents processedEvents,
+                                 DomainEventPublisher events, ProcessedEvents processedEvents, RideMetrics metrics,
                                  MatchingProperties properties, Clock clock) {
         this.rides = rides;
         this.offers = offers;
@@ -54,6 +56,7 @@ public class DriverMatchingService {
         this.recorder = recorder;
         this.events = events;
         this.processedEvents = processedEvents;
+        this.metrics = metrics;
         this.properties = properties;
         this.clock = clock;
     }
@@ -84,7 +87,7 @@ public class DriverMatchingService {
         if (offers.existsByRideIdAndStatusAndExpiresAtAfter(rideId, OfferStatus.PENDING, now)) {
             return;
         }
-        offers.expireOverdueForRide(rideId, now);
+        metrics.offersClosed(OfferStatus.EXPIRED, offers.expireOverdueForRide(rideId, now));
 
         int round = ride.getMatchingRound() + 1;
         if (round > properties.maxRounds()) {
@@ -117,6 +120,7 @@ public class DriverMatchingService {
 
         log.info("Ride {} round {} (radius {} m): {} candidates, offered to {}",
                 rideId, round, radius, candidates.size(), offeredTo.size());
+        metrics.offersCreated(offeredTo.size());
         if (!offeredTo.isEmpty()) {
             events.publish(new RideOffersCreatedEvent(rideId, round, offeredTo, expiresAt));
         }
