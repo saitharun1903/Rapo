@@ -63,8 +63,14 @@ npm run dev                       # http://localhost:3000
 
 The browser calls `/api/*` on the frontend's own origin and Next forwards it to `BACKEND_URL`
 (default `http://localhost:8080`), so the refresh cookie stays first-party. The WebSocket goes straight to
-`NEXT_PUBLIC_WS_URL` (default `ws://localhost:8080/ws`); the backend's `CORS_ALLOWED_ORIGINS` must include
-the frontend's origin. Other optional variables: `NEXT_PUBLIC_MAP_STYLE_URL` (default OpenFreeMap, no key),
+`NEXT_PUBLIC_WS_URL` (default `ws://localhost:8080/ws`). The backend's `CORS_ALLOWED_ORIGINS` must include
+the frontend's origin, for the WebSocket and for writes through the rewrite. The backend ignores the rewrite's
+forwarding headers, so it checks the browser's `Origin` against that list. Leave `TRUSTED_PROXIES` empty
+locally: Next passes a browser's `X-Forwarded-For` on unchanged, so trusting it would let any caller pick its
+rate-limit address (architecture.md §9). Deployed behind an edge that overwrites the client address (Vercel),
+set `CLIENT_IP_SIGNING_SECRET` (the backend's value) and `CLIENT_IP_SOURCE_HEADER=x-vercel-forwarded-for` in
+the frontend's server environment. `src/proxy.ts` then signs each browser's address for the backend. Leave both
+unset locally: without an edge there is no trustworthy address to sign. Other optional variables: `NEXT_PUBLIC_MAP_STYLE_URL` (default OpenFreeMap, no key),
 `NEXT_PUBLIC_MAP_CENTER_LAT` / `_LNG`.
 
 ### Driver simulator (demo only)
@@ -102,6 +108,9 @@ integration tests, so it is off locally unless asked for: `./mvnw verify -Pcover
 |---|---|
 | `ArchitectureTest` | Layering rules: controllers never touch repositories/entities, no transactional controllers, etc. |
 | `*WebTest` | HTTP contract: status codes, `ApiError` shape, validation, role rules, security headers, cookies |
+| `ForwardedHeadersTest` | On a real Tomcat with `application.yml`'s server settings (no Docker): forwarding headers from an untrusted peer change nothing; behind a trusted proxy the client is the right-most untrusted hop |
+| `RateLimitIT` | Limits against real Redis; over real HTTP, a new forged `X-Forwarded-For` per request still hits the login and registration limits, and forwarded writes are checked against `CORS_ALLOWED_ORIGINS`. Browsers the frontend signs for get their own buckets; claims signed with another secret do not |
+| `SignedClientIp*Test`, `ClientIpConfigTest` | The signature format (the same vector as the frontend's `clientIp.test.ts`), expiry both ways, malformed input, and that the filter only ever narrows trust |
 | `*Test` (service/entity) | Business rules: refresh rotation and reuse detection, driver verification transitions, normalisation |
 | `SchemaMigrationIT` | Flyway migrations apply, Hibernate mappings validate, DB constraints enforce invariants |
 | `AuthAndOnboardingFlowIT` | End-to-end: register → login → refresh rotation → reuse detection; driver onboarding → admin verification; suspension |
@@ -210,6 +219,9 @@ startup if one is missing.
 | `REFRESH_COOKIE_SAME_SITE` | no | `Lax` | `None` (with Secure) if the frontend is on a different site than the API |
 | `BCRYPT_STRENGTH` | no | `12` | BCrypt cost factor |
 | `CORS_ALLOWED_ORIGINS` | no | `http://localhost:3000` | Comma-separated browser origins allowed to call the API |
+| `TRUSTED_PROXIES` | no | (empty: none) | Comma-separated CIDR ranges of reverse proxies in front of the backend, e.g. `10.0.0.0/8,172.16.0.0/12`; one address is `10.1.2.3/32`. Only connections from these may set the client address, scheme, host and port with `X-Forwarded-For`/`-Proto`/`-Host`/`-Port`. The client is the right-most `X-Forwarded-For` hop outside the list. List a proxy only if it overwrites or appends `X-Forwarded-For`, and never the Next.js frontend on its own (architecture.md §9). A value without `/` is read as a regular expression |
+| `CLIENT_IP_SIGNING_SECRET` | no | (empty: off) | HMAC key, at least 32 bytes (`openssl rand -base64 48`), shared by the backend and the frontend's server. With it, the frontend signs each browser's address and the backend keys per-IP limits on it (architecture.md §9). Never commit it; changing it means redeploying both |
+| `CLIENT_IP_SOURCE_HEADER` | frontend, with the secret | — | The request header the hosting edge overwrites with the browser's address: `x-vercel-forwarded-for` on Vercel. Never a header the browser can set. The frontend refuses to serve `/api` with only one of the two set |
 | `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` | no | — | Creates the first admin at startup if none exists |
 | `DEMO_USER_PASSWORD` | **yes** with `demo` | — | Password for all seed accounts (hashed inside PostgreSQL; must not contain `'`) |
 | `SERVER_PORT` | no | `8080` | API port |

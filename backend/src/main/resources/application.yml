@@ -69,7 +69,17 @@ server:
   error:
     include-stacktrace: never
     include-message: never
-  forward-headers-strategy: framework
+  # Forwarding headers (X-Forwarded-For/-Proto/-Host/-Port) are applied by Tomcat's RemoteIpValve, and only on
+  # connections from TRUSTED_PROXIES. The client address is then the right-most X-Forwarded-For hop that is not
+  # a trusted proxy. From anyone else the headers are ignored, so a caller cannot choose its own address for the
+  # per-IP rate limits, or its scheme and host for CORS and the WebSocket Origin check. RFC 7239 "Forwarded" is
+  # never read. See docs/architecture.md section 9.
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      # Comma-separated CIDR ranges of reverse proxies that overwrite or append X-Forwarded-For. Empty trusts
+      # none. Never list the Next.js frontend alone: its /api rewrite passes the browser's header on unchanged.
+      internal-proxies: ${TRUSTED_PROXIES:}
 
 management:
   server:
@@ -123,6 +133,12 @@ rideflow:
       cookie-secure: ${REFRESH_COOKIE_SECURE:true}
       cookie-same-site: ${REFRESH_COOKIE_SAME_SITE:Lax}
       cookie-path: /api/auth
+    # The browser address the frontend signs for the requests it forwards (architecture.md section 9). Empty
+    # turns it off; the same value goes in the frontend's environment.
+    client-ip:
+      signing-secret: ${CLIENT_IP_SIGNING_SECRET:}
+      # Replay window and clock skew between frontend and backend, either way.
+      max-age: 60s
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
   # Rate card (INR). Bump "version" whenever rates change; it is stored with every fare.
