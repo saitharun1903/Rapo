@@ -15,12 +15,18 @@ import com.rideflow.support.RideFixtures.Actor;
 import com.rideflow.support.RideTestConfig;
 import com.rideflow.support.StubProvidersConfig;
 import com.rideflow.support.StubProvidersConfig.CountingGeocoder;
+import com.rideflow.security.SignedClientIp;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,6 +50,7 @@ import org.springframework.test.web.servlet.MvcResult;
     "rideflow.rate-limit.enabled=true",
     "rideflow.rate-limit.rules.LOGIN.limit=" + RateLimitIT.LOGIN_LIMIT,
     "rideflow.rate-limit.rules.REGISTER.limit=" + RateLimitIT.REGISTER_LIMIT,
+    "rideflow.security.client-ip.signing-secret=" + RateLimitIT.CLIENT_IP_SECRET,
     // A long window keeps the upstream test independent of how fast the CI runner is.
     "rideflow.rate-limit.rules.GEOCODING_UPSTREAM.window=1m"
 })
@@ -65,6 +72,10 @@ class RateLimitIT extends IntegrationTestContainers {
     /** The default CORS_ALLOWED_ORIGINS, and the frontend's host as its /api rewrite reports it. */
     private static final String FRONTEND_ORIGIN = "http://localhost:3000";
     private static final String FRONTEND_HOST = "localhost:3000";
+    /** What the frontend's proxy.ts shares with the backend (CLIENT_IP_SIGNING_SECRET). */
+    static final String CLIENT_IP_SECRET = "rate-limit-it-client-ip-signing-secret-0123456789";
+    private static final String BROWSER_IP = "198.51.100.21";
+    private static final String OTHER_BROWSER_IP = "198.51.100.22";
 
     @LocalServerPort
     private int port;
@@ -80,6 +91,8 @@ class RateLimitIT extends IntegrationTestContainers {
     private StringRedisTemplate redis;
     @Autowired
     private CountingGeocoder geocoder;
+    @Autowired
+    private Clock clock;
 
     @BeforeEach
     void setUp() {
@@ -139,6 +152,16 @@ class RateLimitIT extends IntegrationTestContainers {
 
     private static Map<String, String> claimingToBe(int client) {
         return Map.of("X-Forwarded-For", FORGED_IP_PREFIX + client);
+    }
+
+    /** The headers the frontend's proxy.ts adds, signed independently of the code under test. */
+    private Map<String, String> vouchedForBy(String secret, String ip) throws Exception {
+        long seconds = clock.instant().getEpochSecond();
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+        byte[] signature = mac.doFinal(("v1\n" + seconds + "\n" + ip).getBytes(StandardCharsets.UTF_8));
+        return Map.of(SignedClientIp.IP_HEADER, ip, SignedClientIp.SIGNATURE_HEADER,
+                "v1." + seconds + "." + Base64.getUrlEncoder().withoutPadding().encodeToString(signature));
     }
 
     private static void assertRateLimited(MvcResult result, long maxRetryAfterSeconds) throws Exception {
@@ -233,6 +256,41 @@ class RateLimitIT extends IntegrationTestContainers {
                 Map.of(HttpHeaders.ORIGIN, "https://evil.example", "X-Forwarded-Host", "evil.example",
                         "X-Forwarded-Proto", "https", "X-Forwarded-Port", "443"));
         assertThat(fromForeignSite.statusCode()).as(fromForeignSite.body()).isEqualTo(403);
+    }
+
+    /**
+     * Two browsers behind the same frontend: the backend sees one peer, but the frontend signs each browser's
+     * address, so one browser using up an account's attempts does not lock the other out.
+     */
+    @Test
+    void addressesSignedByTheFrontendGetTheirOwnBuckets() throws Exception {
+        String email = existingUser();
+        for (int attempt = 0; attempt < LOGIN_LIMIT; attempt++) {
+            HttpResponse<String> wrong = postOverHttp("/api/auth/login",
+                    loginBody(email, "Wrong-password-" + attempt), vouchedForBy(CLIENT_IP_SECRET, BROWSER_IP));
+            assertThat(wrong.statusCode()).as(wrong.body()).isEqualTo(401);
+        }
+        assertRateLimited(postOverHttp("/api/auth/login", loginBody(email, PASSWORD),
+                vouchedForBy(CLIENT_IP_SECRET, BROWSER_IP)), LOGIN_WINDOW_SECONDS);
+
+        HttpResponse<String> otherBrowser = postOverHttp("/api/auth/login", loginBody(email, PASSWORD),
+                vouchedForBy(CLIENT_IP_SECRET, OTHER_BROWSER_IP));
+        assertThat(otherBrowser.statusCode()).as(otherBrowser.body()).isEqualTo(200);
+    }
+
+    /** Without the secret, a caller's claims all land in the bucket of the address it connects from. */
+    @Test
+    void addressesSignedWithoutTheSecretAreIgnored() throws Exception {
+        String email = existingUser();
+        String wrongSecret = "not-the-frontends-secret-but-just-as-long-0123456789";
+        int claimed = 0;
+        for (int attempt = 0; attempt < LOGIN_LIMIT; attempt++) {
+            HttpResponse<String> wrong = postOverHttp("/api/auth/login", loginBody(email, "Wrong-password-" + attempt),
+                    vouchedForBy(wrongSecret, FORGED_IP_PREFIX + ++claimed));
+            assertThat(wrong.statusCode()).as(wrong.body()).isEqualTo(401);
+        }
+        assertRateLimited(postOverHttp("/api/auth/login", loginBody(email, PASSWORD),
+                vouchedForBy(wrongSecret, FORGED_IP_PREFIX + ++claimed)), LOGIN_WINDOW_SECONDS);
     }
 
     @Test

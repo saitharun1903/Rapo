@@ -430,7 +430,19 @@ Limits return `429 RATE_LIMITED` with `Retry-After`. A busy geocoding budget ret
   - Trust is by address, so every trusted proxy needs a stable range.
 - **Consequence for the frontend hop.** Trusting the Next server would only hand the backend the browser's own header, so it must not be listed on its own. Browser REST calls through it are keyed on the frontend server's address. Every browser then shares that address's REGISTER budget and each email's LOGIN budget: limits fail tight, not open.
   - This already held for honest browsers, which Next never identified. It changes a deployment where an edge in front of Next (for example Vercel's) supplies the real client address.
-  - Per-browser limits behind the frontend need that edge to overwrite `X-Forwarded-For` and to reach the backend from ranges listed in `TRUSTED_PROXIES`. Otherwise the frontend must forward the client address in a header the backend can authenticate (not built).
+  - Per-browser limits behind the frontend come from the signed client address below. The alternative, an edge that overwrites `X-Forwarded-For` and reaches the backend from ranges in `TRUSTED_PROXIES`, needs static egress addresses, which Vercel's functions do not have.
+
+**Signed client address (per-browser limits behind the frontend).** The frontend vouches for the browser's address with a shared secret, so trust no longer depends on where the frontend connects from.
+
+- **Frontend (`frontend/src/proxy.ts`, Next 16 Proxy, before the `/api` rewrite).** It removes any `X-RideFlow-Client-IP` and `X-RideFlow-Client-IP-Signature` the browser sent. When `CLIENT_IP_SIGNING_SECRET` and `CLIENT_IP_SOURCE_HEADER` are set, it reads the browser's address from that header and adds both headers.
+  - The source header must be one the hosting edge overwrites. On Vercel that is `x-vercel-forwarded-for`: Vercel overwrites `X-Forwarded-For` to prevent spoofing, and this copy survives a proxy in front of Vercel.
+  - A value that is not exactly one IP address is not signed.
+- **Signature.** `v1.<unix seconds>.<base64url HMAC-SHA256 over "v1\n<seconds>\n<ip>">`. The frontend (`lib/clientIp.ts`) and the backend (`SignedClientIp`) tests pin the same vector.
+- **Backend (`SignedClientIpFilter`, after `RequestIdFilter`, before Spring Security).** A valid signature within `max-age` (60 s, either way, which bounds replay and clock skew) makes the signed address the request's remote address.
+  - Anything else leaves the address as Tomcat resolved it: a failed check never widens trust.
+  - Outcomes are counted in `rideflow_client_ip_signatures_total{result=valid|malformed|bad_signature|expired}`. A steady `bad_signature` or `expired` count means the secrets differ or the clocks drift.
+  - Off unless `CLIENT_IP_SIGNING_SECRET` is set (at least 32 bytes, checked at startup on both sides).
+- **What it does not cover.** The WebSocket and direct callers (the simulator) reach the backend without the frontend. They keep the Tomcat-resolved address, which is fine because only REST is rate limited per IP. Anyone holding the secret can claim any address, so it is a credential like `JWT_SECRET`: rotate it by redeploying both sides.
 
 **Failure behaviour (D22).**
 - **Caches:** fall back to computing the value.
@@ -443,6 +455,7 @@ Limits return `429 RATE_LIMITED` with `Retry-After`. A busy geocoding budget ret
 - `rideflow_cache_requests_total{cache, result=hit|miss|error|bypass}`
 - `rideflow_ratelimit_rejected_total{scope}`
 - `rideflow_ratelimit_errors_total`
+- `rideflow_client_ip_signatures_total{result}`
 - `rideflow_redis_available`
 
 Redis command latency dashboards are Phase 11.
@@ -771,7 +784,7 @@ flowchart LR
     PR["Prometheus + Grafana<br/>Grafana Cloud free tier or self-hosted"] -->|scrape| BE
 ```
 
-All endpoints and credentials come from environment variables. There is no provider-specific code. `TRUSTED_PROXIES` lists the address ranges of any load balancer or edge in front of the backend. Without it, TLS termination at a proxy is invisible to the backend (`isSecure()` false, no HSTS), and per-IP limits key on the proxy (§9). Candidate free or low-cost services are listed in `docs/deployment.md` (Phase 14) with their availability verified at deploy time.
+All endpoints and credentials come from environment variables. There is no provider-specific code. `TRUSTED_PROXIES` lists the address ranges of any load balancer or edge in front of the backend. Without it, TLS termination at a proxy is invisible to the backend (`isSecure()` false, no HSTS), and per-IP limits key on the proxy (§9). With the frontend on Vercel, set the same `CLIENT_IP_SIGNING_SECRET` on both and `CLIENT_IP_SOURCE_HEADER=x-vercel-forwarded-for` on the frontend, so per-IP limits key on the browser (§9). Candidate free or low-cost services are listed in `docs/deployment.md` (Phase 14) with their availability verified at deploy time.
 
 ---
 
