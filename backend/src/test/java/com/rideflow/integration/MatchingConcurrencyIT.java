@@ -37,7 +37,10 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-/** Races and time-driven matching: simultaneous accepts, offer expiry, radius growth and ride expiry. */
+/**
+ * Races and time-driven matching: simultaneous accepts, offer expiry, radius growth, ride expiry, and drivers
+ * going offline with an offer open or a trip under way.
+ */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -179,5 +182,51 @@ class MatchingConcurrencyIT extends IntegrationTestContainers {
                 .isEqualTo(204);
 
         await().atMost(AWAIT).until(() -> api.openOfferCount(other) == 1);
+    }
+
+    @Test
+    void aDriverGoingOfflineGivesUpTheirOfferAndTheRideMovesOn() throws Exception {
+        Actor passenger = fixtures.passenger();
+        Actor leaving = fixtures.verifiedDriver(VehicleCategory.ECONOMY);
+        api.goOnline(leaving, offset(HITECH_CITY, 100, 0));
+        UUID rideId = api.book(passenger, HITECH_CITY, HUSSAIN_SAGAR);
+        await().atMost(AWAIT).until(() -> api.openOfferCount(leaving) == 1);
+        Actor other = fixtures.verifiedDriver(VehicleCategory.ECONOMY);
+        api.goOnline(other, offset(HITECH_CITY, 200, 0));
+
+        MvcResult offline = api.call(leaving, "POST", "/api/drivers/offline", null);
+
+        assertThat(offline.getResponse().getStatus()).isEqualTo(200);
+        assertThat(JsonPath.<String>read(body(offline), "$.availability")).isEqualTo("OFFLINE");
+        assertThat(api.openOfferCount(leaving)).isZero();
+        assertThat(jdbc.queryForObject("SELECT status FROM ride_offers WHERE ride_id = ? AND driver_id = ?",
+                String.class, rideId, leaving.id())).isEqualTo("CANCELLED");
+
+        // The round has no open offer left, so the sweeper starts the next one once the offer time is up.
+        clock.advance(PAST_OFFER_TTL);
+        api.reportLocation(other, offset(HITECH_CITY, 200, 0), clock.instant());
+        kafka.awaitIdle();
+        sweeper.sweep();
+
+        assertThat(api.openOfferCount(other)).isEqualTo(1);
+        assertThat(rideStatus(rideId)).isEqualTo("MATCHING");
+    }
+
+    @Test
+    void aDriverOnATripCannotGoOffline() throws Exception {
+        Actor passenger = fixtures.passenger();
+        Actor driver = fixtures.verifiedDriver(VehicleCategory.ECONOMY);
+        api.goOnline(driver, offset(HITECH_CITY, 100, 0));
+        UUID rideId = api.book(passenger, HITECH_CITY, HUSSAIN_SAGAR);
+        await().atMost(AWAIT).until(() -> api.openOfferCount(driver) == 1);
+        assertThat(api.call(driver, "POST", "/api/rides/" + rideId + "/accept", null).getResponse().getStatus())
+                .isEqualTo(200);
+
+        MvcResult offline = api.call(driver, "POST", "/api/drivers/offline", null);
+
+        assertThat(offline.getResponse().getStatus()).isEqualTo(409);
+        assertThat(JsonPath.<String>read(body(offline), "$.code")).isEqualTo("DRIVER_ON_TRIP");
+        assertThat(jdbc.queryForObject("SELECT availability FROM drivers WHERE id = ?", String.class, driver.id()))
+                .isEqualTo("ON_TRIP");
     }
 }

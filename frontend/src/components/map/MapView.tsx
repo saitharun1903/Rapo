@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import { Car } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Map, { Layer, Marker, NavigationControl, Source, type MapLayerMouseEvent, type MapRef } from "react-map-gl/maplibre";
 import type { GeoPoint } from "@/lib/api/types";
 import { config } from "@/lib/config";
@@ -60,6 +60,8 @@ export default function MapView({ label, center = config.mapCenter, pickup, drop
                                   fitTo = [], onPick, className }: MapViewProps) {
   const mapRef = useRef<MapRef>(null);
   const colors = useTokenColors();
+  // True once MapLibre has drawn the style and tiles for the first time; exposed as data-drawn for tests.
+  const [drawn, setDrawn] = useState(false);
   const fitKey = fitTo.map((point) => `${point.lat.toFixed(5)},${point.lng.toFixed(5)}`).join("|");
 
   useEffect(() => {
@@ -88,9 +90,9 @@ export default function MapView({ label, center = config.mapCenter, pickup, drop
   const onClick = (event: MapLayerMouseEvent) => onPick?.({ lat: event.lngLat.lat, lng: event.lngLat.lng });
 
   return (
-    <div role="region" aria-label={label} className={clsx("relative size-full min-h-72", className)}>
+    <div role="region" aria-label={label} data-drawn={drawn} className={clsx("relative size-full min-h-72", className)}>
       <Map ref={mapRef} mapStyle={config.mapStyleUrl} initialViewState={{ latitude: center.lat, longitude: center.lng, zoom: DEFAULT_ZOOM }}
-        onClick={onPick ? onClick : undefined} cursor={onPick ? "crosshair" : undefined} style={{ position: "absolute", inset: 0 }}>
+        onIdle={() => setDrawn(true)} onClick={onPick ? onClick : undefined} cursor={onPick ? "crosshair" : undefined} style={{ position: "absolute", inset: 0 }}>
         <NavigationControl position="bottom-right" showCompass={false} />
         {routeData && (
           <Source id="route" type="geojson" data={routeData}>

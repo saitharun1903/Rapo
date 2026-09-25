@@ -72,17 +72,36 @@ export async function clickMap(page: Page, mapName: string, x: number, y: number
   await map.click({ position: { x: box.width * x, y: box.height * y } });
 }
 
-/** Map tiles and markers have no DOM signal for "drawn"; this is how long a capture waits for them. */
-const CAPTURE_SETTLE_MS = 2_500;
+/** How long a capture waits for MapLibre to draw its first frame of style and tiles (data-drawn on the map). */
+const MAP_DRAWN_TIMEOUT_MS = 20_000;
+/** Markers and a route layer can follow the first frame; a short pause lets them settle. */
+const CAPTURE_SETTLE_MS = 1_000;
 
 /**
  * Saves what the page shows as SCREENSHOTS_DIR/<name>.png, for the README. The e2e workflow sets the directory,
- * so every screenshot comes from a passing run against the compose stack; without it this does nothing.
+ * so every screenshot comes from a passing run against the compose stack; without it this does nothing. A map
+ * that never finishes drawing does not fail the test (it says nothing about the app); it becomes a CI warning
+ * with the browser's WebGL renderer, and the screenshot is still taken.
  */
 export async function capture(page: Page, name: string, options: { fullPage?: boolean } = {}): Promise<void> {
   const directory = process.env.SCREENSHOTS_DIR;
   if (!directory) {
     return;
+  }
+  const maps = page.locator("[data-drawn]");
+  if (await maps.count() > 0) {
+    const started = Date.now();
+    try {
+      await expect(maps.first()).toHaveAttribute("data-drawn", "true", { timeout: MAP_DRAWN_TIMEOUT_MS });
+      console.log(`::notice title=Map in ${name}::drawn after ${Date.now() - started} ms`);
+    } catch {
+      const renderer = await page.evaluate(() => {
+        const canvas = document.createElement("canvas");
+        const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+        return gl ? String(gl.getParameter(gl.RENDERER)) : "no WebGL context";
+      });
+      console.log(`::warning title=Map in ${name}::not drawn within ${MAP_DRAWN_TIMEOUT_MS} ms; WebGL renderer: ${renderer}`);
+    }
   }
   await page.waitForTimeout(CAPTURE_SETTLE_MS);
   await page.screenshot({ path: path.join(directory, `${name}.png`), fullPage: options.fullPage ?? false });
