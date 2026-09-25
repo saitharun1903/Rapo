@@ -790,18 +790,22 @@ The public OSRM and Nominatim instances are for light development use only; the 
 
 ```mermaid
 flowchart LR
-    U["Users"] --> V["Vercel<br/>Next.js frontend"]
-    U -->|REST + WSS| BE["Container host<br/>backend Docker image"]
-    BE --> MPG[("Managed PostgreSQL with PostGIS")]
-    BE --> MR[("Managed Redis, TLS")]
-    BE --> MK[["Managed Kafka-compatible service, SASL/TLS"]]
-    BE --> LLM["External LLM API"]
-    BE -.-> SEN["Sentry"]
+    U["Users"] -->|"pages, REST via /api rewrite"| V["Vercel<br/>Next.js frontend"]
+    V -->|HTTPS| BE["Render free plan<br/>backend image from GHCR"]
+    U -->|WSS| BE
+    BE --> MPG[("Neon: PostgreSQL + PostGIS, TLS")]
+    BE --> MR[("Upstash Redis, TLS")]
+    BE --> MK[["Redpanda Serverless, SASL_SSL/SCRAM"]]
+    BE -.-> SEN["Sentry (optional)"]
     V -.-> SEN
-    PR["Prometheus + Grafana<br/>Grafana Cloud free tier or self-hosted"] -->|scrape| BE
 ```
 
-All endpoints and credentials come from environment variables. There is no provider-specific code. Candidate free or low-cost services are listed in `docs/deployment.md` (Phase 14) with their availability verified at deploy time.
+All endpoints and credentials come from environment variables, and there is no provider-specific code: the
+same image runs in compose and on Render, and the managed services differ only in TLS and SASL settings
+(`REDIS_SSL_ENABLED`, `KAFKA_SECURITY_PROTOCOL` and the SCRAM credentials). The backend serves status-only
+`/livez` and `/readyz` on its public port for hosts that can probe only that port; the actuator stays on the
+management port. [deployment.md](deployment.md) has the setup, the free-tier limits as checked, and their
+trade-offs: Kafka is a 30-day trial, the backend sleeps when idle, and there is no metrics scraping.
 
 ---
 

@@ -193,10 +193,11 @@ backend and simulator you run on the host.
 |---|---|---|
 | `backend-ci` | changes to `backend/` or the API contract | Build, unit, web and ArchUnit tests, integration tests on Testcontainers, merged coverage with a gate on the service layer |
 | `frontend-ci` | changes to `frontend/`, `simulator/` or the API contract | Generated API types match `docs/openapi.json`, ESLint, `tsc`, Vitest with coverage, production build; simulator typecheck and tests |
-| `e2e` | changes to any app, the compose file or `infrastructure/` | The compose stack from a clean checkout, the Playwright suite, every Grafana panel; on `main`, publishes the tested images to GHCR |
+| `e2e` | changes to any app, the compose file or `infrastructure/` | The compose stack from a clean checkout, the Playwright suite, every Grafana panel; on `main`, publishes the tested images to GHCR and deploys the backend image ([deployment.md](deployment.md#updates-and-rollback)) |
 | `secret-scan` | every push and pull request | gitleaks over the whole history |
 | `load-test` | changes to `load-tests/scenarios/`, or by hand | k6 scenarios at 10/50/100 VUs ([performance.md](performance.md)) |
 | `cache-benchmark` | changes to `load-tests/cache-benchmark/`, or by hand | Cache on/off comparison |
+| `free-tier-fit` | changes to `render.yaml`, `infrastructure/free-tier/` or the backend Dockerfile, or by hand | The backend at 512 MB and 0.1 CPU with the Blueprint's settings: startup time, peak memory, login and whole rides ([deployment.md](deployment.md#measured)) |
 
 Dependabot opens weekly update pull requests (`.github/dependabot.yml`), which go through the same checks.
 `python scripts/ci_status.py [commit]` shows every run for a commit once, without waiting; a workflow with
@@ -211,7 +212,8 @@ fixture, say) is accepted by adding its fingerprint, printed by the scan and by 
 `ghcr.io/saitharun1903/rideflow-{backend,frontend,simulator}` with the commit SHA and `latest`. The backend
 and simulator images take all settings from the environment. The frontend image is built for the compose
 stack's URLs, so a deployment builds its own:
-`docker build --build-arg BACKEND_URL=... --build-arg NEXT_PUBLIC_WS_URL=... frontend`.
+`docker build --build-arg BACKEND_URL=... --build-arg NEXT_PUBLIC_WS_URL=... frontend`. The public
+deployment builds the frontend on Vercel instead ([deployment.md](deployment.md)).
 
 ## Environment variables
 
@@ -244,6 +246,10 @@ startup if one is missing.
 | `KAFKA_BOOTSTRAP_SERVERS` | no | `localhost:29092` | Kafka brokers for the backend |
 | `KAFKA_TOPIC_PREFIX` | no | (empty) | Prepended to every topic and consumer group, to share one cluster between environments |
 | `KAFKA_REPLICATION_FACTOR` | no | `1` | Replication of the declared topics; at least 3 on a real cluster |
+| `KAFKA_PARTITIONS` | no | `3` | Partitions of every topic and its dead-letter topic (managed services bill per partition) |
+| `KAFKA_SECURITY_PROTOCOL` | no | `PLAINTEXT` | `SASL_SSL` for a managed broker ([deployment.md](deployment.md)) |
+| `KAFKA_SASL_MECHANISM` | no | `SCRAM-SHA-256` | SASL mechanism, used only with a SASL protocol |
+| `KAFKA_USERNAME` / `KAFKA_PASSWORD` | no | (empty) | SCRAM credentials of a managed broker; letters and digits only in the password |
 | `REPORTING_TIME_ZONE` | no | `Asia/Kolkata` | Zone in which earnings and admin analytics cut hour and day buckets |
 | `AI_PROVIDER` | no | `disabled` | `local` (Ollama), `external` (Anthropic API) or `disabled`; trips still get their computed observations when disabled |
 | `AI_LOCAL_BASE_URL` | no | `http://localhost:11434` | Ollama server |
