@@ -150,6 +150,11 @@ jobs:
           echo "--- simulator (last 100 lines)"; tail -n 100 simulator.log
           echo "::warning title=Backend warnings and errors::$(grep -E ' (WARN|ERROR) ' backend.log | tail -n 25 | encode)"
           echo "::warning title=Simulator log::$(tail -n 25 simulator.log | encode)"
+          # What each failed test's page showed: Playwright's accessibility snapshot at the moment it failed.
+          for context in frontend/test-results/*/error-context.md; do
+            [ -f "$context" ] || continue
+            echo "::warning title=Page at failure: $(basename "$(dirname "$context")" | cut -c1-60)::$(encode < "$context")"
+          done
           python3 .github/scripts/thread_dump_summary.py backend.log
 
       - name: Upload the Playwright report
