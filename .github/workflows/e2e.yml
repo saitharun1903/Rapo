@@ -132,6 +132,22 @@ jobs:
           done
           echo "::notice title=Published images::$published (also tagged latest)"
 
+      # The deployed backend (render.yaml) runs the image just published, by its commit tag rather than latest.
+      # The hook URL is a secret of this repository; until it is set, the step says so and deploys nothing.
+      - name: Deploy the backend
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "::notice title=Backend deploy::Not requested: the RENDER_DEPLOY_HOOK_URL secret is not set (docs/deployment.md)"
+            exit 0
+          fi
+          owner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          image="ghcr.io/$owner/rideflow-backend:$GITHUB_SHA"
+          curl -fsS --get --data-urlencode "imgURL=$image" -o /dev/null "$RENDER_DEPLOY_HOOK_URL"
+          echo "::notice title=Backend deploy::Render deploy requested for $image"
+
       # A backend that is slow or stuck: SIGQUIT makes the JVM print a thread dump to its log (the JRE image has
       # no jcmd), which is condensed into annotations with the recent warnings and the simulator's log.
       - name: Diagnose a failure

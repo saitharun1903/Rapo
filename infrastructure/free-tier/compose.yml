@@ -1,0 +1,14 @@
+# The backend at the free container host's size (render.yaml): 512 MB with no swap and a tenth of a CPU, with
+# the JVM, pool and topic settings of the Blueprint. Used on top of docker-compose.yml by the free-tier-fit
+# workflow, which copies those settings from render.yaml into .env.
+services:
+  backend:
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 0.1
+    environment:
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:?Set JAVA_TOOL_OPTIONS (from render.yaml)}
+      KAFKA_PARTITIONS: ${KAFKA_PARTITIONS:?Set KAFKA_PARTITIONS (from render.yaml)}
+    healthcheck:
+      # Startup at a tenth of a CPU takes minutes; failed checks before this do not count.
+      start_period: 15m

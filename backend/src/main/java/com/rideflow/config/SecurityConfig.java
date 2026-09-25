@@ -71,6 +71,8 @@ public class SecurityConfig {
                                 "/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout")
                         .permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
+                        // Status-only probes on the public port (application.yml).
+                        .requestMatchers(HttpMethod.GET, "/livez", "/readyz").permitAll()
                         .requestMatchers("/error").permitAll()
                         // The WebSocket handshake carries no token (browsers cannot set headers on it); the
                         // STOMP CONNECT frame is authenticated instead (StompAuthenticationInterceptor).

@@ -41,6 +41,13 @@ spring:
     default-property-inclusion: always
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+    # Plaintext for the compose broker; a managed broker takes SASL_SSL with SCRAM (docs/deployment.md). The
+    # SASL settings are only read on a SASL connection.
+    security:
+      protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
+    properties:
+      sasl.mechanism: ${KAFKA_SASL_MECHANISM:SCRAM-SHA-256}
+      sasl.jaas.config: org.apache.kafka.common.security.scram.ScramLoginModule required username="${KAFKA_USERNAME:}" password="${KAFKA_PASSWORD:}";
     producer:
       # Wait for all in-sync replicas; with idempotence, retries cannot duplicate or reorder records.
       acks: all
@@ -82,6 +89,9 @@ management:
     health:
       probes:
         enabled: true
+        # Also /livez and /readyz on the public port, for hosts that can only probe the port they route to
+        # (docs/deployment.md). Those groups show the status only.
+        add-additional-paths: true
       show-details: never
       # Component names and UP/DOWN only (no details), for the admin console's system view. The management
       # port is not public.
@@ -91,6 +101,12 @@ management:
           # Redis is deliberately absent: caches and rate limits fail open, so a Redis outage should not take
           # instances out of the load balancer. It still shows in the overall health status.
           include: readinessState,db
+          show-components: never
+        # Declaring the group replaces the default one, so its member is named again: liveness must not
+        # depend on the database or brokers, or an outage would restart every instance.
+        liveness:
+          include: livenessState
+          show-components: never
   metrics:
     tags:
       application: ${spring.application.name}
@@ -233,7 +249,8 @@ rideflow:
       AI_REGENERATE: { limit: 3, window: 1h }
   kafka:
     prefix: ${KAFKA_TOPIC_PREFIX:}
-    partitions: 3
+    # Managed services bill per partition; every topic and its DLT get this many.
+    partitions: ${KAFKA_PARTITIONS:3}
     replication-factor: ${KAFKA_REPLICATION_FACTOR:1}
     retention:
       lifecycle: 7d

@@ -1,0 +1,85 @@
+# Render Blueprint for the backend (docs/deployment.md). It runs the image that CI tested and published to GHCR;
+# the e2e workflow asks Render to deploy each new one on main. Values that are secret or belong to a provider
+# account are marked sync: false: Render asks for them when the Blueprint is created and none is stored here.
+# The free-tier-fit workflow runs the backend with this file's JVM and pool settings at the same memory and CPU.
+services:
+  - type: web
+    name: rideflow-backend
+    runtime: image
+    image:
+      url: ghcr.io/saitharun1903/rideflow-backend:latest
+    plan: free
+    # Near the demo city (Hyderabad), and the region of the other managed services.
+    region: singapore
+    # Status only, on the public port; the actuator's own port is not reachable on Render.
+    healthCheckPath: /readyz
+    envVars:
+      # Render routes to the port in PORT.
+      - key: PORT
+        value: "8080"
+      # prod: JSON logs, no public API docs. demo: the seed accounts the simulator drives (their password is
+      # DEMO_USER_PASSWORD, known only to whoever set it).
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod,demo
+      # 512 MB and a tenth of a CPU: a heap of half the memory, the serial collector, the client compiler only
+      # (much less CPU to warm up), and bounded class metadata, code cache and thread stacks.
+      - key: JAVA_TOOL_OPTIONS
+        value: -XX:MaxRAMPercentage=50 -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:MaxMetaspaceSize=192m -XX:ReservedCodeCacheSize=64m -Xss512k -XX:+ExitOnOutOfMemoryError
+
+      # Neon (PostgreSQL with PostGIS). The direct endpoint, not the pooler: jdbc:postgresql://<host>/<db>?sslmode=require
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_USERNAME
+        sync: false
+      - key: DATABASE_PASSWORD
+        sync: false
+      - key: DATABASE_POOL_SIZE
+        value: "5"
+
+      # Upstash Redis, over TLS.
+      - key: REDIS_HOST
+        sync: false
+      - key: REDIS_PORT
+        value: "6379"
+      - key: REDIS_PASSWORD
+        sync: false
+      - key: REDIS_SSL_ENABLED
+        value: "true"
+
+      # Redpanda Serverless: SASL/SCRAM over TLS. It bills per partition and replicates three times itself.
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        sync: false
+      - key: KAFKA_SECURITY_PROTOCOL
+        value: SASL_SSL
+      - key: KAFKA_SASL_MECHANISM
+        value: SCRAM-SHA-256
+      - key: KAFKA_USERNAME
+        sync: false
+      - key: KAFKA_PASSWORD
+        sync: false
+      - key: KAFKA_PARTITIONS
+        value: "1"
+      - key: KAFKA_REPLICATION_FACTOR
+        value: "3"
+
+      # Render generates it once; it signs access tokens and fare quotes.
+      - key: JWT_SECRET
+        generateValue: true
+      # The Vercel production URL, e.g. https://rideflow.vercel.app (REST through its /api rewrite, and the
+      # WebSocket's Origin).
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      - key: DEMO_USER_PASSWORD
+        sync: false
+
+      - key: AI_PROVIDER
+        value: disabled
+      # Optional: empty keeps error reporting off.
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_ENVIRONMENT
+        value: production
