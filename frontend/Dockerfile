@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1
 
 # ---- Dependencies: reused until package-lock.json changes ------------------------------------------------------
-FROM node:24-alpine AS deps
+FROM node:25-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 
 # ---- Build: standalone output (a minimal server.js and only the traced node_modules) ---------------------------
-FROM node:24-alpine AS build
+FROM node:25-alpine AS build
 WORKDIR /app
 # next.config and NEXT_PUBLIC_ variables are fixed at build time, so the image is built for where it runs:
 # BACKEND_URL is where the server forwards /api (the backend service in compose); NEXT_PUBLIC_WS_URL is where
@@ -36,7 +36,7 @@ COPY . .
 RUN mkdir -p public && npm run build
 
 # ---- Runtime: Node only, non-root ------------------------------------------------------------------------------
-FROM node:24-alpine
+FROM node:25-alpine
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
