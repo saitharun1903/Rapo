@@ -27,7 +27,7 @@ Each phase ends with: compile → tests → lint/static checks → self-review �
 ├── load-tests/              k6 scripts + results/ (gitignored raw output)
 ├── docs/
 ├── .github/workflows/       backend-ci.yml, frontend-ci.yml, docker.yml
-├── docker-compose.yml       profiles: default (infra + apps), demo (simulator), observability
+├── docker-compose.yml       default: infra, apps, Prometheus, Grafana; profile demo: simulator
 ├── .env.example
 ├── README.md
 └── LICENSE
@@ -47,6 +47,7 @@ Each phase ends with: compile → tests → lint/static checks → self-review �
 | 8 Frontend | ✅ Verified | Commit 44a2102: `frontend-ci` run 36103873138 (API types match `docs/openapi.json`, ESLint with zero warnings, `tsc`, 37 Vitest tests, production build; simulator typecheck and tests) and `e2e` run 36103873129: three Playwright tests against the real stack (backend jar with the `demo` profile on PostGIS, Redis and Kafka, the Next.js production build, and the driver simulator). A new passenger registers; a passenger books a ride that a simulated driver accepts, drives and completes, rates it and opens the trip; an admin sees a completed ride in the ride list and the health components. **Manual E2E:** not possible on the development machine (no Docker), so the `e2e` workflow is the end-to-end evidence. `backend-ci` did not run on 44a2102 (frontend-only change); the backend it tested is unchanged since b4083ad, which passed all three workflows (`backend-ci` 36102888155, `frontend-ci` 36102888199, `e2e` 36102888249); the backend endpoints in 2f2bb63 passed `backend-ci` run 36099541397 |
 | 9 Testing | ✅ Verified | Commit bf59c5b: `backend-ci` run 36110208581 (263 unit/web/ArchUnit tests and all 55 integration test methods, 0 skipped; JaCoCo over both: 91.0 % of lines and 68.2 % of branches overall, 91.4 % and 74.3 % in the service layer, above the new 88 %/70 % gate), `frontend-ci` run 36110208392 (75 Vitest tests; V8 coverage reported), `e2e` run 36110208393 (5 Playwright tests in 2.3 min against the whole stack). **End-to-end workflow:** `RideWorkflowIT` drives one ride from request to payment and AI insights over HTTP, a STOMP socket per participant and Kafka, first green in run 36105414302. **Open:** an intermittent stall, not reproduced since; see below |
 | 10 Docker | ✅ Verified | Commit 26b06a3: `e2e` run 36121854154 does what the exit criterion says, from a clean checkout: `scripts/init-env.sh` writes `.env` with random secrets, `docker compose --profile demo up --build --wait` builds the three images and starts the stack, a login succeeds through the frontend container's `/api` proxy, and the 5 Playwright tests pass against the containers (2.1 min; stack healthy after 44 s). The first green run was 36118346579 (commit ebb1c43: images built in 74 s, stack healthy after 47 s). Images (uncompressed): backend 349 MB, frontend 217 MB, simulator 173 MB. `backend-ci` on the same commit passed as the pull-request run 36121859901 (all integration tests, including the refresh-token retry); its push twin 36121854152 hit the 20-minute limit in Build and test: the intermittent stall from Phase 9 again (see Found). **Not done:** `docker compose up` on this development machine, which has no Docker |
+| 11 Observability | 🟡 Partly verified | Commit 704104d: `e2e` run 36129063738 meets the dashboard criterion. The compose stack (now with Prometheus and Grafana) was healthy after 57 s, the 5 Playwright tests passed with the simulator running, and `check_dashboards.py` then ran every panel query of the four provisioned dashboards through Grafana with no errors. Live values included 6 WebSocket sessions, 2.5 location reports/s, a 93 % cache hit ratio, 0.4 ms Redis commands, about 3 rides requested and 2 completed, and the backend up. Only the AI panels (AI disabled in e2e) and dead letters (none) were empty. `backend-ci` run 36129063755 passed every unit and integration test, including `RideWorkflowIT` reading the new counters from the Prometheus scrape and `ErrorReportingIT` (the admin test error reaches a stand-in Sentry with the id the API returned and without the caller's token). JaCoCo: 91.2 % of lines and 69.3 % of branches overall, 91.6 % and 74.8 % in the service layer. `frontend-ci` run 36128242166 (commit 9a62f52; the frontend has not changed since) passed with 83 Vitest tests. **Not yet done:** a test error seen in a real Sentry project, which needs a DSN from the owner. The browser path was checked by hand against a local stand-in (email and JWT arrived masked) |
 
 **Phase 2 delivered:** Spring Boot 4.1.1 / Java 21 skeleton; Flyway V1–V3; JWT access tokens and rotating refresh tokens with reuse detection; role-based security with JSON 401/403; `GlobalExceptionHandler`; request-id correlation; OpenAPI; auth, profile, driver onboarding, admin driver verification and user suspension; admin bootstrap; demo seed; docker-compose; `.env.example`; backend CI.
 
@@ -183,6 +184,29 @@ Each phase ends with: compile → tests → lint/static checks → self-review �
 - **Phase 11:** Prometheus and Grafana join the compose file.
 - **Phase 13:** build caching for the images in CI, and publishing them to GHCR.
 - **Phase 14:** frontend images built for the deployed backend's URL.
+
+**Phase 11 delivered:**
+- **Ride pipeline metrics:** `rideflow_rides_total{event}` (from `RideTransitionRecorder`, the one path every status change takes), `rideflow_matching_duration_seconds` (request to acceptance), `rideflow_offers_total{outcome}` and `rideflow_location_updates_total{result}`. Ride and offer counts are taken after the transaction commits, so a rolled-back accept is never counted. The latencies charted as percentiles publish histogram buckets.
+- **Prometheus and Grafana in compose:** Prometheus scrapes the management port every 10 s. Grafana provisions the Service overview, Ride pipeline, Real-time & cache and AI dashboards, read-only in the UI. Both listen on 127.0.0.1 only; `init-env.sh` generates the Grafana admin password and anonymous access is off.
+- **Sentry, backend and frontend:** off without a DSN. On the backend, ERROR log events become events (the exception handler answers every exception itself, so Sentry's resolver never sees one). On the frontend: uncaught errors, both error boundaries and server request errors. Tracing and replay stay off.
+- **Scrubbing:** on top of `sendDefaultPii=false`. Requests keep method, path and a few harmless headers; the user keeps only its id; emails, JWTs and bearer tokens are masked in messages, exceptions and breadcrumbs, nested data included.
+- **Admin > System:** shows whether reporting is on, and sends a test error from the backend (`POST /api/admin/system/test-error`, answering with the event id) or from the browser.
+- **CI:** after its rides, the `e2e` workflow runs every panel query through Grafana. A query error fails the run, and so does an empty panel the rides must fill.
+
+**Design changes made in Phase 11:**
+- Prometheus and Grafana run with the default compose services instead of an `observability` profile, so the dashboards are there whenever the stack is.
+- The driver services cancel pending offers through `DriverOfferWithdrawal`, which also counts them, instead of calling the repository directly.
+- Sentry's Next.js build wrapper (`withSentryConfig`) is not used: it exists mainly to upload source maps, which needs a Sentry org, project and auth token, so browser stack traces arrive minified for now.
+
+**Found while verifying Phase 11:**
+- **Console arguments reached Sentry unmasked:** in the local browser check, console breadcrumbs keep their arguments as an array, which the first scrubber skipped. Both scrubbers now mask strings however deeply they are nested.
+- **Redis latency metric renamed in Spring Boot 4:** the panel queried Lettuce's old command-latency series, which Boot 4 no longer produces, so it was empty in e2e run 36128242176. Boot 4 times commands through Lettuce observations (`lettuce_seconds`, by `db_operation`). The panel now reads those, the dashboard check requires them, and `RideWorkflowIT` asserts them.
+- **A test that insisted on 200:** `ReportingIT` read the expected 409 with a helper that asserts 200 first (backend-ci run 36128242162); the endpoint itself answered correctly.
+- **The stall:** did not recur in this phase's `backend-ci` runs (about 3.5 minutes each); still open.
+
+**Carried forward:**
+- **Owner:** set `SENTRY_DSN` and `NEXT_PUBLIC_SENTRY_DSN`, then send both test errors from Admin > System, to close the Sentry criterion.
+- **Phase 13:** source-map upload to Sentry from CI, if a Sentry auth token is available.
 
 ## Phases
 
