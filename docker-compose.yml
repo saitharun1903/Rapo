@@ -45,7 +45,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
 
   kafka:
-    image: apache/kafka:4.2.1
+    image: apache/kafka:4.3.1
     environment:
       # Single-node KRaft cluster (no ZooKeeper): this node is both broker and controller.
       KAFKA_NODE_ID: 1
