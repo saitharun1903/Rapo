@@ -43,6 +43,7 @@ Each phase ends with: compile → tests → lint/static checks → self-review �
 | 4 Real-time | ✅ Verified | GitHub Actions `backend-ci` run 36040434543: 153 unit/web/ArchUnit tests and 35 PostGIS integration tests passed, including `RealtimeIT` with a real STOMP client against the running server (offer, status and driver location reach only the ride's participants; offers withdrawn from losing drivers; unauthenticated, forged-token, foreign-origin, admin-topic, foreign-queue and spoofed-send frames refused with ERROR and closed; invalid location messages answered without closing; flood throttling; silent drivers taken offline while drivers on a trip are not; sockets closed at token expiry) |
 | 5 Redis | ✅ Verified | GitHub Actions `backend-ci` run 36044436417: 175 unit/web/ArchUnit tests and 42 integration tests passed against real PostGIS and Redis (`RedisCachingIT`: TTLs, fallback routes not cached, hashed keys, ETA eviction on status change; `RateLimitIT`: login per IP and email, register per IP, 429 with `Retry-After`, shared geocoder budget). `cache-benchmark` run 36044436543: before/after k6 numbers in [performance.md](performance.md) |
 | 6 Kafka | ✅ Verified | GitHub Actions `backend-ci` run 36050446683: 200 unit/web/ArchUnit tests and all integration tests (49 test methods, 0 skipped) passed against real PostGIS, Redis and Kafka. `KafkaEventFlowIT` checks each exit criterion. **Full lifecycle over Kafka:** every ride step read back from its topic by an independent consumer, keyed by ride and in `aggregateVersion` order, then payment and notifications. **DLT:** an undecodable record is dead-lettered at once by each group that reads it; a failing handler is retried 1 s, 2 s, 4 s and then dead-lettered. **Redelivery:** the same `ride.completed` record delivered twice more creates no second payment or notification. The earlier run 36050273822 failed only on a wrong test expectation, corrected in 74574a2 (see below) |
+| 7 AI | ✅ Verified | GitHub Actions `backend-ci` run 36097403045: 237 unit/web/ArchUnit tests and all integration tests (53 test methods, 0 skipped) passed. **Failure matrix:** `AIFailureMatrixTest` runs both providers against WireMock (success, 5xx/529 retried, 4xx not retried, `Retry-After` honoured only up to 10 s, slow headers and slowly dribbled bodies time out, invalid output with one corrective retry, invented numbers, refusal, circuit opening, bulkhead full, provider disabled). **Ride completion unaffected:** `AITripInsightsIT` completes a ride with a failing provider and checks it is still completed and paid, the analysis is `FAILED(PROVIDER_ERROR)`, and regenerate then succeeds; it also checks passenger-only access and that stored facts hold no personal data. **Real local model:** five recorded runs with codegemma and codeqwen in [ai.md](ai.md) §5. The earlier run 36096846204 failed only because `KafkaEventFlowIT` did not yet expect the third `ride.completed` group, corrected in b3ffbc9 |
 
 **Phase 2 delivered:** Spring Boot 4.1.1 / Java 21 skeleton; Flyway V1–V3; JWT access tokens and rotating refresh tokens with reuse detection; role-based security with JSON 401/403; `GlobalExceptionHandler`; request-id correlation; OpenAPI; auth, profile, driver onboarding, admin driver verification and user suspension; admin bootstrap; demo seed; docker-compose; `.env.example`; backend CI.
 
@@ -93,6 +94,27 @@ Each phase ends with: compile → tests → lint/static checks → self-review �
 **Carried forward:**
 - **Phase 7:** `trip-analysis` consumer on `ride.completed` (AI), migration `V7__ai.sql`.
 - **Phase 11:** Grafana panels for outbox backlog, consumer lag and dead letters.
+
+**Phase 7 delivered:**
+- **AIService:** Ollama (local), Anthropic (official Java SDK, structured outputs) and disabled providers behind one interface, selected by `AI_PROVIDER` (disabled by default).
+- **Grounding:** `TripFactsAssembler` builds keyed facts from the database only, with no personal data; `TripObservationCalculator` adds deterministic observations that are shown whether or not a model is available.
+- **Prompts:** versioned templates (`prompts/<name>/v1`); the version is stored with each result.
+- **Validation:** schema, limits, fact keys and numeric grounding, with one corrective retry.
+- **Resilience:** bulkhead (4), circuit breaker (50 % over 20 calls, open 60 s) and a retry loop; timeouts cover the whole call.
+- **Pipeline:** a `trip-analysis` consumer on `ride.completed` in its own group; the model call runs outside any transaction.
+- **API:** passenger-only analysis, regenerate (3/h) and questions (10/h); migration `V7__ai.sql`.
+
+**Design changes made in Phase 7:** no Resilience4j `TimeLimiter` (each client enforces a whole-call deadline); retries are a small loop rather than Resilience4j `Retry`, to honour `Retry-After` once and never retry timeouts; SDK retries are off so the circuit breaker sees every failure.
+
+**Found while verifying Phase 7** (details in [ai.md](ai.md) §5):
+- **Timeout:** the JDK `HttpRequest.timeout` covers only the wait for headers; a real call ran 641 s past a 300 s limit. Fixed with a whole-call deadline, with regression tests for both providers.
+- **Reasoning:** a 7B model blamed a fare increase on a multiplier that applied to both estimate and fare, with only true numbers. A clearer observation plus a prompt rule fixed it for codegemma, not for codeqwen.
+- **Prompt injection:** codeqwen followed an injection (it told a joke) and validation cannot catch that; codegemma declined in every run. Documented as a limitation of small local models.
+- **Latency:** 7B analyses took 66–159 s per call on a laptop GPU, so `AI_LOCAL_TIMEOUT=300s` is recommended for them.
+
+**Carried forward:**
+- **Phase 11:** Grafana panels for the AI metrics (`rideflow_ai_*`).
+- **Phase 15:** a run against the external provider with a real key, recorded in ai.md, if a key is available.
 
 ## Phases
 
