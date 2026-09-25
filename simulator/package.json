@@ -16,7 +16,7 @@
     "@stomp/stompjs": "^7.3.0"
   },
   "devDependencies": {
-    "@types/node": "^24.13.6",
+    "@types/node": "^26.6.2",
     "typescript": "^5.9.3"
   }
 }
