@@ -80,6 +80,7 @@ startup if one is missing.
 | `KAFKA_BOOTSTRAP_SERVERS` | no | `localhost:29092` | Kafka brokers for the backend |
 | `KAFKA_TOPIC_PREFIX` | no | (empty) | Prepended to every topic and consumer group, to share one cluster between environments |
 | `KAFKA_REPLICATION_FACTOR` | no | `1` | Replication of the declared topics; at least 3 on a real cluster |
+| `REPORTING_TIME_ZONE` | no | `Asia/Kolkata` | Zone in which earnings and admin analytics cut hour and day buckets |
 | `AI_PROVIDER` | no | `disabled` | `local` (Ollama), `external` (Anthropic API) or `disabled`; trips still get their computed observations when disabled |
 | `AI_LOCAL_BASE_URL` | no | `http://localhost:11434` | Ollama server |
 | `AI_LOCAL_MODEL` | no | `llama3.2` | A model already pulled into Ollama (`ollama pull <model>`) |

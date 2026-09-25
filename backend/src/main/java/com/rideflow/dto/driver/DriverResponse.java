@@ -5,6 +5,7 @@ import com.rideflow.entity.DriverVerificationStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 public record DriverResponse(
         UUID id,
@@ -12,11 +13,11 @@ public record DriverResponse(
         String email,
         String licenseNumber,
         DriverVerificationStatus verificationStatus,
-        String rejectionReason,
-        Instant verifiedAt,
+        @Nullable String rejectionReason,
+        @Nullable Instant verifiedAt,
         DriverAvailability availability,
-        BigDecimal ratingAvg,
+        @Nullable BigDecimal ratingAvg,
         int ratingCount,
-        VehicleResponse vehicle,
+        @Nullable VehicleResponse vehicle,
         Instant createdAt) {
 }

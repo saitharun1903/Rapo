@@ -83,6 +83,9 @@ management:
       probes:
         enabled: true
       show-details: never
+      # Component names and UP/DOWN only (no details), for the admin console's system view. The management
+      # port is not public.
+      show-components: always
       group:
         readiness:
           # Redis is deliberately absent: caches and rate limits fail open, so a Redis outage should not take
@@ -165,6 +168,12 @@ rideflow:
       max-future-skew: 5s
       track-min-interval: 10s
       track-min-distance-meters: 25
+  reporting:
+    # Earnings and admin analytics cut hour and day buckets in this zone (the demo city's), so "today"
+    # means the same thing to every viewer.
+    time-zone: ${REPORTING_TIME_ZONE:Asia/Kolkata}
+    # Upper bound on buckets per request (about 16 days of hours or a year of days), to bound the query.
+    max-buckets: 400
   realtime:
     heartbeat: 10s
     location-min-interval: 1s

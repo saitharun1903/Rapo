@@ -19,7 +19,8 @@ import org.springframework.web.client.RestClient;
     SurgeProperties.class,
     MatchingProperties.class,
     RideProperties.class,
-    RoutingProperties.class
+    RoutingProperties.class,
+    ReportingProperties.class
 })
 public class RideDomainConfig {
 

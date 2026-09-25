@@ -5,6 +5,7 @@ import com.rideflow.entity.TripQuestionStatus;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A question about a trip and its answer. For a question that could not be answered, {@code answerable},
@@ -14,9 +15,9 @@ public record TripQuestionResponse(
         UUID id,
         String question,
         TripQuestionStatus status,
-        AIFailureCode failureCode,
-        Boolean answerable,
-        String answer,
-        List<String> factKeysUsed,
+        @Nullable AIFailureCode failureCode,
+        @Nullable Boolean answerable,
+        @Nullable String answer,
+        @Nullable List<String> factKeysUsed,
         Instant askedAt) {
 }

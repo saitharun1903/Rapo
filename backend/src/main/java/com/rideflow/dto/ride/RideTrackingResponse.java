@@ -4,6 +4,7 @@ import com.rideflow.entity.RideStatus;
 import com.rideflow.geospatial.GeoPoint;
 import java.time.Instant;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Tracking snapshot after page load or reconnect; live updates then arrive over WebSocket.
@@ -13,9 +14,9 @@ import java.util.UUID;
  * @param eta            time to the next stop (pickup, or dropoff once the trip started); {@code null} when
  *                       the position is stale or the driver is waiting at the pickup
  */
-public record RideTrackingResponse(UUID rideId, RideStatus status, DriverLocation driverLocation, boolean stale,
-                                   EtaResponse eta) {
+public record RideTrackingResponse(UUID rideId, RideStatus status, @Nullable DriverLocation driverLocation,
+                                   boolean stale, @Nullable EtaResponse eta) {
 
-    public record DriverLocation(GeoPoint point, Integer headingDeg, Instant recordedAt) {
+    public record DriverLocation(GeoPoint point, @Nullable Integer headingDeg, Instant recordedAt) {
     }
 }

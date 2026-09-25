@@ -2,6 +2,7 @@ package com.rideflow.support;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 import com.jayway.jsonpath.JsonPath;
 import com.rideflow.entity.PaymentMethod;
@@ -29,6 +30,7 @@ public class RideApi {
         var request = switch (method) {
             case "GET" -> get(path);
             case "POST" -> post(path);
+            case "PUT" -> put(path);
             default -> throw new IllegalArgumentException(method);
         };
         request.header(HttpHeaders.AUTHORIZATION, actor.bearer());

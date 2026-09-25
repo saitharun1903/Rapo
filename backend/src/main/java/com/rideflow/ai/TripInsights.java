@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The model's analysis of a completed trip, after validation. Limits are enforced here rather than in the
@@ -19,7 +20,7 @@ public record TripInsights(
         @NotBlank @Size(max = 800) String fareExplanation,
         @NotNull @Size(max = 5) List<@Valid @NotNull Observation> observations,
         @NotNull @Size(max = 3) List<@NotBlank @Size(max = 200) String> recommendations,
-        @Size(max = 400) String comparison,
+        @Size(max = 400) @Nullable String comparison,
         @NotEmpty List<@NotBlank String> factKeysUsed) {
 
     public record Observation(@NotNull Type type, @NotBlank @Size(max = 300) String text) {

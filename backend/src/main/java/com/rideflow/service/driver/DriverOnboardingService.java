@@ -5,11 +5,13 @@ import com.rideflow.dto.driver.DriverResponse;
 import com.rideflow.dto.driver.VehicleRequest;
 import com.rideflow.entity.AuditAction;
 import com.rideflow.entity.Driver;
+import com.rideflow.entity.DriverAvailability;
 import com.rideflow.entity.Role;
 import com.rideflow.entity.User;
 import com.rideflow.entity.Vehicle;
 import com.rideflow.exception.DuplicateResourceException;
 import com.rideflow.exception.ErrorCode;
+import com.rideflow.exception.InvalidStateException;
 import com.rideflow.exception.ResourceNotFoundException;
 import com.rideflow.exception.RideFlowException;
 import com.rideflow.mapper.DriverMapper;
@@ -77,6 +79,34 @@ public class DriverOnboardingService {
         Driver driver = drivers.save(Driver.onboard(user, licenseNumber));
         Vehicle vehicle = vehicles.save(Vehicle.register(driver, details));
         auditService.record(userId, AuditAction.DRIVER_PROFILE_SUBMITTED, ENTITY_TYPE, userId, Map.of());
+        return driverMapper.toResponse(driver, vehicle);
+    }
+
+    /**
+     * Replaces the driver's active vehicle. Only while offline, so a driver can never be matched, or be on a
+     * trip, in a vehicle that is being swapped out. Plates are unique across all vehicles ever registered, so a
+     * retired vehicle's plate cannot be registered again.
+     */
+    @Transactional
+    public DriverResponse replaceVehicle(UUID driverId, VehicleRequest request) {
+        Driver driver = drivers.findWithUserById(driverId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.DRIVER_PROFILE_NOT_FOUND,
+                        "Driver profile has not been submitted yet"));
+        if (driver.getAvailability() != DriverAvailability.OFFLINE) {
+            throw new InvalidStateException(ErrorCode.INVALID_DRIVER_STATE, "Go offline before changing vehicle");
+        }
+        Vehicle.VehicleDetails details = toVehicleDetails(request);
+        if (vehicles.existsByPlateNumber(details.plateNumber())) {
+            throw new DuplicateResourceException(ErrorCode.PLATE_TAKEN, "This plate number is already registered");
+        }
+        vehicles.findByDriverIdAndActiveTrue(driverId).ifPresent(current -> {
+            current.deactivate();
+            // One active vehicle per driver is a unique index; retire the old one before inserting the new.
+            vehicles.flush();
+        });
+        Vehicle vehicle = vehicles.save(Vehicle.register(driver, details));
+        auditService.record(driverId, AuditAction.DRIVER_VEHICLE_REPLACED, ENTITY_TYPE, driverId,
+                Map.of("vehicleId", vehicle.getId().toString(), "category", details.category().name()));
         return driverMapper.toResponse(driver, vehicle);
     }
 

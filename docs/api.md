@@ -1,6 +1,8 @@
 # RideFlow — REST API Contracts
 
-Base path `/api`. JSON only. Interactive docs are generated at `/swagger-ui.html` from the OpenAPI spec (`/v3/api-docs`). The frontend's TypeScript types are generated from that same spec.
+Base path `/api`. JSON only. Interactive docs are generated at `/swagger-ui.html` from the OpenAPI spec (`/v3/api-docs`).
+
+**The contract is [openapi.json](openapi.json)**, generated from the controllers and DTOs and committed. `OpenApiContractTest` fails the build when the code and the file differ, and the frontend's TypeScript types are generated from the file. In it every property of a response is required (Jackson writes nulls rather than omitting them), and a property that can be `null` says so; both come from the Java records, where such components are annotated `@Nullable`. This page explains behaviour; where it and the file disagree on shape, the file is right.
 
 ## Conventions
 
@@ -20,7 +22,7 @@ Base path `/api`. JSON only. Interactive docs are generated at `/swagger-ui.html
 | Status | Used for |
 |---|---|
 | 200 / 201 / 204 | success / created (with `Location` header) / no content |
-| 400 | malformed request, validation failure (`VALIDATION_FAILED` + `fieldErrors`) |
+| 400 | malformed request, validation failure (`VALIDATION_FAILED` + `fieldErrors`), `INVALID_SORT_FIELD`, `INVALID_DATE_RANGE` |
 | 401 | missing/invalid/expired token (`UNAUTHENTICATED`, `INVALID_TOKEN`, `INVALID_CREDENTIALS`, `SESSION_REVOKED`) |
 | 403 | authenticated but not allowed (`FORBIDDEN`, `ACCOUNT_SUSPENDED`, `CSRF_HEADER_MISSING`, `DRIVER_NOT_VERIFIED`) |
 | 404 | not found **or not visible to caller** |
@@ -162,12 +164,12 @@ Errors common to driver actions: `404 RIDE_NOT_FOUND` (not your ride or offer), 
 |---|---|---|---|
 | POST | `/drivers/me/profile` | DRIVER | Onboarding: `{licenseNumber, vehicle{make, model, color, plateNumber, modelYear, category, seats}}` → `PENDING` verification |
 | GET | `/drivers/me` | DRIVER | Profile, verification, availability, vehicle, rating |
-| PUT | `/drivers/me/vehicle` | DRIVER | Replace active vehicle (re-verification not required in v1) |
+| PUT | `/drivers/me/vehicle` | DRIVER | Replace the active vehicle with `VehicleRequest` (re-verification not required in v1). Only while `OFFLINE`, else `409 INVALID_DRIVER_STATE`; a plate that was ever registered, including the driver's own retired one, gives `409 PLATE_TAKEN`. Audited as `DRIVER_VEHICLE_REPLACED` |
 | POST | `/drivers/online` | DRIVER (VERIFIED) | `{location{lat,lng}}` → `AVAILABLE` (`403 DRIVER_NOT_VERIFIED`, `409 NO_ACTIVE_VEHICLE`) |
 | POST | `/drivers/offline` | DRIVER | `→ OFFLINE`, releases any pending offer; `409 DRIVER_ON_TRIP` during a trip. Returns the driver profile |
 | POST | `/drivers/location` | DRIVER | `{location{lat,lng}, headingDeg?, speedMps?, accuracyMeters?, recordedAt}` → 202. `recordedAt` must be within 30 s in the past / 5 s in the future (`422 STALE_LOCATION`); driver must be online (`409 DRIVER_OFFLINE`). REST fallback for the WebSocket stream `/app/drivers/location`, with the same rules and the same push to the passenger |
 | GET | `/drivers/me/offers` | DRIVER | Pending offers (used on reconnect) |
-| GET | `/drivers/me/earnings?from=&to=&granularity=DAY` | DRIVER | `{total, tripCount, onlineSeconds?, series[{bucket, earnings, trips}]}` from `payments` |
+| GET | `/drivers/me/earnings?from=&to=&granularity=DAY` | DRIVER | `{from, to, granularity, timeZone, total, tripCount, series[{start, earnings, trips}]}`: the driver's share of captured payments for rides completed in `[from, to)`. `granularity` is `HOUR` or `DAY`; buckets are cut at local hours or days of `REPORTING_TIME_ZONE` and every bucket is present, empty ones included. At most 400 buckets, else `400 INVALID_DATE_RANGE` |
 | GET | `/drivers/nearby?lat=&lng=&radiusMeters=&category=` | PASSENGER, ADMIN | Passenger: `[{point (≈100 m grid), category}]`, max 20, no identity. Admin: full detail |
 
 ## Trips: AI Trip Intelligence
@@ -221,18 +223,18 @@ Notifications are created asynchronously by the notifications consumer (ride pro
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/admin/overview?from=&to=` | Ride counts by status, completion and cancellation rate, median time-to-match, gross fares, drivers online (DB + Redis) |
-| GET | `/admin/analytics/rides?from=&to=&granularity=HOUR\|DAY` | Time series: requested, completed, cancelled, expired, revenue |
+| GET | `/admin/overview?from=&to=` | For rides requested in `[from, to)`: count by current status (every status present), completion and cancellation rate among finished rides (`null` when none finished), median seconds from request to acceptance. Gross fares and platform fees of captured payments for rides completed in the window. Verified drivers by current availability (from the database) |
+| GET | `/admin/analytics/rides?from=&to=&granularity=HOUR\|DAY` | Per bucket, empty ones included: rides requested, completed, cancelled and expired (each by when it happened) and captured revenue (by completion). Same bucket rules and limit as earnings |
 | GET | `/admin/users?role=&status=&q=` | Paged user search |
 | PATCH | `/admin/users/{id}/status` | `{status: ACTIVE\|SUSPENDED, reason}` (suspension revokes sessions) |
 | GET | `/admin/drivers?verificationStatus=&availability=` | Paged drivers |
 | POST | `/admin/drivers/{id}/verify` | → `VERIFIED`, emits `notification.requested` |
 | POST | `/admin/drivers/{id}/reject` | `{reason}` → `REJECTED` |
 | POST | `/admin/drivers/{id}/suspend` | `{reason}` → `SUSPENDED`, forces `OFFLINE` |
-| GET | `/admin/rides?status=&from=&to=&passengerId=&driverId=` | Paged rides |
-| GET | `/admin/rides/{id}` | Ride + timeline + offers + payment + analysis status |
-| GET | `/admin/system` | Actuator health components, outbox backlog, DLT counts, AI circuit-breaker state, WebSocket sessions (live values from `MeterRegistry` / health indicators) |
-| GET | `/admin/audit-logs?action=&entityType=&from=&to=` | Paged audit log |
+| GET | `/admin/rides?status=&from=&to=&passengerId=&driverId=` | Paged rides, all filters optional (`from`/`to` on request time). Sort: `requestedAt`, `completedAt` |
+| GET | `/admin/rides/{id}` | `{ride, passenger{id, fullName, email}, timeline, offers[{driverId, round, distanceMeters, status, offeredAt, expiresAt, respondedAt}], analysis{status, failureCode, updatedAt}}`; `analysis` is `null` until recorded |
+| GET | `/admin/system` | Health status and component statuses (no details), outbox backlog, dead letters by topic since start, AI circuit state and calls in flight, WebSocket sessions, Redis availability. Read from the same health indicators and meters as Actuator and Prometheus, for the instance that serves the request; a value is `null` when its meter is not registered |
+| GET | `/admin/audit-logs?action=&entityType=&from=&to=` | Paged audit log, newest first by default |
 
 ## Operational (management port, not public)
 

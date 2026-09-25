@@ -34,6 +34,8 @@ public interface RideOfferRepository extends JpaRepository<RideOffer, UUID> {
 
     Optional<RideOffer> findByRideIdAndDriverId(UUID rideId, UUID driverId);
 
+    List<RideOffer> findByRideIdOrderByOfferedAtAsc(UUID rideId);
+
     boolean existsByRideIdAndDriverId(UUID rideId, UUID driverId);
 
     List<RideOffer> findByRideIdAndStatus(UUID rideId, OfferStatus status);

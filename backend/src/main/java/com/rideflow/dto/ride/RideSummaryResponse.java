@@ -5,6 +5,7 @@ import com.rideflow.entity.RideStatus;
 import com.rideflow.entity.VehicleCategory;
 import java.time.Instant;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /** Trip-history row. {@code fare} is the final fare when completed, otherwise the quoted estimate. */
 public record RideSummaryResponse(
@@ -13,8 +14,8 @@ public record RideSummaryResponse(
         VehicleCategory vehicleCategory,
         String pickupAddress,
         String dropoffAddress,
-        Money fare,
+        @Nullable Money fare,
         boolean fareIsFinal,
         Instant requestedAt,
-        Instant completedAt) {
+        @Nullable Instant completedAt) {
 }

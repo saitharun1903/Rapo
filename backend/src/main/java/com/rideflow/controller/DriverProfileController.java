@@ -2,6 +2,7 @@ package com.rideflow.controller;
 
 import com.rideflow.dto.driver.DriverProfileRequest;
 import com.rideflow.dto.driver.DriverResponse;
+import com.rideflow.dto.driver.VehicleRequest;
 import com.rideflow.security.AuthenticatedUser;
 import com.rideflow.service.driver.DriverOnboardingService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -38,5 +40,12 @@ public class DriverProfileController {
     @Operation(summary = "Current driver's profile, verification status and vehicle")
     public DriverResponse me(@AuthenticationPrincipal AuthenticatedUser user) {
         return onboardingService.getProfile(user.id());
+    }
+
+    @PutMapping("/vehicle")
+    @Operation(summary = "Replace the active vehicle; only while offline")
+    public DriverResponse replaceVehicle(
+            @AuthenticationPrincipal AuthenticatedUser user, @Valid @RequestBody VehicleRequest request) {
+        return onboardingService.replaceVehicle(user.id(), request);
     }
 }

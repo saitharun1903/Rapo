@@ -76,7 +76,8 @@ public class PromptTemplates {
     private static String load(Prompt prompt, String file) {
         ClassPathResource resource = new ClassPathResource("prompts/" + prompt.id() + "/" + file);
         try {
-            return resource.getContentAsString(StandardCharsets.UTF_8);
+            // A Windows checkout can turn the files' line endings into CRLF; the model gets the same text anywhere.
+            return resource.getContentAsString(StandardCharsets.UTF_8).replace("\r\n", "\n");
         } catch (IOException ex) {
             throw new UncheckedIOException("Missing prompt template " + resource.getPath(), ex);
         }

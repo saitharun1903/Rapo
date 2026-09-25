@@ -11,9 +11,11 @@ import com.rideflow.entity.PaymentStatus;
 import com.rideflow.entity.RideStatus;
 import com.rideflow.entity.VehicleCategory;
 import com.rideflow.geospatial.GeoPoint;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Full view of a ride. {@code version} increases with every status change; clients apply realtime
@@ -28,19 +30,20 @@ public record RideResponse(
         Place dropoff,
         PaymentMethod paymentMethod,
         Estimate estimate,
-        Actual actual,
-        PaymentInfo payment,
-        DriverInfo driver,
-        PassengerInfo passenger,
+        @Nullable Actual actual,
+        @Nullable PaymentInfo payment,
+        @Nullable DriverInfo driver,
+        @Nullable PassengerInfo passenger,
         Matching matching,
         Timestamps timestamps,
-        Cancellation cancellation) {
+        @Nullable Cancellation cancellation) {
 
+    @Schema(name = "RidePlace")
     public record Place(GeoPoint point, String address) {
     }
 
-    public record Estimate(int distanceMeters, int durationSeconds, EstimateSource source, Money fare,
-                           FareBreakdownResponse breakdown) {
+    public record Estimate(int distanceMeters, int durationSeconds, EstimateSource source, @Nullable Money fare,
+                           @Nullable FareBreakdownResponse breakdown) {
     }
 
     /** Present once the ride is completed. */
@@ -56,7 +59,8 @@ public record RideResponse(
                               Money amount) {
     }
 
-    public record DriverInfo(UUID id, String fullName, BigDecimal ratingAvg, int ratingCount, Vehicle vehicle) {
+    public record DriverInfo(UUID id, String fullName, @Nullable BigDecimal ratingAvg, int ratingCount,
+                             @Nullable Vehicle vehicle) {
     }
 
     public record Vehicle(String make, String model, String color, String plateNumber, VehicleCategory category) {
@@ -68,10 +72,11 @@ public record RideResponse(
     public record Matching(int round, int radiusMeters) {
     }
 
-    public record Timestamps(Instant requestedAt, Instant acceptedAt, Instant enRouteAt, Instant arrivedAt,
-                             Instant startedAt, Instant completedAt, Instant cancelledAt, Instant expiredAt) {
+    public record Timestamps(Instant requestedAt, @Nullable Instant acceptedAt, @Nullable Instant enRouteAt,
+                             @Nullable Instant arrivedAt, @Nullable Instant startedAt, @Nullable Instant completedAt,
+                             @Nullable Instant cancelledAt, @Nullable Instant expiredAt) {
     }
 
-    public record Cancellation(ActorType cancelledBy, String reason) {
+    public record Cancellation(ActorType cancelledBy, @Nullable String reason) {
     }
 }

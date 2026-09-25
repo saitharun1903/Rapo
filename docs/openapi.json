@@ -1,0 +1,3731 @@
+{
+  "components" : {
+    "schemas" : {
+      "Actual" : {
+        "properties" : {
+          "breakdown" : {
+            "$ref" : "#/components/schemas/FareBreakdownResponse"
+          },
+          "distanceMeters" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "distanceSource" : {
+            "enum" : [ "TRACKED", "ESTIMATED" ],
+            "type" : "string"
+          },
+          "durationSeconds" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "fare" : {
+            "$ref" : "#/components/schemas/Money"
+          }
+        },
+        "required" : [ "breakdown", "distanceMeters", "distanceSource", "durationSeconds", "fare" ],
+        "type" : "object"
+      },
+      "AdminOverviewResponse" : {
+        "properties" : {
+          "cancellationRate" : {
+            "format" : "double",
+            "type" : [ "number", "null" ]
+          },
+          "completionRate" : {
+            "format" : "double",
+            "type" : [ "number", "null" ]
+          },
+          "from" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "grossFares" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "medianSecondsToMatch" : {
+            "format" : "double",
+            "type" : [ "number", "null" ]
+          },
+          "platformFees" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "ridesByStatus" : {
+            "additionalProperties" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "type" : "object"
+          },
+          "ridesRequested" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "to" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "verifiedDrivers" : {
+            "additionalProperties" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "type" : "object"
+          }
+        },
+        "required" : [ "from", "grossFares", "platformFees", "ridesByStatus", "ridesRequested", "to", "verifiedDrivers" ],
+        "type" : "object"
+      },
+      "AdminRideAnalysis" : {
+        "properties" : {
+          "failureCode" : {
+            "type" : [ "string", "null" ]
+          },
+          "status" : {
+            "enum" : [ "PENDING", "COMPLETED", "FAILED", "UNAVAILABLE" ],
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "status", "updatedAt" ],
+        "type" : "object"
+      },
+      "AdminRideDetailResponse" : {
+        "properties" : {
+          "analysis" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/AdminRideAnalysis"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "offers" : {
+            "items" : {
+              "$ref" : "#/components/schemas/AdminRideOffer"
+            },
+            "type" : "array"
+          },
+          "passenger" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/AdminRidePassenger"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "ride" : {
+            "$ref" : "#/components/schemas/RideResponse"
+          },
+          "timeline" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RideTimelineEntryResponse"
+            },
+            "type" : "array"
+          }
+        },
+        "required" : [ "offers", "ride", "timeline" ],
+        "type" : "object"
+      },
+      "AdminRideOffer" : {
+        "properties" : {
+          "distanceMeters" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "driverId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "offeredAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "respondedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "round" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "status" : {
+            "enum" : [ "PENDING", "ACCEPTED", "REJECTED", "EXPIRED", "CANCELLED" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "distanceMeters", "driverId", "expiresAt", "offeredAt", "round", "status" ],
+        "type" : "object"
+      },
+      "AdminRidePassenger" : {
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          },
+          "fullName" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        },
+        "required" : [ "email", "fullName", "id" ],
+        "type" : "object"
+      },
+      "AdminRideSummaryResponse" : {
+        "properties" : {
+          "completedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "driverId" : {
+            "format" : "uuid",
+            "type" : [ "string", "null" ]
+          },
+          "dropoffAddress" : {
+            "type" : "string"
+          },
+          "fare" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/Money"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "fareIsFinal" : {
+            "type" : "boolean"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "passengerId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "pickupAddress" : {
+            "type" : "string"
+          },
+          "requestedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "REQUESTED", "MATCHING", "DRIVER_ASSIGNED", "DRIVER_ARRIVING", "DRIVER_ARRIVED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED" ],
+            "type" : "string"
+          },
+          "vehicleCategory" : {
+            "enum" : [ "ECONOMY", "COMFORT", "XL" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "dropoffAddress", "fareIsFinal", "id", "passengerId", "pickupAddress", "requestedAt", "status", "vehicleCategory" ],
+        "type" : "object"
+      },
+      "AuditLogResponse" : {
+        "properties" : {
+          "action" : {
+            "enum" : [ "LOGIN_FAILED", "PASSWORD_CHANGED", "REFRESH_TOKEN_REUSE_DETECTED", "DRIVER_PROFILE_SUBMITTED", "DRIVER_VERIFIED", "DRIVER_REJECTED", "DRIVER_SUSPENDED", "DRIVER_VEHICLE_REPLACED", "USER_STATUS_CHANGED", "ADMIN_BOOTSTRAPPED" ],
+            "type" : "string"
+          },
+          "actorUserId" : {
+            "format" : "uuid",
+            "type" : [ "string", "null" ]
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "details" : {
+            "additionalProperties" : { },
+            "type" : [ "object", "null" ]
+          },
+          "entityId" : {
+            "format" : "uuid",
+            "type" : [ "string", "null" ]
+          },
+          "entityType" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "action", "createdAt", "entityType", "id" ],
+        "type" : "object"
+      },
+      "AuthResponse" : {
+        "properties" : {
+          "accessToken" : {
+            "type" : "string"
+          },
+          "expiresIn" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "tokenType" : {
+            "type" : "string"
+          },
+          "user" : {
+            "$ref" : "#/components/schemas/UserResponse"
+          }
+        },
+        "required" : [ "accessToken", "expiresIn", "tokenType", "user" ],
+        "type" : "object"
+      },
+      "BookRideRequest" : {
+        "properties" : {
+          "dropoff" : {
+            "$ref" : "#/components/schemas/PlaceRequest"
+          },
+          "paymentMethod" : {
+            "enum" : [ "CASH", "CARD" ],
+            "type" : "string"
+          },
+          "pickup" : {
+            "$ref" : "#/components/schemas/PlaceRequest"
+          },
+          "quoteId" : {
+            "maxLength" : 4096,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "dropoff", "paymentMethod", "pickup", "quoteId" ],
+        "type" : "object"
+      },
+      "CancelRideRequest" : {
+        "properties" : {
+          "reason" : {
+            "maxLength" : 255,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          }
+        },
+        "type" : "object"
+      },
+      "Cancellation" : {
+        "properties" : {
+          "cancelledBy" : {
+            "enum" : [ "PASSENGER", "DRIVER", "SYSTEM", "ADMIN" ],
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "cancelledBy" ],
+        "type" : "object"
+      },
+      "ChangePasswordRequest" : {
+        "properties" : {
+          "currentPassword" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "newPassword" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "currentPassword", "newPassword" ],
+        "type" : "object"
+      },
+      "DriverDecisionRequest" : {
+        "properties" : {
+          "reason" : {
+            "maxLength" : 255,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "reason" ],
+        "type" : "object"
+      },
+      "DriverInfo" : {
+        "properties" : {
+          "fullName" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "ratingAvg" : {
+            "type" : [ "number", "null" ]
+          },
+          "ratingCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "vehicle" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/Vehicle"
+            }, {
+              "type" : "null"
+            } ]
+          }
+        },
+        "required" : [ "fullName", "id", "ratingCount" ],
+        "type" : "object"
+      },
+      "DriverLocation" : {
+        "properties" : {
+          "headingDeg" : {
+            "format" : "int32",
+            "type" : [ "integer", "null" ]
+          },
+          "point" : {
+            "$ref" : "#/components/schemas/GeoPoint"
+          },
+          "recordedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "point", "recordedAt" ],
+        "type" : "object"
+      },
+      "DriverProfileRequest" : {
+        "properties" : {
+          "licenseNumber" : {
+            "minLength" : 1,
+            "pattern" : "^[A-Za-z0-9-]{6,40}$",
+            "type" : "string"
+          },
+          "vehicle" : {
+            "$ref" : "#/components/schemas/VehicleRequest"
+          }
+        },
+        "required" : [ "licenseNumber", "vehicle" ],
+        "type" : "object"
+      },
+      "DriverResponse" : {
+        "properties" : {
+          "availability" : {
+            "enum" : [ "OFFLINE", "AVAILABLE", "ON_TRIP" ],
+            "type" : "string"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "fullName" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "licenseNumber" : {
+            "type" : "string"
+          },
+          "ratingAvg" : {
+            "type" : [ "number", "null" ]
+          },
+          "ratingCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "rejectionReason" : {
+            "type" : [ "string", "null" ]
+          },
+          "vehicle" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/VehicleResponse"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "verificationStatus" : {
+            "enum" : [ "PENDING", "VERIFIED", "REJECTED", "SUSPENDED" ],
+            "type" : "string"
+          },
+          "verifiedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "availability", "createdAt", "email", "fullName", "id", "licenseNumber", "ratingCount", "verificationStatus" ],
+        "type" : "object"
+      },
+      "EarningsBucket" : {
+        "properties" : {
+          "earnings" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "start" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "trips" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "earnings", "start", "trips" ],
+        "type" : "object"
+      },
+      "EarningsResponse" : {
+        "properties" : {
+          "from" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "granularity" : {
+            "enum" : [ "HOUR", "DAY" ],
+            "type" : "string"
+          },
+          "series" : {
+            "items" : {
+              "$ref" : "#/components/schemas/EarningsBucket"
+            },
+            "type" : "array"
+          },
+          "timeZone" : {
+            "type" : "string"
+          },
+          "to" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "total" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "tripCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "from", "granularity", "series", "timeZone", "to", "total", "tripCount" ],
+        "type" : "object"
+      },
+      "Estimate" : {
+        "properties" : {
+          "breakdown" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/FareBreakdownResponse"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "distanceMeters" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "durationSeconds" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "fare" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/Money"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "source" : {
+            "enum" : [ "ROUTED", "APPROXIMATE" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "distanceMeters", "durationSeconds", "source" ],
+        "type" : "object"
+      },
+      "EtaResponse" : {
+        "properties" : {
+          "computedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "distanceMeters" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "seconds" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "source" : {
+            "enum" : [ "ROUTED", "APPROXIMATE" ],
+            "type" : "string"
+          },
+          "target" : {
+            "enum" : [ "PICKUP", "DROPOFF" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "computedAt", "distanceMeters", "seconds", "source", "target" ],
+        "type" : "object"
+      },
+      "FareBreakdownResponse" : {
+        "properties" : {
+          "baseFare" : {
+            "type" : "string"
+          },
+          "bookingFee" : {
+            "type" : "string"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "distanceCharge" : {
+            "type" : "string"
+          },
+          "distanceMeters" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "durationSeconds" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "minimumFare" : {
+            "type" : "string"
+          },
+          "minimumFareApplied" : {
+            "type" : "boolean"
+          },
+          "pricingVersion" : {
+            "type" : "string"
+          },
+          "subtotal" : {
+            "type" : "string"
+          },
+          "surgeMultiplier" : {
+            "type" : "string"
+          },
+          "timeCharge" : {
+            "type" : "string"
+          },
+          "total" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "baseFare", "bookingFee", "currency", "distanceCharge", "distanceMeters", "durationSeconds", "minimumFare", "minimumFareApplied", "pricingVersion", "subtotal", "surgeMultiplier", "timeCharge", "total" ],
+        "type" : "object"
+      },
+      "FareEstimateRequest" : {
+        "properties" : {
+          "dropoff" : {
+            "$ref" : "#/components/schemas/GeoPoint"
+          },
+          "pickup" : {
+            "$ref" : "#/components/schemas/GeoPoint"
+          }
+        },
+        "required" : [ "dropoff", "pickup" ],
+        "type" : "object"
+      },
+      "FareEstimateResponse" : {
+        "properties" : {
+          "distanceMeters" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "durationSeconds" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "estimateSource" : {
+            "enum" : [ "ROUTED", "APPROXIMATE" ],
+            "type" : "string"
+          },
+          "quotes" : {
+            "items" : {
+              "$ref" : "#/components/schemas/FareQuoteResponse"
+            },
+            "type" : "array"
+          },
+          "route" : {
+            "items" : {
+              "$ref" : "#/components/schemas/GeoPoint"
+            },
+            "type" : "array"
+          },
+          "surgeMultiplier" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "distanceMeters", "durationSeconds", "estimateSource", "quotes", "route", "surgeMultiplier" ],
+        "type" : "object"
+      },
+      "FareQuoteResponse" : {
+        "properties" : {
+          "breakdown" : {
+            "$ref" : "#/components/schemas/FareBreakdownResponse"
+          },
+          "estimatedFare" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "minimumFare" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "quoteId" : {
+            "type" : "string"
+          },
+          "vehicleCategory" : {
+            "enum" : [ "ECONOMY", "COMFORT", "XL" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "breakdown", "estimatedFare", "expiresAt", "minimumFare", "quoteId", "vehicleCategory" ],
+        "type" : "object"
+      },
+      "GeoPoint" : {
+        "properties" : {
+          "lat" : {
+            "format" : "double",
+            "maximum" : 90.0,
+            "minimum" : -90.0,
+            "type" : "number"
+          },
+          "lng" : {
+            "format" : "double",
+            "maximum" : 180.0,
+            "minimum" : -180.0,
+            "type" : "number"
+          }
+        },
+        "required" : [ "lat", "lng" ],
+        "type" : "object"
+      },
+      "GoOnlineRequest" : {
+        "properties" : {
+          "location" : {
+            "$ref" : "#/components/schemas/GeoPoint"
+          }
+        },
+        "required" : [ "location" ],
+        "type" : "object"
+      },
+      "LocationUpdateRequest" : {
+        "properties" : {
+          "accuracyMeters" : {
+            "format" : "double",
+            "maximum" : 10000.0,
+            "minimum" : 0.0,
+            "type" : [ "number", "null" ]
+          },
+          "headingDeg" : {
+            "format" : "int32",
+            "maximum" : 359,
+            "minimum" : 0,
+            "type" : [ "integer", "null" ]
+          },
+          "location" : {
+            "$ref" : "#/components/schemas/GeoPoint"
+          },
+          "recordedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "speedMps" : {
+            "format" : "double",
+            "maximum" : 100.0,
+            "minimum" : 0.0,
+            "type" : [ "number", "null" ]
+          }
+        },
+        "required" : [ "location", "recordedAt" ],
+        "type" : "object"
+      },
+      "LoginRequest" : {
+        "properties" : {
+          "email" : {
+            "maxLength" : 254,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "password" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "email", "password" ],
+        "type" : "object"
+      },
+      "Matching" : {
+        "properties" : {
+          "radiusMeters" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "round" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "radiusMeters", "round" ],
+        "type" : "object"
+      },
+      "Money" : {
+        "properties" : {
+          "amount" : {
+            "type" : "string"
+          },
+          "currency" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "amount", "currency" ],
+        "type" : "object"
+      },
+      "NearbyDriverResponse" : {
+        "properties" : {
+          "category" : {
+            "enum" : [ "ECONOMY", "COMFORT", "XL" ],
+            "type" : "string"
+          },
+          "distanceMeters" : {
+            "format" : "double",
+            "type" : [ "number", "null" ]
+          },
+          "driverId" : {
+            "format" : "uuid",
+            "type" : [ "string", "null" ]
+          },
+          "position" : {
+            "$ref" : "#/components/schemas/GeoPoint"
+          }
+        },
+        "required" : [ "category", "position" ],
+        "type" : "object"
+      },
+      "NotificationResponse" : {
+        "properties" : {
+          "body" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "read" : {
+            "type" : "boolean"
+          },
+          "rideId" : {
+            "format" : "uuid",
+            "type" : [ "string", "null" ]
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "type" : {
+            "enum" : [ "DRIVER_ACCEPTED", "DRIVER_ARRIVING", "DRIVER_ARRIVED", "DRIVER_REASSIGNING", "TRIP_STARTED", "TRIP_COMPLETED", "RIDE_CANCELLED", "RIDE_EXPIRED", "PAYMENT_RECEIVED", "EARNINGS_RECORDED", "DRIVER_VERIFIED", "DRIVER_REJECTED" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "body", "createdAt", "id", "read", "title", "type" ],
+        "type" : "object"
+      },
+      "Observation" : {
+        "properties" : {
+          "text" : {
+            "maxLength" : 300,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "type" : {
+            "enum" : [ "FARE", "ROUTE", "TIME", "COMPARISON", "OTHER" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "text", "type" ],
+        "type" : "object"
+      },
+      "PageResponseAdminRideSummaryResponse" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/AdminRideSummaryResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "sort" : {
+            "type" : "string"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PageResponseAuditLogResponse" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/AuditLogResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "sort" : {
+            "type" : "string"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PageResponseDriverResponse" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/DriverResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "sort" : {
+            "type" : "string"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PageResponseNotificationResponse" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/NotificationResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "sort" : {
+            "type" : "string"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PageResponseRideSummaryResponse" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RideSummaryResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "sort" : {
+            "type" : "string"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PageResponseUserResponse" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/UserResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "sort" : {
+            "type" : "string"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "PassengerInfo" : {
+        "properties" : {
+          "fullName" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        },
+        "required" : [ "fullName", "id" ],
+        "type" : "object"
+      },
+      "PaymentInfo" : {
+        "properties" : {
+          "amount" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "method" : {
+            "enum" : [ "CASH", "CARD" ],
+            "type" : "string"
+          },
+          "provider" : {
+            "enum" : [ "CASH", "SANDBOX" ],
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "PENDING", "CAPTURED", "FAILED", "REFUNDED" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "amount", "id", "method", "provider", "status" ],
+        "type" : "object"
+      },
+      "PlaceRequest" : {
+        "properties" : {
+          "address" : {
+            "maxLength" : 255,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "point" : {
+            "$ref" : "#/components/schemas/GeoPoint"
+          }
+        },
+        "required" : [ "address", "point" ],
+        "type" : "object"
+      },
+      "PlaceResponse" : {
+        "properties" : {
+          "address" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "point" : {
+            "$ref" : "#/components/schemas/GeoPoint"
+          }
+        },
+        "required" : [ "address", "name", "point" ],
+        "type" : "object"
+      },
+      "RateRideRequest" : {
+        "properties" : {
+          "comment" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          },
+          "score" : {
+            "format" : "int32",
+            "maximum" : 5,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        },
+        "required" : [ "score" ],
+        "type" : "object"
+      },
+      "RatingResponse" : {
+        "properties" : {
+          "comment" : {
+            "type" : [ "string", "null" ]
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "rideId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "score" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "createdAt", "id", "rideId", "score" ],
+        "type" : "object"
+      },
+      "RegisterRequest" : {
+        "properties" : {
+          "accountType" : {
+            "enum" : [ "PASSENGER", "DRIVER" ],
+            "type" : "string"
+          },
+          "email" : {
+            "format" : "email",
+            "maxLength" : 254,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "fullName" : {
+            "maxLength" : 120,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "password" : {
+            "type" : "string"
+          },
+          "phone" : {
+            "pattern" : "^\\+[1-9]\\d{7,14}$",
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "accountType", "email", "fullName", "password" ],
+        "type" : "object"
+      },
+      "RideActivityBucket" : {
+        "properties" : {
+          "cancelled" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "completed" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "expired" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "requested" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "revenue" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "start" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "cancelled", "completed", "expired", "requested", "revenue", "start" ],
+        "type" : "object"
+      },
+      "RideActivityResponse" : {
+        "properties" : {
+          "from" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "granularity" : {
+            "enum" : [ "HOUR", "DAY" ],
+            "type" : "string"
+          },
+          "series" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RideActivityBucket"
+            },
+            "type" : "array"
+          },
+          "timeZone" : {
+            "type" : "string"
+          },
+          "to" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "from", "granularity", "series", "timeZone", "to" ],
+        "type" : "object"
+      },
+      "RideOfferResponse" : {
+        "properties" : {
+          "distanceToPickupMeters" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "dropoff" : {
+            "$ref" : "#/components/schemas/RidePlace"
+          },
+          "estimatedDistanceMeters" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "estimatedDurationSeconds" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "estimatedFare" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/Money"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "expiresAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "offerId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "pickup" : {
+            "$ref" : "#/components/schemas/RidePlace"
+          },
+          "rideId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "round" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "vehicleCategory" : {
+            "enum" : [ "ECONOMY", "COMFORT", "XL" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "distanceToPickupMeters", "dropoff", "estimatedDistanceMeters", "estimatedDurationSeconds", "expiresAt", "offerId", "pickup", "rideId", "round", "vehicleCategory" ],
+        "type" : "object"
+      },
+      "RidePlace" : {
+        "properties" : {
+          "address" : {
+            "type" : "string"
+          },
+          "point" : {
+            "$ref" : "#/components/schemas/GeoPoint"
+          }
+        },
+        "required" : [ "address", "point" ],
+        "type" : "object"
+      },
+      "RideResponse" : {
+        "properties" : {
+          "actual" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/Actual"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "cancellation" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/Cancellation"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "driver" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/DriverInfo"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "dropoff" : {
+            "$ref" : "#/components/schemas/RidePlace"
+          },
+          "estimate" : {
+            "$ref" : "#/components/schemas/Estimate"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "matching" : {
+            "$ref" : "#/components/schemas/Matching"
+          },
+          "passenger" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/PassengerInfo"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "payment" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/PaymentInfo"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "paymentMethod" : {
+            "enum" : [ "CASH", "CARD" ],
+            "type" : "string"
+          },
+          "pickup" : {
+            "$ref" : "#/components/schemas/RidePlace"
+          },
+          "status" : {
+            "enum" : [ "REQUESTED", "MATCHING", "DRIVER_ASSIGNED", "DRIVER_ARRIVING", "DRIVER_ARRIVED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED" ],
+            "type" : "string"
+          },
+          "timestamps" : {
+            "$ref" : "#/components/schemas/Timestamps"
+          },
+          "vehicleCategory" : {
+            "enum" : [ "ECONOMY", "COMFORT", "XL" ],
+            "type" : "string"
+          },
+          "version" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "dropoff", "estimate", "id", "matching", "paymentMethod", "pickup", "status", "timestamps", "vehicleCategory", "version" ],
+        "type" : "object"
+      },
+      "RideSummaryResponse" : {
+        "properties" : {
+          "completedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "dropoffAddress" : {
+            "type" : "string"
+          },
+          "fare" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/Money"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "fareIsFinal" : {
+            "type" : "boolean"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "pickupAddress" : {
+            "type" : "string"
+          },
+          "requestedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "REQUESTED", "MATCHING", "DRIVER_ASSIGNED", "DRIVER_ARRIVING", "DRIVER_ARRIVED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED" ],
+            "type" : "string"
+          },
+          "vehicleCategory" : {
+            "enum" : [ "ECONOMY", "COMFORT", "XL" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "dropoffAddress", "fareIsFinal", "id", "pickupAddress", "requestedAt", "status", "vehicleCategory" ],
+        "type" : "object"
+      },
+      "RideTimelineEntryResponse" : {
+        "properties" : {
+          "actor" : {
+            "enum" : [ "PASSENGER", "DRIVER", "SYSTEM", "ADMIN" ],
+            "type" : "string"
+          },
+          "from" : {
+            "enum" : [ "REQUESTED", "MATCHING", "DRIVER_ASSIGNED", "DRIVER_ARRIVING", "DRIVER_ARRIVED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED" ],
+            "type" : [ "string", "null" ]
+          },
+          "occurredAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : [ "string", "null" ]
+          },
+          "rideVersion" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "to" : {
+            "enum" : [ "REQUESTED", "MATCHING", "DRIVER_ASSIGNED", "DRIVER_ARRIVING", "DRIVER_ARRIVED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "actor", "occurredAt", "rideVersion", "to" ],
+        "type" : "object"
+      },
+      "RideTrackingResponse" : {
+        "properties" : {
+          "driverLocation" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/DriverLocation"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "eta" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/EtaResponse"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "rideId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "stale" : {
+            "type" : "boolean"
+          },
+          "status" : {
+            "enum" : [ "REQUESTED", "MATCHING", "DRIVER_ASSIGNED", "DRIVER_ARRIVING", "DRIVER_ARRIVED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "rideId", "stale", "status" ],
+        "type" : "object"
+      },
+      "RouteResponse" : {
+        "properties" : {
+          "distanceMeters" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "durationSeconds" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "path" : {
+            "items" : {
+              "$ref" : "#/components/schemas/GeoPoint"
+            },
+            "type" : "array"
+          },
+          "source" : {
+            "enum" : [ "ROUTED", "APPROXIMATE" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "distanceMeters", "durationSeconds", "path", "source" ],
+        "type" : "object"
+      },
+      "SystemStatusResponse" : {
+        "properties" : {
+          "aiCallsActive" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "aiCircuitOpen" : {
+            "type" : [ "boolean", "null" ]
+          },
+          "components" : {
+            "additionalProperties" : {
+              "type" : "string"
+            },
+            "type" : "object"
+          },
+          "deadLettersByTopic" : {
+            "additionalProperties" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "type" : "object"
+          },
+          "health" : {
+            "type" : "string"
+          },
+          "outboxPending" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "redisAvailable" : {
+            "type" : [ "boolean", "null" ]
+          },
+          "webSocketSessions" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          }
+        },
+        "required" : [ "components", "deadLettersByTopic", "health" ],
+        "type" : "object"
+      },
+      "Timestamps" : {
+        "properties" : {
+          "acceptedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "arrivedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "cancelledAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "completedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "enRouteAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "expiredAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "requestedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "startedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "requestedAt" ],
+        "type" : "object"
+      },
+      "TripAnalysisResponse" : {
+        "properties" : {
+          "failureCode" : {
+            "enum" : [ "TIMEOUT", "PROVIDER_ERROR", "RATE_LIMITED", "INVALID_RESPONSE", "REFUSED", "BUSY", "UNAVAILABLE" ],
+            "type" : [ "string", "null" ]
+          },
+          "insights" : {
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/TripInsights"
+            }, {
+              "type" : "null"
+            } ]
+          },
+          "model" : {
+            "type" : [ "string", "null" ]
+          },
+          "observations" : {
+            "items" : {
+              "$ref" : "#/components/schemas/TripObservationResponse"
+            },
+            "type" : "array"
+          },
+          "promptVersion" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : [ "string", "null" ]
+          },
+          "rideId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "PENDING", "COMPLETED", "FAILED", "UNAVAILABLE" ],
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "observations", "promptVersion", "rideId", "status" ],
+        "type" : "object"
+      },
+      "TripInsights" : {
+        "properties" : {
+          "comparison" : {
+            "maxLength" : 400,
+            "minLength" : 0,
+            "type" : [ "string", "null" ]
+          },
+          "factKeysUsed" : {
+            "items" : {
+              "minLength" : 1,
+              "type" : "string"
+            },
+            "minItems" : 1,
+            "type" : "array"
+          },
+          "fareExplanation" : {
+            "maxLength" : 800,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "observations" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Observation"
+            },
+            "maxItems" : 5,
+            "minItems" : 0,
+            "type" : "array"
+          },
+          "recommendations" : {
+            "items" : {
+              "maxLength" : 200,
+              "minLength" : 0,
+              "type" : "string"
+            },
+            "maxItems" : 3,
+            "minItems" : 0,
+            "type" : "array"
+          },
+          "summary" : {
+            "maxLength" : 600,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "factKeysUsed", "fareExplanation", "observations", "recommendations", "summary" ],
+        "type" : "object"
+      },
+      "TripObservationResponse" : {
+        "properties" : {
+          "key" : {
+            "type" : "string"
+          },
+          "text" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "key", "text" ],
+        "type" : "object"
+      },
+      "TripQuestionRequest" : {
+        "properties" : {
+          "question" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "question" ],
+        "type" : "object"
+      },
+      "TripQuestionResponse" : {
+        "properties" : {
+          "answer" : {
+            "type" : [ "string", "null" ]
+          },
+          "answerable" : {
+            "type" : [ "boolean", "null" ]
+          },
+          "askedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "factKeysUsed" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : [ "array", "null" ]
+          },
+          "failureCode" : {
+            "enum" : [ "TIMEOUT", "PROVIDER_ERROR", "RATE_LIMITED", "INVALID_RESPONSE", "REFUSED", "BUSY", "UNAVAILABLE" ],
+            "type" : [ "string", "null" ]
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "question" : {
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "COMPLETED", "FAILED", "UNAVAILABLE" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "askedAt", "id", "question", "status" ],
+        "type" : "object"
+      },
+      "UpdateProfileRequest" : {
+        "properties" : {
+          "fullName" : {
+            "maxLength" : 120,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "phone" : {
+            "pattern" : "^\\+[1-9]\\d{7,14}$",
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "fullName" ],
+        "type" : "object"
+      },
+      "UserResponse" : {
+        "properties" : {
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "fullName" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "phone" : {
+            "type" : [ "string", "null" ]
+          },
+          "role" : {
+            "enum" : [ "PASSENGER", "DRIVER", "ADMIN" ],
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "ACTIVE", "SUSPENDED" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "createdAt", "email", "fullName", "id", "role", "status" ],
+        "type" : "object"
+      },
+      "UserStatusUpdateRequest" : {
+        "properties" : {
+          "reason" : {
+            "maxLength" : 255,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "ACTIVE", "SUSPENDED" ],
+            "type" : "string"
+          }
+        },
+        "required" : [ "reason", "status" ],
+        "type" : "object"
+      },
+      "Vehicle" : {
+        "properties" : {
+          "category" : {
+            "enum" : [ "ECONOMY", "COMFORT", "XL" ],
+            "type" : "string"
+          },
+          "color" : {
+            "type" : "string"
+          },
+          "make" : {
+            "type" : "string"
+          },
+          "model" : {
+            "type" : "string"
+          },
+          "plateNumber" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "category", "color", "make", "model", "plateNumber" ],
+        "type" : "object"
+      },
+      "VehicleRequest" : {
+        "properties" : {
+          "category" : {
+            "enum" : [ "ECONOMY", "COMFORT", "XL" ],
+            "type" : "string"
+          },
+          "color" : {
+            "maxLength" : 30,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "make" : {
+            "maxLength" : 40,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "model" : {
+            "maxLength" : 40,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "modelYear" : {
+            "format" : "int32",
+            "minimum" : 1990,
+            "type" : "integer"
+          },
+          "plateNumber" : {
+            "minLength" : 1,
+            "pattern" : "^[A-Za-z0-9 -]{4,20}$",
+            "type" : "string"
+          },
+          "seats" : {
+            "format" : "int32",
+            "maximum" : 8,
+            "minimum" : 2,
+            "type" : "integer"
+          }
+        },
+        "required" : [ "category", "color", "make", "model", "modelYear", "plateNumber", "seats" ],
+        "type" : "object"
+      },
+      "VehicleResponse" : {
+        "properties" : {
+          "category" : {
+            "enum" : [ "ECONOMY", "COMFORT", "XL" ],
+            "type" : "string"
+          },
+          "color" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "make" : {
+            "type" : "string"
+          },
+          "model" : {
+            "type" : "string"
+          },
+          "modelYear" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "plateNumber" : {
+            "type" : "string"
+          },
+          "seats" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "category", "color", "id", "make", "model", "modelYear", "plateNumber", "seats" ],
+        "type" : "object"
+      }
+    },
+    "securitySchemes" : {
+      "bearerAuth" : {
+        "bearerFormat" : "JWT",
+        "scheme" : "bearer",
+        "type" : "http"
+      }
+    }
+  },
+  "info" : {
+    "description" : "Real-time ride-hailing platform API. Conventions: docs/api.md",
+    "title" : "RideFlow API",
+    "version" : "v1"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/api/admin/analytics/rides" : {
+      "get" : {
+        "operationId" : "rideActivity",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "from",
+          "required" : true,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "to",
+          "required" : true,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "granularity",
+          "required" : false,
+          "schema" : {
+            "default" : "DAY",
+            "enum" : [ "HOUR", "DAY" ],
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RideActivityResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Requested, completed, cancelled and expired rides and revenue per hour or day",
+        "tags" : [ "Admin: reports" ]
+      }
+    },
+    "/api/admin/audit-logs" : {
+      "get" : {
+        "operationId" : "search_3",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "action",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "LOGIN_FAILED", "PASSWORD_CHANGED", "REFRESH_TOKEN_REUSE_DETECTED", "DRIVER_PROFILE_SUBMITTED", "DRIVER_VERIFIED", "DRIVER_REJECTED", "DRIVER_SUSPENDED", "DRIVER_VEHICLE_REPLACED", "USER_STATUS_CHANGED", "ADMIN_BOOTSTRAPPED" ],
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "entityType",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 40,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "from",
+          "required" : false,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "to",
+          "required" : false,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "minimum" : 0,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "maximum" : 100,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "default" : "createdAt,desc",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageResponseAuditLogResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Security and administrative actions, newest first by default",
+        "tags" : [ "Admin: audit log" ]
+      }
+    },
+    "/api/admin/drivers" : {
+      "get" : {
+        "operationId" : "list_1",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "verificationStatus",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "PENDING", "VERIFIED", "REJECTED", "SUSPENDED" ],
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "minimum" : 0,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "maximum" : 100,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "default" : "createdAt,asc",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageResponseDriverResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "List drivers, optionally filtered by verification status",
+        "tags" : [ "Admin: drivers" ]
+      }
+    },
+    "/api/admin/drivers/{driverId}/reject" : {
+      "post" : {
+        "operationId" : "reject_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "driverId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DriverDecisionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DriverResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Reject a pending driver application",
+        "tags" : [ "Admin: drivers" ]
+      }
+    },
+    "/api/admin/drivers/{driverId}/suspend" : {
+      "post" : {
+        "operationId" : "suspend",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "driverId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DriverDecisionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DriverResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Suspend a verified driver and force them offline",
+        "tags" : [ "Admin: drivers" ]
+      }
+    },
+    "/api/admin/drivers/{driverId}/verify" : {
+      "post" : {
+        "operationId" : "verify",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "driverId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DriverResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Approve a driver so they can go online",
+        "tags" : [ "Admin: drivers" ]
+      }
+    },
+    "/api/admin/overview" : {
+      "get" : {
+        "operationId" : "overview",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "from",
+          "required" : true,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "to",
+          "required" : true,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AdminOverviewResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Ride counts, rates, time to match and revenue for [from, to); drivers by availability now",
+        "tags" : [ "Admin: reports" ]
+      }
+    },
+    "/api/admin/rides" : {
+      "get" : {
+        "operationId" : "search_2",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "status",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "REQUESTED", "MATCHING", "DRIVER_ASSIGNED", "DRIVER_ARRIVING", "DRIVER_ARRIVED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED" ],
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "from",
+          "required" : false,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "to",
+          "required" : false,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "passengerId",
+          "required" : false,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "driverId",
+          "required" : false,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "minimum" : 0,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "maximum" : 100,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "default" : "requestedAt,desc",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageResponseAdminRideSummaryResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Search all rides by status, request time, passenger or driver",
+        "tags" : [ "Admin: rides" ]
+      }
+    },
+    "/api/admin/rides/{rideId}" : {
+      "get" : {
+        "operationId" : "detail",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AdminRideDetailResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "A ride with its passenger, status history, offers and AI analysis status",
+        "tags" : [ "Admin: rides" ]
+      }
+    },
+    "/api/admin/system" : {
+      "get" : {
+        "operationId" : "system",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SystemStatusResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Health, outbox backlog, dead letters, AI circuit and WebSocket sessions of this instance",
+        "tags" : [ "Admin: reports" ]
+      }
+    },
+    "/api/admin/users" : {
+      "get" : {
+        "operationId" : "search_1",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "role",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "PASSENGER", "DRIVER", "ADMIN" ],
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "status",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "ACTIVE", "SUSPENDED" ],
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "q",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "minimum" : 0,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "maximum" : 100,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "default" : "createdAt,desc",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageResponseUserResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Search users by role, status and name/email text",
+        "tags" : [ "Admin: users" ]
+      }
+    },
+    "/api/admin/users/{userId}/status" : {
+      "patch" : {
+        "operationId" : "changeStatus",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "userId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UserStatusUpdateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Suspend or reactivate a passenger or driver account",
+        "tags" : [ "Admin: users" ]
+      }
+    },
+    "/api/auth/login" : {
+      "post" : {
+        "operationId" : "login",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AuthResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ ],
+        "summary" : "Sign in; returns an access token and sets the refresh-token cookie",
+        "tags" : [ "Auth" ]
+      }
+    },
+    "/api/auth/logout" : {
+      "post" : {
+        "description" : "Requires header X-Requested-With: rideflow",
+        "operationId" : "logout",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "security" : [ ],
+        "summary" : "Revoke the current session and clear the refresh-token cookie",
+        "tags" : [ "Auth" ]
+      }
+    },
+    "/api/auth/refresh" : {
+      "post" : {
+        "description" : "Requires header X-Requested-With: rideflow",
+        "operationId" : "refresh",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AuthResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ ],
+        "summary" : "Rotate the refresh-token cookie and issue a new access token",
+        "tags" : [ "Auth" ]
+      }
+    },
+    "/api/auth/register" : {
+      "post" : {
+        "operationId" : "register",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ ],
+        "summary" : "Create a passenger or driver account",
+        "tags" : [ "Auth" ]
+      }
+    },
+    "/api/drivers/location" : {
+      "post" : {
+        "operationId" : "reportLocation",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LocationUpdateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Report the current GPS position (REST fallback for the WebSocket stream)",
+        "tags" : [ "Drivers" ]
+      }
+    },
+    "/api/drivers/me" : {
+      "get" : {
+        "operationId" : "me_1",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DriverResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Current driver's profile, verification status and vehicle",
+        "tags" : [ "Drivers" ]
+      }
+    },
+    "/api/drivers/me/earnings" : {
+      "get" : {
+        "operationId" : "earnings",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "from",
+          "required" : true,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "to",
+          "required" : true,
+          "schema" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "granularity",
+          "required" : false,
+          "schema" : {
+            "default" : "DAY",
+            "enum" : [ "HOUR", "DAY" ],
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/EarningsResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Earnings from rides completed in [from, to), bucketed by hour or day",
+        "tags" : [ "Drivers" ]
+      }
+    },
+    "/api/drivers/me/offers" : {
+      "get" : {
+        "operationId" : "openOffers",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/RideOfferResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Open ride offers for the current driver",
+        "tags" : [ "Drivers" ]
+      }
+    },
+    "/api/drivers/me/profile" : {
+      "post" : {
+        "operationId" : "submitProfile",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DriverProfileRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DriverResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Submit licence and vehicle for verification",
+        "tags" : [ "Drivers" ]
+      }
+    },
+    "/api/drivers/me/vehicle" : {
+      "put" : {
+        "operationId" : "replaceVehicle",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/VehicleRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DriverResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Replace the active vehicle; only while offline",
+        "tags" : [ "Drivers" ]
+      }
+    },
+    "/api/drivers/nearby" : {
+      "get" : {
+        "operationId" : "nearby",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "lat",
+          "required" : true,
+          "schema" : {
+            "format" : "double",
+            "maximum" : 90.0,
+            "minimum" : -90.0,
+            "type" : "number"
+          }
+        }, {
+          "in" : "query",
+          "name" : "lng",
+          "required" : true,
+          "schema" : {
+            "format" : "double",
+            "maximum" : 180.0,
+            "minimum" : -180.0,
+            "type" : "number"
+          }
+        }, {
+          "in" : "query",
+          "name" : "radiusMeters",
+          "required" : false,
+          "schema" : {
+            "default" : 3000,
+            "format" : "int32",
+            "maximum" : 10000,
+            "minimum" : 100,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "category",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "ECONOMY", "COMFORT", "XL" ],
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/NearbyDriverResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Available cars near a point (coarsened and anonymous for passengers)",
+        "tags" : [ "Drivers" ]
+      }
+    },
+    "/api/drivers/offline" : {
+      "post" : {
+        "operationId" : "goOffline",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DriverResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Go offline; any pending offer is released",
+        "tags" : [ "Drivers" ]
+      }
+    },
+    "/api/drivers/online" : {
+      "post" : {
+        "operationId" : "goOnline",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/GoOnlineRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DriverResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Go online at the given position",
+        "tags" : [ "Drivers" ]
+      }
+    },
+    "/api/fares/estimate" : {
+      "post" : {
+        "operationId" : "estimate",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/FareEstimateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/FareEstimateResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Route, surge and a signed fare quote per vehicle category",
+        "tags" : [ "Fares" ]
+      }
+    },
+    "/api/geo/reverse" : {
+      "get" : {
+        "operationId" : "reverse",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "lat",
+          "required" : true,
+          "schema" : {
+            "format" : "double",
+            "maximum" : 90.0,
+            "minimum" : -90.0,
+            "type" : "number"
+          }
+        }, {
+          "in" : "query",
+          "name" : "lng",
+          "required" : true,
+          "schema" : {
+            "format" : "double",
+            "maximum" : 180.0,
+            "minimum" : -180.0,
+            "type" : "number"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PlaceResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Address at a point, or 204 if there is none (for example at sea)",
+        "tags" : [ "Geo" ]
+      }
+    },
+    "/api/geo/route" : {
+      "get" : {
+        "operationId" : "route",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "fromLat",
+          "required" : true,
+          "schema" : {
+            "format" : "double",
+            "maximum" : 90.0,
+            "minimum" : -90.0,
+            "type" : "number"
+          }
+        }, {
+          "in" : "query",
+          "name" : "fromLng",
+          "required" : true,
+          "schema" : {
+            "format" : "double",
+            "maximum" : 180.0,
+            "minimum" : -180.0,
+            "type" : "number"
+          }
+        }, {
+          "in" : "query",
+          "name" : "toLat",
+          "required" : true,
+          "schema" : {
+            "format" : "double",
+            "maximum" : 90.0,
+            "minimum" : -90.0,
+            "type" : "number"
+          }
+        }, {
+          "in" : "query",
+          "name" : "toLng",
+          "required" : true,
+          "schema" : {
+            "format" : "double",
+            "maximum" : 180.0,
+            "minimum" : -180.0,
+            "type" : "number"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RouteResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Road route between two points (straight-line fallback flagged APPROXIMATE)",
+        "tags" : [ "Geo" ]
+      }
+    },
+    "/api/geo/search" : {
+      "get" : {
+        "operationId" : "search",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "q",
+          "required" : true,
+          "schema" : {
+            "maxLength" : 200,
+            "minLength" : 2,
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "lat",
+          "required" : false,
+          "schema" : {
+            "format" : "double",
+            "maximum" : 90.0,
+            "minimum" : -90.0,
+            "type" : "number"
+          }
+        }, {
+          "in" : "query",
+          "name" : "lng",
+          "required" : false,
+          "schema" : {
+            "format" : "double",
+            "maximum" : 180.0,
+            "minimum" : -180.0,
+            "type" : "number"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/PlaceResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Place search, biased towards lat/lng when given; call on submit, not per keystroke",
+        "tags" : [ "Geo" ]
+      }
+    },
+    "/api/notifications" : {
+      "get" : {
+        "operationId" : "list",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "unreadOnly",
+          "required" : false,
+          "schema" : {
+            "default" : false,
+            "type" : "boolean"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "minimum" : 0,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "maximum" : 100,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "default" : "createdAt,desc",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageResponseNotificationResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Newest first by default",
+        "tags" : [ "Notifications" ]
+      }
+    },
+    "/api/notifications/read-all" : {
+      "post" : {
+        "operationId" : "markAllRead",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "Notifications" ]
+      }
+    },
+    "/api/notifications/{notificationId}/read" : {
+      "post" : {
+        "operationId" : "markRead",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "notificationId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "Notifications" ]
+      }
+    },
+    "/api/rides" : {
+      "get" : {
+        "operationId" : "history",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "status",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "REQUESTED", "MATCHING", "DRIVER_ASSIGNED", "DRIVER_ARRIVING", "DRIVER_ARRIVED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED" ],
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "minimum" : 0,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 20,
+            "format" : "int32",
+            "maximum" : 100,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "default" : "requestedAt,desc",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageResponseRideSummaryResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Trip history: rides booked (passenger) or driven (driver)",
+        "tags" : [ "Rides" ]
+      },
+      "post" : {
+        "operationId" : "book",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/BookRideRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RideResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Book a ride from a fare quote; matching starts asynchronously",
+        "tags" : [ "Rides" ]
+      }
+    },
+    "/api/rides/active" : {
+      "get" : {
+        "operationId" : "active",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RideResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "The caller's ongoing ride, or 204 if none (used to restore state after reload)",
+        "tags" : [ "Rides" ]
+      }
+    },
+    "/api/rides/{rideId}" : {
+      "get" : {
+        "operationId" : "get",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RideResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "Rides" ]
+      }
+    },
+    "/api/rides/{rideId}/accept" : {
+      "post" : {
+        "operationId" : "accept",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RideResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Accept an open offer (first driver to accept wins)",
+        "tags" : [ "Rides: driver actions" ]
+      }
+    },
+    "/api/rides/{rideId}/arrive" : {
+      "post" : {
+        "operationId" : "arrive",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RideResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Arrived at pickup (requires a fresh location inside the pickup geofence)",
+        "tags" : [ "Rides: driver actions" ]
+      }
+    },
+    "/api/rides/{rideId}/cancel" : {
+      "post" : {
+        "operationId" : "cancel",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CancelRideRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RideResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Passenger cancels; a driver before pickup releases the ride for re-dispatch",
+        "tags" : [ "Rides" ]
+      }
+    },
+    "/api/rides/{rideId}/complete" : {
+      "post" : {
+        "operationId" : "complete",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RideResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Complete the trip; measures distance from the GPS trail and computes the final fare",
+        "tags" : [ "Rides: driver actions" ]
+      }
+    },
+    "/api/rides/{rideId}/en-route" : {
+      "post" : {
+        "operationId" : "enRoute",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RideResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Start driving to the pickup",
+        "tags" : [ "Rides: driver actions" ]
+      }
+    },
+    "/api/rides/{rideId}/rating" : {
+      "post" : {
+        "operationId" : "rate",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RateRideRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RatingResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Rate the other participant of a completed ride (once per participant)",
+        "tags" : [ "Rides" ]
+      }
+    },
+    "/api/rides/{rideId}/reject" : {
+      "post" : {
+        "operationId" : "reject",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Decline an open offer",
+        "tags" : [ "Rides: driver actions" ]
+      }
+    },
+    "/api/rides/{rideId}/start" : {
+      "post" : {
+        "operationId" : "start",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RideResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Passenger on board; the trip starts",
+        "tags" : [ "Rides: driver actions" ]
+      }
+    },
+    "/api/rides/{rideId}/timeline" : {
+      "get" : {
+        "operationId" : "timeline",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/RideTimelineEntryResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Status history of the ride",
+        "tags" : [ "Rides" ]
+      }
+    },
+    "/api/rides/{rideId}/tracking" : {
+      "get" : {
+        "operationId" : "tracking",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RideTrackingResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Driver position and ETA snapshot; live updates then arrive over WebSocket",
+        "tags" : [ "Rides" ]
+      }
+    },
+    "/api/trips/{rideId}/ai-analysis" : {
+      "get" : {
+        "operationId" : "analysis",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TripAnalysisResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Computed observations, plus the AI analysis once it is ready (status PENDING until then)",
+        "tags" : [ "Trip insights" ]
+      }
+    },
+    "/api/trips/{rideId}/ai-analysis/questions" : {
+      "get" : {
+        "operationId" : "questions",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/TripQuestionResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Questions asked about this trip, oldest first",
+        "tags" : [ "Trip insights" ]
+      },
+      "post" : {
+        "operationId" : "ask",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TripQuestionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TripQuestionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Ask about this trip; answered from the trip's recorded facts only (503 AI_UNAVAILABLE if AI is down)",
+        "tags" : [ "Trip insights" ]
+      }
+    },
+    "/api/trips/{rideId}/ai-analysis/regenerate" : {
+      "post" : {
+        "operationId" : "regenerate",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TripAnalysisResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Run a FAILED, UNAVAILABLE or abandoned analysis again (asynchronously)",
+        "tags" : [ "Trip insights" ]
+      }
+    },
+    "/api/users/me" : {
+      "get" : {
+        "operationId" : "me",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Current user's profile",
+        "tags" : [ "Users" ]
+      },
+      "patch" : {
+        "operationId" : "update",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateProfileRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Update name and phone",
+        "tags" : [ "Users" ]
+      }
+    },
+    "/api/users/me/password" : {
+      "put" : {
+        "operationId" : "changePassword",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Change password; signs out all sessions",
+        "tags" : [ "Users" ]
+      }
+    }
+  },
+  "security" : [ {
+    "bearerAuth" : [ ]
+  } ],
+  "servers" : [ {
+    "url" : "/"
+  } ]
+}
