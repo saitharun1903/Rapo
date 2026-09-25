@@ -1,7 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ThemeProvider } from "next-themes";
+import { ThemeProvider, useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { Toaster } from "sonner";
 import { isApiError } from "@/lib/api/errors";
@@ -47,6 +47,11 @@ function SessionBootstrap({ queryClient }: { queryClient: QueryClient }) {
   return null;
 }
 
+function ThemedToaster() {
+  const { resolvedTheme } = useTheme();
+  return <Toaster position="top-center" richColors closeButton theme={resolvedTheme === "dark" ? "dark" : "light"} />;
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(createQueryClient);
   return (
@@ -54,7 +59,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <SessionBootstrap queryClient={queryClient} />
         {children}
-        <Toaster position="top-center" richColors closeButton />
+        <ThemedToaster />
       </QueryClientProvider>
     </ThemeProvider>
   );

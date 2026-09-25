@@ -63,6 +63,7 @@ export function ActiveRideView({ ride }: { ride: RideResponse }) {
     queryFn: () => unwrap(api.GET("/api/geo/route", {
       params: { query: { fromLat: ride.pickup.point.lat, fromLng: ride.pickup.point.lng, toLat: ride.dropoff.point.lat, toLng: ride.dropoff.point.lng } },
     })),
+    enabled: inTrip,
     staleTime: Infinity,
   });
 

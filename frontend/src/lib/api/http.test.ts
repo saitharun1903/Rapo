@@ -42,6 +42,18 @@ describe("createRefresher", () => {
     expect(store.accessToken()).toBe("new");
   });
 
+  it("takes turns with other tabs through a Web Lock", async () => {
+    const request = vi.fn((_name: string, task: () => Promise<boolean>) => task());
+    vi.stubGlobal("navigator", { ...navigator, locks: { request } });
+    try {
+      const store = signedInStore();
+      await expect(createRefresher("", vi.fn(async () => json(auth("new"))), store)()).resolves.toBe(true);
+      expect(request).toHaveBeenCalledWith("rideflow-token-refresh", expect.any(Function));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("sends the CSRF header and signs out when the cookie is rejected", async () => {
     const store = signedInStore();
     const fetchImpl = vi.fn(async () => json({ code: "SESSION_REVOKED", message: "revoked" }, 401));

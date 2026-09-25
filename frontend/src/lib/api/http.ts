@@ -12,10 +12,24 @@ type Fetch = (request: Request) => Promise<Response>;
 
 export type Refresher = () => Promise<boolean>;
 
+const REFRESH_LOCK = "rideflow-token-refresh";
+
 /**
- * Exchanges the HttpOnly refresh cookie for a new access token. Concurrent callers share one request:
- * the backend rotates refresh tokens and treats reuse of a rotated one as theft, so two parallel
- * refreshes would sign the user out.
+ * Runs `task` while holding a lock shared by every tab of this origin (Web Locks API), so refreshes from
+ * two tabs happen one after the other and the second sends the cookie the first one rotated.
+ */
+function acrossTabs<T>(task: () => Promise<T>): Promise<T> {
+  if (typeof navigator === "undefined" || !navigator.locks) {
+    return task();
+  }
+  // request() resolves with the callback's result; the callback's promise is flattened at runtime.
+  return navigator.locks.request(REFRESH_LOCK, task).then((result) => result);
+}
+
+/**
+ * Exchanges the HttpOnly refresh cookie for a new access token. Concurrent callers share one request, and
+ * tabs take turns: the backend rotates refresh tokens and treats reuse of a rotated one as theft, so two
+ * parallel refreshes (say, two tabs opened at once) would sign the user out.
  */
 export function createRefresher(baseUrl: string, fetchImpl: typeof fetch, store: SessionStore): Refresher {
   let inFlight: Promise<boolean> | null = null;
@@ -44,7 +58,7 @@ export function createRefresher(baseUrl: string, fetchImpl: typeof fetch, store:
   }
 
   return () => {
-    inFlight ??= refresh().finally(() => {
+    inFlight ??= acrossTabs(refresh).finally(() => {
       inFlight = null;
     });
     return inFlight;

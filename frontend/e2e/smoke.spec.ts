@@ -22,10 +22,12 @@ test("a passenger books a ride that a simulated driver completes, then sees the 
   await signIn(page, DEMO.passenger, demoPassword(), /\/ride$/);
   await expect(page.getByRole("heading", { name: "Where to?" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Choose on map" }).first().click();
+  const chooseOnMap = page.getByRole("button", { name: "Choose on map" });
+  await chooseOnMap.first().click();
   await clickMap(page, BOOKING_MAP, 0.45, 0.55);
-  await expect(page.getByRole("button", { name: "Choose on map" }).first()).toBeVisible();
-  await page.getByRole("button", { name: "Choose on map" }).nth(1).click();
+  // Both fields offer "Choose on map" again only once the pickup is set.
+  await expect(chooseOnMap).toHaveCount(2);
+  await chooseOnMap.nth(1).click();
   await clickMap(page, BOOKING_MAP, 0.65, 0.3);
 
   const request = page.getByRole("button", { name: /^Request / });
