@@ -28,7 +28,7 @@ class FareQuoteSignerTest {
     private static FareQuoteSigner signer(String secret) {
         return new FareQuoteSigner(new SecurityProperties(
                 new SecurityProperties.Jwt(secret, "rideflow", Duration.ofMinutes(15)),
-                new SecurityProperties.RefreshToken(Duration.ofDays(14), Duration.ofDays(7), "rf", true, "Lax", "/"),
+                new SecurityProperties.RefreshToken(Duration.ofDays(14), Duration.ofDays(7), Duration.ofSeconds(10), "rf", true, "Lax", "/"),
                 4), JSON);
     }
 

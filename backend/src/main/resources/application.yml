@@ -115,6 +115,9 @@ rideflow:
     refresh-token:
       ttl: ${REFRESH_TOKEN_TTL:14d}
       cleanup-retention: 7d
+      # A rotated token presented again this soon, while its successor has never been used, is a client that
+      # lost the response (a reload or dropped connection mid-refresh), not a replay; see RefreshTokenService.
+      reuse-grace: ${REFRESH_TOKEN_REUSE_GRACE:10s}
       cleanup-cron: "0 15 3 * * *"
       cookie-name: rf_refresh
       cookie-secure: ${REFRESH_COOKIE_SECURE:true}

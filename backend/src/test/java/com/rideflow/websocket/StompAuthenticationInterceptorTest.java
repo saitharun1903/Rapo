@@ -53,7 +53,7 @@ class StompAuthenticationInterceptorTest {
 
     private String token(Role role, String secret) {
         SecurityProperties properties = new SecurityProperties(new SecurityProperties.Jwt(secret, ISSUER, TTL),
-                new SecurityProperties.RefreshToken(Duration.ofDays(14), Duration.ofDays(7), "rf_refresh", true, "Lax",
+                new SecurityProperties.RefreshToken(Duration.ofDays(14), Duration.ofDays(7), Duration.ofSeconds(10), "rf_refresh", true, "Lax",
                         "/api/auth"), 4);
         SecretKeySpec signingKey = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
         AccessTokenService tokens = new AccessTokenService(

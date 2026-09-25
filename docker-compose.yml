@@ -94,6 +94,7 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-rideflow}
       JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-15m}
       REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-14d}
+      REFRESH_TOKEN_REUSE_GRACE: ${REFRESH_TOKEN_REUSE_GRACE:-10s}
       # The stack is served over plain http on localhost; a Secure cookie would never be sent back.
       REFRESH_COOKIE_SECURE: ${REFRESH_COOKIE_SECURE:-false}
       REFRESH_COOKIE_SAME_SITE: ${REFRESH_COOKIE_SAME_SITE:-Lax}

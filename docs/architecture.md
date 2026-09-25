@@ -612,8 +612,11 @@ sequenceDiagram
     C->>A: API calls with Authorization: Bearer <JWT>
     Note over C: on 401 or shortly before expiry
     C->>A: POST /api/auth/refresh (cookie + X-Requested-With header)
-    S->>PG: find by hash, not revoked, not expired
-    alt token already used (reuse detected)
+    S->>PG: find by hash (row locked), not revoked, not expired
+    alt rotated within the reuse grace, successor never presented (the client lost the response)
+        S->>PG: replace the lost successor with a new token
+        S-->>C: 200 new access token + rotated cookie
+    else token already used (reuse detected)
         S->>PG: revoke entire family
         S-->>C: 401 SESSION_REVOKED
     else valid
@@ -624,6 +627,7 @@ sequenceDiagram
 
 - JWT: HS256, secret from `JWT_SECRET` (≥ 256-bit), claims `sub` (userId), `role`, `iat`, `exp`, `jti`. Issued with `NimbusJwtEncoder`, validated by Spring Security's resource server.
 - Passwords: `DelegatingPasswordEncoder` with BCrypt (strength 12).
+- Reuse grace (`REFRESH_TOKEN_REUSE_GRACE`, 10 s): a page reload or dropped connection during a refresh leaves the browser with the old cookie after the server has rotated it. That old token, presented again within the grace while its successor has never been presented, replaces the successor instead of revoking the session. Once the successor has been used, the old token is theft again; two lost responses in a row within the grace also end the session, which is the price of not letting a replay follow the chain. The token row is locked during rotation, so concurrent refreshes with one token are decided in turn.
 - The access token lives in memory on the client, never in `localStorage`.
 
 ### 13.2 Authorisation
@@ -735,7 +739,7 @@ The public OSRM and Nominatim instances are for light development use only; the 
 ## 19. Demo mode and seed data
 
 - **Seed data** lives in `backend/src/main/resources/db/seed/` and is added to `spring.flyway.locations` **only** when the `demo` profile is active. It contains demo accounts (1 admin, passengers, verified drivers with vehicles, one driver pending verification). It contains no positions: drivers report their own when they go online. It also contains **no rides, trips, payments or analytics**: those are produced by actually running rides.
-- **Driver simulator** (`simulator/`, TypeScript on Node 24; a compose profile `demo` follows in Phase 10) starts each seeded driver at a random point within `SIM_START_RADIUS_METERS` of the city centre, logs in as seeded drivers through `POST /api/auth/login`, goes online through `POST /api/drivers/online`, streams location over the same STOMP destination as a real driver, auto-accepts offers through `POST /api/rides/{id}/accept`, and follows real routes from `RoutingProvider` (via a backend route endpoint) to the pickup, then the destination, calling `en-route`, `arrive`, `start` and `complete`. The passenger watches it move through the real WebSocket pipeline. It shares no code path with the frontend and has no backdoor into the backend.
+- **Driver simulator** (`simulator/`, TypeScript on Node 24; `docker compose --profile demo up` runs it in a container) starts each seeded driver at a random point within `SIM_START_RADIUS_METERS` of the city centre, logs in as seeded drivers through `POST /api/auth/login`, goes online through `POST /api/drivers/online`, streams location over the same STOMP destination as a real driver, auto-accepts offers through `POST /api/rides/{id}/accept`, and follows real routes from `RoutingProvider` (via a backend route endpoint) to the pickup, then the destination, calling `en-route`, `arrive`, `start` and `complete`. The passenger watches it move through the real WebSocket pipeline. It shares no code path with the frontend and has no backdoor into the backend.
 - A `--trips N` mode drives N complete rides for seeded passengers so that trip history and AI comparisons have genuine data.
 
 ---
@@ -767,8 +771,8 @@ flowchart LR
     PUSH --> FCI["frontend-ci.yml"]
     BCI --> B1["checkout, JDK 21, Maven cache"] --> B2["spotless check + compile"] --> B3["unit + ArchUnit tests"] --> B4["integration tests<br/>Testcontainers on runner Docker"] --> B5["package + JaCoCo report"]
     FCI --> F1["checkout, Node, npm ci"] --> F2["lint + typecheck"] --> F3["vitest"] --> F4["next build"]
-    B5 & F4 --> DK["docker.yml"]
-    DK --> D1["build backend and frontend images"] --> D2["compose up + smoke test"] --> D3{"main branch<br/>and registry secrets?"}
+    PUSH --> DK["e2e.yml"]
+    DK --> D1["init-env.sh, build backend, frontend and simulator images"] --> D2["compose up --wait, login through the frontend, Playwright suite"] --> D3{"main branch<br/>and registry secrets?"}
     D3 -->|yes| D4["push images to GHCR, optional deploy hook"]
     D3 -->|no| D5["skip publish"]
     PUSH --> SEC["gitleaks secret scan"]

@@ -5,7 +5,7 @@
 | Tool | Version | Notes |
 |---|---|---|
 | JDK | 21 | Maven itself is not needed: use the wrapper `backend/mvnw` |
-| Docker Desktop | recent | Runs PostGIS, Redis and Kafka, and the Testcontainers integration tests |
+| Docker Desktop | recent, Compose v2 | Runs the whole stack, or just PostGIS, Redis and Kafka, and the Testcontainers integration tests |
 | Node.js | 24+ | Frontend and driver simulator (the simulator runs TypeScript directly on Node 24) |
 
 > **Windows / OneDrive:** keep the repository outside OneDrive-synced folders. OneDrive locks files in
@@ -13,9 +13,34 @@
 
 ## First run
 
+`.env` holds every setting and secret, and is git-ignored. Create it once:
+
 ```bash
-cp .env.example .env              # then fill in every REQUIRED value
-docker compose up -d              # PostGIS, Redis, Kafka
+./scripts/init-env.sh             # .env from .env.example, with random values for every required secret
+```
+
+(or `cp .env.example .env` and fill in each REQUIRED value by hand). Then either run everything in Docker, or
+run the infrastructure in Docker and the apps on the host while you work on them.
+
+### Everything in Docker
+
+```bash
+docker compose --profile demo up --build   # http://localhost:3000; the simulator's drivers are online
+docker compose up --build                  # the same without the simulator
+docker compose --profile demo down         # stop (add -v to delete the database and Kafka volumes)
+```
+
+Compose starts PostGIS, Redis and Kafka, then the backend once they are healthy, then the frontend (and the
+simulator) once the backend is ready. The backend image is a layered Spring Boot jar on an Alpine JRE 21, the
+frontend image is Next's standalone server on Node 24, and both run as non-root users. The frontend forwards
+`/api` to the backend container; the browser opens the WebSocket on the backend's published port
+(`BACKEND_PORT`). Both are fixed when the frontend image is built (Next inlines them), so changing
+`BACKEND_PORT` needs `--build`.
+
+### Apps on the host
+
+```bash
+docker compose up -d postgres redis kafka  # infrastructure only
 cd backend
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=demo
 ```
@@ -114,7 +139,9 @@ trip controls. Pages as a whole are covered by Playwright.
 ### End-to-end (Playwright)
 
 `frontend/e2e` holds tests that need the whole stack: infrastructure, the backend with the `demo` profile and
-the simulator (the `e2e` workflow starts all of it).
+the simulator. The `e2e` workflow runs them against the Docker Compose stack from a clean checkout:
+`init-env.sh`, `docker compose --profile demo up --build --wait`, a login through the frontend container, then
+Playwright.
 
 | Spec | Journey |
 |---|---|
@@ -123,15 +150,17 @@ the simulator (the `e2e` workflow starts all of it).
 | `passenger.spec.ts` | A passenger books from their own location, cancels while matching, and sees the ride in their history |
 
 The driver and cancellation tests work 15 to 20 km out of the city centre, beyond the simulator's drivers'
-reach, so those drivers never take their rides. Locally, with the stack running:
+reach, so those drivers never take their rides. Locally, against the compose stack started with
+`SIM_SPEED_MPS=60` and `SIM_BOARDING_MS=2000` in `.env` (so a whole ride fits in a test's time limit):
 
 ```bash
 cd frontend
 npx playwright install chromium
-DEMO_USER_PASSWORD=... npm run build && DEMO_USER_PASSWORD=... npm run e2e
+PLAYWRIGHT_BASE_URL=http://localhost:3000 DEMO_USER_PASSWORD=... npm run e2e
 ```
 
-Run the simulator with `SIM_SPEED_MPS=60` so a whole ride fits in the test's time limit.
+Without `PLAYWRIGHT_BASE_URL`, Playwright starts the frontend itself (`npm run build` first) against a
+backend and simulator you run on the host.
 
 ## Environment variables
 
@@ -176,7 +205,8 @@ startup if one is missing.
 | `JWT_ISSUER` | no | `rideflow` | `iss` claim, validated on every request |
 | `JWT_ACCESS_TOKEN_TTL` | no | `15m` | Access-token lifetime |
 | `REFRESH_TOKEN_TTL` | no | `14d` | Refresh-token lifetime (sliding via rotation) |
-| `REFRESH_COOKIE_SECURE` | no | `true` | `Secure` flag on the refresh cookie; `false` only for http://localhost |
+| `REFRESH_TOKEN_REUSE_GRACE` | no | `10s` | How soon a rotated refresh token may come back (while its successor is unused) without counting as theft: a reload or dropped connection mid-refresh |
+| `REFRESH_COOKIE_SECURE` | no | `true` (`false` in compose) | `Secure` flag on the refresh cookie; `false` only for http://localhost |
 | `REFRESH_COOKIE_SAME_SITE` | no | `Lax` | `None` (with Secure) if the frontend is on a different site than the API |
 | `BCRYPT_STRENGTH` | no | `12` | BCrypt cost factor |
 | `CORS_ALLOWED_ORIGINS` | no | `http://localhost:3000` | Comma-separated browser origins allowed to call the API |
@@ -185,6 +215,9 @@ startup if one is missing.
 | `SERVER_PORT` | no | `8080` | API port |
 | `MANAGEMENT_PORT` | no | `8081` | Actuator port; keep it off the public internet |
 | `API_DOCS_ENABLED` | no | `true` (`false` in `prod`) | Swagger UI and `/v3/api-docs` |
+| `FRONTEND_PORT` / `BACKEND_PORT` | no | `3000` / `8080` | Host ports of the compose frontend and backend. A different frontend port needs `CORS_ALLOWED_ORIGINS` to match |
+| `DOCKER_AI_LOCAL_BASE_URL` | no | `http://host.docker.internal:11434` | Where the backend container reaches Ollama on the host (`AI_LOCAL_BASE_URL` is for a backend on the host) |
+| `SIM_SPEED_MPS` / `SIM_BOARDING_MS` | no | `11` / `5000` | Simulated drivers' speed and boarding wait, compose `demo` profile |
 
 ## Conventions
 

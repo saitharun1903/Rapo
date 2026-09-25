@@ -41,6 +41,7 @@ class RefreshTokenServiceTest {
     private static final Instant NOW = Instant.parse("2026-09-24T10:00:00Z");
     private static final Duration TTL = Duration.ofDays(14);
     private static final String RAW = "raw-refresh-token";
+    private static final Duration REUSE_GRACE = Duration.ofSeconds(10);
 
     @Mock
     private RefreshTokenRepository repository;
@@ -55,7 +56,7 @@ class RefreshTokenServiceTest {
     void setUp() {
         SecurityProperties properties = new SecurityProperties(
                 new SecurityProperties.Jwt("unused-secret-unused-secret-unused", "rideflow", Duration.ofMinutes(15)),
-                new SecurityProperties.RefreshToken(TTL, Duration.ofDays(7), "rf_refresh", true, "Lax", "/api/auth"),
+                new SecurityProperties.RefreshToken(TTL, Duration.ofDays(7), REUSE_GRACE, "rf_refresh", true, "Lax", "/api/auth"),
                 4);
         service = new RefreshTokenService(repository, generator, auditService, Clock.fixed(NOW, ZoneOffset.UTC), properties);
         user = User.register("a@example.com", null, "{bcrypt}x", "A", Role.PASSENGER);
@@ -93,7 +94,7 @@ class RefreshTokenServiceTest {
     void rotationRevokesCurrentTokenAndKeepsFamily() {
         UUID familyId = UUID.randomUUID();
         RefreshToken current = stored(familyId, NOW.plus(Duration.ofDays(1)));
-        when(repository.findByTokenHash(generator.hash(RAW))).thenReturn(Optional.of(current));
+        when(repository.findForRotation(generator.hash(RAW))).thenReturn(Optional.of(current));
         saveAssignsIds();
 
         RefreshTokenService.RotatedRefreshToken rotated = service.rotate(RAW);
@@ -107,11 +108,56 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    void reusingRotatedTokenRevokesWholeFamilyAndAudits() {
+    void reusingATokenRotatedLongerAgoThanTheGraceRevokesTheWholeFamilyAndAudits() {
         UUID familyId = UUID.randomUUID();
         RefreshToken alreadyRotated = stored(familyId, NOW.plus(Duration.ofDays(1)));
         alreadyRotated.rotateTo(UUID.randomUUID(), NOW.minusSeconds(60));
-        when(repository.findByTokenHash(generator.hash(RAW))).thenReturn(Optional.of(alreadyRotated));
+        when(repository.findForRotation(generator.hash(RAW))).thenReturn(Optional.of(alreadyRotated));
+
+        assertThatThrownBy(() -> service.rotate(RAW))
+                .extracting(ex -> ((RideFlowException) ex).code())
+                .isEqualTo(ErrorCode.SESSION_REVOKED);
+        verify(repository).revokeFamily(familyId, NOW);
+        verify(auditService).record(eq(user.getId()), eq(AuditAction.REFRESH_TOKEN_REUSE_DETECTED), eq("USER"),
+                eq(user.getId()), anyMap());
+        verify(repository, never()).save(any());
+    }
+
+    private RefreshToken successor(UUID familyId) {
+        RefreshToken token = RefreshToken.issue(user, generator.hash("successor"), familyId, NOW.plus(TTL));
+        ReflectionTestUtils.setField(token, "id", UUID.randomUUID());
+        return token;
+    }
+
+    @Test
+    void aTokenPresentedAgainWithinTheGraceWhileItsSuccessorIsUnusedReplacesTheLostSuccessor() {
+        UUID familyId = UUID.randomUUID();
+        RefreshToken lost = successor(familyId);
+        RefreshToken presented = stored(familyId, NOW.plus(Duration.ofDays(1)));
+        presented.rotateTo(lost.getId(), NOW.minus(REUSE_GRACE));
+        when(repository.findForRotation(generator.hash(RAW))).thenReturn(Optional.of(presented));
+        when(repository.findByIdForRotation(lost.getId())).thenReturn(Optional.of(lost));
+        saveAssignsIds();
+
+        RefreshTokenService.RotatedRefreshToken rotated = service.rotate(RAW);
+
+        // The successor that never reached the client is replaced; the session goes on.
+        assertThat(lost.isRevoked()).isTrue();
+        assertThat(lost.getReplacedById()).isEqualTo(rotated.token().id());
+        assertThat(presented.getReplacedById()).isEqualTo(lost.getId());
+        verify(repository, never()).revokeFamily(any(), any());
+        verifyNoInteractions(auditService);
+    }
+
+    @Test
+    void aTokenPresentedAgainAfterItsSuccessorWasUsedIsReuseEvenWithinTheGrace() {
+        UUID familyId = UUID.randomUUID();
+        RefreshToken used = successor(familyId);
+        used.rotateTo(UUID.randomUUID(), NOW.minusSeconds(1));
+        RefreshToken presented = stored(familyId, NOW.plus(Duration.ofDays(1)));
+        presented.rotateTo(used.getId(), NOW.minusSeconds(2));
+        when(repository.findForRotation(generator.hash(RAW))).thenReturn(Optional.of(presented));
+        when(repository.findByIdForRotation(used.getId())).thenReturn(Optional.of(used));
 
         assertThatThrownBy(() -> service.rotate(RAW))
                 .extracting(ex -> ((RideFlowException) ex).code())
@@ -123,10 +169,24 @@ class RefreshTokenServiceTest {
     }
 
     @Test
+    void theGraceEndsExactlyAtItsLength() {
+        UUID familyId = UUID.randomUUID();
+        RefreshToken presented = stored(familyId, NOW.plus(Duration.ofDays(1)));
+        presented.rotateTo(UUID.randomUUID(), NOW.minus(REUSE_GRACE).minusMillis(1));
+        when(repository.findForRotation(generator.hash(RAW))).thenReturn(Optional.of(presented));
+
+        assertThatThrownBy(() -> service.rotate(RAW))
+                .extracting(ex -> ((RideFlowException) ex).code())
+                .isEqualTo(ErrorCode.SESSION_REVOKED);
+        verify(repository, never()).findByIdForRotation(any());
+        verify(repository).revokeFamily(familyId, NOW);
+    }
+
+    @Test
     void tokenRevokedByLogoutIsRejectedWithoutReuseAlarm() {
         RefreshToken loggedOut = stored(UUID.randomUUID(), NOW.plus(Duration.ofDays(1)));
         ReflectionTestUtils.setField(loggedOut, "revokedAt", NOW.minusSeconds(60));
-        when(repository.findByTokenHash(generator.hash(RAW))).thenReturn(Optional.of(loggedOut));
+        when(repository.findForRotation(generator.hash(RAW))).thenReturn(Optional.of(loggedOut));
 
         assertThatThrownBy(() -> service.rotate(RAW))
                 .extracting(ex -> ((RideFlowException) ex).code())
@@ -137,7 +197,7 @@ class RefreshTokenServiceTest {
 
     @Test
     void expiredTokenIsRejected() {
-        when(repository.findByTokenHash(generator.hash(RAW)))
+        when(repository.findForRotation(generator.hash(RAW)))
                 .thenReturn(Optional.of(stored(UUID.randomUUID(), NOW)));
 
         assertThatThrownBy(() -> service.rotate(RAW))
@@ -147,7 +207,7 @@ class RefreshTokenServiceTest {
 
     @Test
     void unknownTokenIsRejected() {
-        when(repository.findByTokenHash(any())).thenReturn(Optional.empty());
+        when(repository.findForRotation(any())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.rotate("never-issued"))
                 .extracting(ex -> ((RideFlowException) ex).code())
@@ -158,7 +218,7 @@ class RefreshTokenServiceTest {
     void suspendedUserCannotRefreshAndSessionIsRevoked() {
         UUID familyId = UUID.randomUUID();
         user.changeStatus(UserStatus.SUSPENDED);
-        when(repository.findByTokenHash(generator.hash(RAW)))
+        when(repository.findForRotation(generator.hash(RAW)))
                 .thenReturn(Optional.of(stored(familyId, NOW.plus(Duration.ofDays(1)))));
 
         assertThatThrownBy(() -> service.rotate(RAW))

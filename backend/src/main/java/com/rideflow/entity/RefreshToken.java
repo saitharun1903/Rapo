@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -75,6 +76,11 @@ public class RefreshToken {
     /** True if this token was exchanged for a successor, as opposed to revoked by logout or an admin. */
     public boolean wasRotated() {
         return replacedById != null;
+    }
+
+    /** True if this token was exchanged for a successor no longer than {@code grace} before {@code now}. */
+    public boolean rotatedWithin(Duration grace, Instant now) {
+        return wasRotated() && !now.isAfter(revokedAt.plus(grace));
     }
 
     public boolean isExpired(Instant now) {

@@ -32,7 +32,7 @@ class AccessTokenServiceTest {
     private static SecurityProperties properties(String issuer) {
         return new SecurityProperties(
                 new SecurityProperties.Jwt(SECRET, issuer, TTL),
-                new SecurityProperties.RefreshToken(Duration.ofDays(14), Duration.ofDays(7), "rf_refresh", true, "Lax", "/api/auth"),
+                new SecurityProperties.RefreshToken(Duration.ofDays(14), Duration.ofDays(7), Duration.ofSeconds(10), "rf_refresh", true, "Lax", "/api/auth"),
                 4);
     }
 

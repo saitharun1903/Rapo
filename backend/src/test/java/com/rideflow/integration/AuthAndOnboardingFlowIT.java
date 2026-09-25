@@ -100,14 +100,25 @@ class AuthAndOnboardingFlowIT extends IntegrationTestContainers {
 
         MvcResult rotated = refresh(session.refreshToken());
         assertThat(rotated.getResponse().getStatus()).isEqualTo(200);
-        Session next = session(rotated);
-        assertThat(next.refreshToken()).isNotEqualTo(session.refreshToken());
+        Session lost = session(rotated);
+        assertThat(lost.refreshToken()).isNotEqualTo(session.refreshToken());
 
-        // Reusing the old token is treated as theft: the whole family, including the new token, is revoked.
+        // The response carrying that token never reached the browser (a reload mid-refresh), so it sends the old
+        // one again at once: within the grace, with the successor unused, the session goes on.
+        MvcResult retried = refresh(session.refreshToken());
+        assertThat(retried.getResponse().getStatus()).isEqualTo(200);
+        Session next = session(retried);
+        assertThat(next.refreshToken()).isNotIn(session.refreshToken(), lost.refreshToken());
+        MvcResult used = refresh(next.refreshToken());
+        assertThat(used.getResponse().getStatus()).isEqualTo(200);
+        Session latest = session(used);
+
+        // Once the client has used its new token, the old one coming back is theft: the whole family, including
+        // the newest token, is revoked.
         MvcResult reuse = refresh(session.refreshToken());
         assertThat(reuse.getResponse().getStatus()).isEqualTo(401);
         assertThat(JsonPath.<String>read(reuse.getResponse().getContentAsString(), "$.code")).isEqualTo("SESSION_REVOKED");
-        assertThat(refresh(next.refreshToken()).getResponse().getStatus()).isEqualTo(401);
+        assertThat(refresh(latest.refreshToken()).getResponse().getStatus()).isEqualTo(401);
         assertThat(auditLogs.findByEntityIdAndAction(UUID.fromString(session.userId()),
                 AuditAction.REFRESH_TOKEN_REUSE_DETECTED)).hasSize(1);
     }

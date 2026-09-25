@@ -25,6 +25,7 @@ public record SecurityProperties(
     public record RefreshToken(
             @NotNull Duration ttl,
             @NotNull Duration cleanupRetention,
+            @NotNull Duration reuseGrace,
             @NotBlank String cookieName,
             boolean cookieSecure,
             @NotBlank String cookieSameSite,

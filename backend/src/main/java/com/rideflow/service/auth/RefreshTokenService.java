@@ -38,6 +38,7 @@ public class RefreshTokenService {
     private final AuditService auditService;
     private final Clock clock;
     private final Duration ttl;
+    private final Duration reuseGrace;
 
     public RefreshTokenService(
             RefreshTokenRepository refreshTokens,
@@ -50,6 +51,7 @@ public class RefreshTokenService {
         this.auditService = auditService;
         this.clock = clock;
         this.ttl = properties.refreshToken().ttl();
+        this.reuseGrace = properties.refreshToken().reuseGrace();
     }
 
     /** Starts a new rotation family (a new login session). */
@@ -58,12 +60,17 @@ public class RefreshTokenService {
     }
 
     /**
-     * Exchanges a valid refresh token for a new one in the same family. Presenting a token that was
-     * already rotated means it leaked (or a client raced itself), so the entire family is revoked.
+     * Exchanges a valid refresh token for a new one in the same family. Presenting a token that was already
+     * rotated means it leaked, so the entire family is revoked, with one exception: the client that lost the
+     * response. A reload or dropped connection during a refresh leaves the browser with the old cookie, while the
+     * server has already rotated it; if that old token comes back within the reuse grace and its successor has
+     * never been presented, the successor (which never reached anyone) is replaced instead. A thief replaying a
+     * token after the rightful client has used its successor is still caught.
      */
     public RotatedRefreshToken rotate(String rawToken) {
         Instant now = clock.instant();
-        RefreshToken current = refreshTokens.findByTokenHash(tokenGenerator.hash(rawToken))
+        // Locked, so concurrent requests with the same token are decided one after the other.
+        RefreshToken current = refreshTokens.findForRotation(tokenGenerator.hash(rawToken))
                 .orElseThrow(() -> invalid("Refresh token is not recognised"));
 
         if (current.isRevoked() && !current.wasRotated()) {
@@ -71,27 +78,41 @@ public class RefreshTokenService {
             throw new AuthenticationFailedException(ErrorCode.SESSION_REVOKED,
                     "Session has ended; please sign in again");
         }
-        if (current.isRevoked()) {
-            refreshTokens.revokeFamily(current.getFamilyId(), now);
-            UUID userId = current.getUser().getId();
-            log.warn("Refresh token reuse detected for user {}; family {} revoked", userId, current.getFamilyId());
-            auditService.record(userId, AuditAction.REFRESH_TOKEN_REUSE_DETECTED, ENTITY_TYPE, userId,
-                    Map.of("familyId", current.getFamilyId().toString()));
-            throw new AuthenticationFailedException(ErrorCode.SESSION_REVOKED,
-                    "Session was revoked because a refresh token was reused; please sign in again");
-        }
-        if (current.isExpired(now)) {
+        RefreshToken toRotate = current.isRevoked() ? lostSuccessor(current, now) : current;
+        if (toRotate.isExpired(now)) {
             throw invalid("Refresh token has expired");
         }
-        User user = current.getUser();
+        User user = toRotate.getUser();
         if (!user.isActive()) {
-            refreshTokens.revokeFamily(current.getFamilyId(), now);
+            refreshTokens.revokeFamily(toRotate.getFamilyId(), now);
             throw new AuthenticationFailedException(ErrorCode.ACCOUNT_SUSPENDED, "Account is suspended");
         }
 
-        IssuedRefreshToken next = issue(user, current.getFamilyId());
-        current.rotateTo(next.id(), now);
+        IssuedRefreshToken next = issue(user, toRotate.getFamilyId());
+        toRotate.rotateTo(next.id(), now);
         return new RotatedRefreshToken(user, next);
+    }
+
+    /**
+     * For a rotated token presented again: its successor, if the client can only have lost it (rotated within the
+     * grace and never presented since). Anything else is reuse, and revokes the family.
+     */
+    private RefreshToken lostSuccessor(RefreshToken rotated, Instant now) {
+        if (rotated.rotatedWithin(reuseGrace, now)) {
+            RefreshToken successor = refreshTokens.findByIdForRotation(rotated.getReplacedById()).orElse(null);
+            if (successor != null && !successor.isRevoked()) {
+                log.info("Refresh token of family {} presented again within the grace period; replacing its "
+                        + "unused successor", rotated.getFamilyId());
+                return successor;
+            }
+        }
+        refreshTokens.revokeFamily(rotated.getFamilyId(), now);
+        UUID userId = rotated.getUser().getId();
+        log.warn("Refresh token reuse detected for user {}; family {} revoked", userId, rotated.getFamilyId());
+        auditService.record(userId, AuditAction.REFRESH_TOKEN_REUSE_DETECTED, ENTITY_TYPE, userId,
+                Map.of("familyId", rotated.getFamilyId().toString()));
+        throw new AuthenticationFailedException(ErrorCode.SESSION_REVOKED,
+                "Session was revoked because a refresh token was reused; please sign in again");
     }
 
     /** Revokes the session the token belongs to. Unknown tokens are ignored so logout is idempotent. */
