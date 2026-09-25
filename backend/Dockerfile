@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- Build: compile and package with the Maven wrapper, then split the jar into Spring Boot's layers ----------
-FROM eclipse-temurin:21-jdk-alpine AS build
+FROM eclipse-temurin:25-jdk-alpine AS build
 WORKDIR /workspace
 
 # Dependencies first: this layer is reused until pom.xml changes. The cache mount keeps ~/.m2 across builds.
@@ -17,7 +17,7 @@ RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q -DskipTests -Djacoco.skip=t
         extract --layers --launcher --destination target/app
 
 # ---- Runtime: JRE only, non-root, one layer per rate of change ------------------------------------------------
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 RUN addgroup -S rideflow && adduser -S -G rideflow -H rideflow
 WORKDIR /app
 
