@@ -25,5 +25,8 @@ load-tests/results/
 *.iml
 .vscode/*
 !.vscode/extensions.json
+.claude/*
+!.claude/scheduled_tasks.lock
 .DS_Store
 Thumbs.db
+

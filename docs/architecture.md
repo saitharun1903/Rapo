@@ -1,6 +1,7 @@
 # RideFlow — Architecture
 
-> Status: **Phase 1 (design)**. This document is the source of truth for architectural decisions.
+> Status: written in Phase 1 and kept in step with the code through Phase 15; each section notes where the
+> build changed the design. This document is the source of truth for architectural decisions.
 > Detailed contracts live in companion documents:
 >
 > - [database.md](database.md) — schema, constraints, indexes, PostGIS queries
