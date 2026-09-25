@@ -1,0 +1,90 @@
+name: load-test
+
+# Phase 12: the k6 scenarios (login, nearby search, ride creation, full ride lifecycle) at 10, 50 and 100
+# VUs against the compose stack's backend on PostGIS, Redis and Kafka. k6 and the stack share one GitHub
+# runner, whose specification is recorded with the results. Settings are production's, except the three a
+# capacity test on one machine must change (load-tests/README.md explains each).
+on:
+  workflow_dispatch:
+  push:
+    paths: ["load-tests/scenarios/**", ".github/workflows/load-test.yml"]
+
+# A newer push to the same branch makes a running measurement obsolete; on main every commit keeps its run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DURATION_SECONDS: "60"
+  ADMIN_EMAIL: load-admin@example.com
+
+jobs:
+  scenarios:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v5
+
+      # Random secrets for this run only, masked in the logs, never stored.
+      - name: Create .env
+        run: |
+          ./scripts/init-env.sh
+          admin_password="Load-$(openssl rand -hex 16)"
+          set_env() {
+            if grep -q "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env; else echo "$1=$2" >> .env; fi
+          }
+          set_env SPRING_PROFILES_ACTIVE prod
+          set_env RATE_LIMIT_ENABLED false
+          set_env ROUTING_PROVIDER straight-line
+          set_env GEOCODING_PROVIDER disabled
+          set_env BOOTSTRAP_ADMIN_EMAIL "$ADMIN_EMAIL"
+          set_env BOOTSTRAP_ADMIN_PASSWORD "$admin_password"
+          for name in POSTGRES_PASSWORD REDIS_PASSWORD JWT_SECRET DEMO_USER_PASSWORD GRAFANA_ADMIN_PASSWORD BOOTSTRAP_ADMIN_PASSWORD; do
+            echo "::add-mask::$(grep "^$name=" .env | cut -d= -f2-)"
+          done
+          echo "ADMIN_PASSWORD=$admin_password" >> "$GITHUB_ENV"
+
+      - name: Start the backend and its infrastructure
+        run: |
+          start=$SECONDS
+          docker compose up -d --build --wait --wait-timeout 300 postgres redis kafka backend
+          echo "::notice title=Stack startup::healthy after $(( SECONDS - start )) s (image build included)"
+
+      - name: Run the scenarios
+        run: DURATION="${DURATION_SECONDS}s" bash load-tests/scenarios/run.sh
+
+      - name: Report
+        run: |
+          {
+            echo "Runner: $(nproc) vCPU, $(lscpu | sed -n 's/^Model name: *//p'), $(free -g | awk '/^Mem:/ {print $2}') GB RAM, $(lsb_release -ds)."
+            echo "k6 and the whole stack (backend, PostGIS, Redis, Kafka) ran on this one machine; ${DURATION_SECONDS} s per run."
+            echo
+            python3 load-tests/scenarios/report.py load-tests/results/scenarios "$DURATION_SECONDS"
+          } > load-tests/results/scenarios/report.md
+          cat load-tests/results/scenarios/report.md >> "$GITHUB_STEP_SUMMARY"
+          # Also as an annotation, which is readable without signing in.
+          body=$(head -c 60000 load-tests/results/scenarios/report.md | tr -d '\r' | awk 'BEGIN { ORS = "%0A" } { gsub(/%/, "%25"); print }')
+          echo "::notice title=Load test results::$body"
+
+      - name: Diagnose a failure
+        if: failure()
+        run: |
+          encode() { head -c 3500 | tr -d '\r' | awk 'BEGIN { ORS = "%0A" } { gsub(/%/, "%25"); print }'; }
+          echo "::warning title=Containers::$(docker compose ps -a --format '{{.Service}}: {{.Status}}' | encode)"
+          docker compose logs --no-color --no-log-prefix backend > backend.log 2>&1 || true
+          echo "::warning title=Backend errors::$(grep -E '"level":"(WARN|ERROR)"' backend.log | tail -n 20 | encode)"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: load-test-results
+          path: load-tests/results/scenarios
+          if-no-files-found: ignore
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose down -v
