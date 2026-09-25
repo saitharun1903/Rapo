@@ -261,6 +261,8 @@ rideflow:
       FARE_ESTIMATE: { limit: 30, window: 1m }
       GEOCODING: { limit: 30, window: 1m }
       GEOCODING_UPSTREAM: { limit: 1, window: 1s }
+      # A driver's console re-routes as they move (about every 100 m), the simulator once per leg.
+      ROUTE: { limit: 60, window: 1m }
       AI_QUESTION: { limit: 10, window: 1h }
       AI_REGENERATE: { limit: 3, window: 1h }
   kafka:

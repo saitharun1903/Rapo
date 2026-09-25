@@ -1,5 +1,6 @@
 package com.rideflow.service.ride;
 
+import com.rideflow.config.MatchingProperties;
 import com.rideflow.config.RideProperties;
 import com.rideflow.exception.ErrorCode;
 import com.rideflow.exception.RideFlowException;
@@ -13,10 +14,13 @@ public class ServiceAreaPolicy {
 
     private final RideProperties.ServiceArea serviceArea;
     private final int minTripDistanceMeters;
+    /** How far outside the area a driver can be and still be matched: the widest matching radius. */
+    private final int driverReachMeters;
 
-    public ServiceAreaPolicy(RideProperties properties) {
+    public ServiceAreaPolicy(RideProperties properties, MatchingProperties matching) {
         this.serviceArea = properties.serviceArea();
         this.minTripDistanceMeters = properties.minTripDistanceMeters();
+        this.driverReachMeters = matching.maxRadiusMeters();
     }
 
     public void validateTrip(GeoPoint pickup, GeoPoint dropoff) {
@@ -28,8 +32,21 @@ public class ServiceAreaPolicy {
         }
     }
 
+    /**
+     * A route preview ends at a ride's stop, inside the area, and starts at most a matching radius outside it
+     * (a driver heading for a pickup). Anything else is not a route the app needs from the router.
+     */
+    public void validateRoute(GeoPoint from, GeoPoint to) {
+        requireWithin(from, serviceArea.radiusMeters() + driverReachMeters, "Route start");
+        requireInside(to, "Route end");
+    }
+
     private void requireInside(GeoPoint point, String label) {
-        if (GeoMath.haversineMeters(serviceArea.center(), point) > serviceArea.radiusMeters()) {
+        requireWithin(point, serviceArea.radiusMeters(), label);
+    }
+
+    private void requireWithin(GeoPoint point, int radiusMeters, String label) {
+        if (GeoMath.haversineMeters(serviceArea.center(), point) > radiusMeters) {
             throw new RideFlowException(ErrorCode.OUTSIDE_SERVICE_AREA, label + " is outside the service area");
         }
     }

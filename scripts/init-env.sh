@@ -20,10 +20,18 @@ random() {
   LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$1"
 }
 
+# At least one letter and one digit: the backend refuses a demo password without both (DemoSeedConfig).
+random_password() {
+  while :; do
+    value=$(random "$1")
+    case "$value" in *[A-Za-z]*) case "$value" in *[0-9]*) printf '%s' "$value"; return ;; esac ;; esac
+  done
+}
+
 database_password=$(random 32)
 redis_password=$(random 32)
 jwt_secret=$(random 64)
-demo_password=$(random 24)
+demo_password=$(random_password 24)
 grafana_password=$(random 24)
 
 # Fill only the blanks that are required; everything else keeps the example's defaults. Carriage returns are

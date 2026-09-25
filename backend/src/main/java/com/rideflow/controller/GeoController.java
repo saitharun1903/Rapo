@@ -39,13 +39,15 @@ public class GeoController {
     }
 
     @GetMapping("/route")
-    @Operation(summary = "Road route between two points (straight-line fallback flagged APPROXIMATE)")
+    @Operation(summary = "Road route between two points (straight-line fallback flagged APPROXIMATE); the end must be "
+            + "in the service area and the start within reach of it (422 OUTSIDE_SERVICE_AREA), rate limited per user")
     public RouteResponse route(
+            @AuthenticationPrincipal AuthenticatedUser user,
             @RequestParam @DecimalMin("-90.0") @DecimalMax("90.0") double fromLat,
             @RequestParam @DecimalMin("-180.0") @DecimalMax("180.0") double fromLng,
             @RequestParam @DecimalMin("-90.0") @DecimalMax("90.0") double toLat,
             @RequestParam @DecimalMin("-180.0") @DecimalMax("180.0") double toLng) {
-        RouteEstimate route = routeService.route(new GeoPoint(fromLat, fromLng), new GeoPoint(toLat, toLng));
+        RouteEstimate route = routeService.preview(user.id(), new GeoPoint(fromLat, fromLng), new GeoPoint(toLat, toLng));
         return new RouteResponse(route.distanceMeters(), route.durationSeconds(), route.source(), route.path());
     }
 

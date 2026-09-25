@@ -493,7 +493,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Road route between two points (straight-line fallback flagged APPROXIMATE) */
+        /** Road route between two points (straight-line fallback flagged APPROXIMATE); the end must be in the service area and the start within reach of it (422 OUTSIDE_SERVICE_AREA), rate limited per user */
         get: operations["route"];
         put?: never;
         post?: never;

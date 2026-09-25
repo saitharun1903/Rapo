@@ -30,6 +30,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
+import org.springframework.kafka.listener.MessageListenerContainer;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -55,6 +57,8 @@ class RideLifecycleIT extends IntegrationTestContainers {
     private MutableClock clock;
     @Autowired
     private KafkaTestSupport kafka;
+    @Autowired
+    private KafkaListenerEndpointRegistry listeners;
 
     private RideApi api;
 
@@ -149,6 +153,36 @@ class RideLifecycleIT extends IntegrationTestContainers {
         assertThat(history.read("$.content[0].id", String.class)).isEqualTo(rideId.toString());
         assertThat(history.read("$.content[0].fareIsFinal", Boolean.class)).isTrue();
         assertError(api.call(passenger, "POST", "/api/rides/" + rideId + "/cancel", null), 409, "RIDE_INVALID_TRANSITION");
+    }
+
+    @Test
+    void aTripWhoseTrailNeverReachedTheDatabaseIsBilledOnTheRoutedEstimate() throws Exception {
+        Actor passenger = fixtures.passenger();
+        Actor driver = fixtures.verifiedDriver(VehicleCategory.ECONOMY);
+        assertStatus(api.goOnline(driver, offset(HITECH_CITY, 40, 0)), 200);
+        UUID rideId = api.book(passenger, HITECH_CITY, HUSSAIN_SAGAR);
+        await().atMost(AWAIT).until(() -> api.openOfferCount(driver) == 1);
+        for (String step : List.of("accept", "en-route", "arrive", "start")) {
+            assertStatus(api.call(driver, "POST", "/api/rides/" + rideId + "/" + step, null), 200);
+        }
+
+        // The location consumer is down: reports still update the live position, but no trail point is written.
+        MessageListenerContainer persistence = listeners.getListenerContainer("location-persistence");
+        persistence.stop();
+        try {
+            clock.advance(GPS_INTERVAL);
+            assertStatus(api.reportLocation(driver, HUSSAIN_SAGAR, clock.instant()), 202);
+            MvcResult completed = api.call(driver, "POST", "/api/rides/" + rideId + "/complete", null);
+
+            assertStatus(completed, 200);
+            DocumentContext ride = json(completed);
+            assertThat(ride.read("$.actual.distanceSource", String.class)).isEqualTo("ESTIMATED");
+            assertThat(ride.read("$.actual.distanceMeters", Integer.class))
+                    .isEqualTo(ride.read("$.estimate.distanceMeters", Integer.class));
+        } finally {
+            persistence.start();
+            kafka.awaitAssignment();
+        }
     }
 
     @Test

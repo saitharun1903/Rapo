@@ -46,8 +46,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class DriverRideService {
 
     private static final Logger log = LoggerFactory.getLogger(DriverRideService.class);
-    /** A trip line needs at least two points to have a length. */
-    private static final int MIN_TRACK_POINTS = 2;
+    /**
+     * Start and completion each add the driver's live position, so a trail describes the drive only with at
+     * least one reported point in between. With just those two (the location consumer down or behind), its
+     * length is the straight line from pickup to dropoff, which would underbill a winding trip.
+     */
+    private static final int MIN_TRACK_POINTS = 3;
 
     private final RideAccessPolicy access;
     private final RideOfferRepository offers;

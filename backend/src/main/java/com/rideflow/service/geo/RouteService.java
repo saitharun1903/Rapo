@@ -2,11 +2,15 @@ package com.rideflow.service.geo;
 
 import com.rideflow.cache.CacheName;
 import com.rideflow.cache.JsonCache;
+import com.rideflow.cache.RateLimitScope;
+import com.rideflow.cache.RateLimiter;
 import com.rideflow.cache.RedisKeys;
 import com.rideflow.entity.EstimateSource;
 import com.rideflow.geospatial.GeoPoint;
 import com.rideflow.geospatial.RouteEstimate;
 import com.rideflow.geospatial.RoutingService;
+import com.rideflow.service.ride.ServiceAreaPolicy;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 /**
@@ -23,10 +27,24 @@ public class RouteService {
 
     private final RoutingService routing;
     private final JsonCache cache;
+    private final ServiceAreaPolicy serviceArea;
+    private final RateLimiter rateLimiter;
 
-    public RouteService(RoutingService routing, JsonCache cache) {
+    public RouteService(RoutingService routing, JsonCache cache, ServiceAreaPolicy serviceArea, RateLimiter rateLimiter) {
         this.routing = routing;
         this.cache = cache;
+        this.serviceArea = serviceArea;
+        this.rateLimiter = rateLimiter;
+    }
+
+    /**
+     * A route a user asked for (the apps' route previews): only within reach of the service area, and rate
+     * limited per user, since each cache miss is a call to the public router.
+     */
+    public RouteEstimate preview(UUID userId, GeoPoint from, GeoPoint to) {
+        serviceArea.validateRoute(from, to);
+        rateLimiter.acquire(RateLimitScope.ROUTE, userId.toString());
+        return route(from, to);
     }
 
     public RouteEstimate route(GeoPoint from, GeoPoint to) {

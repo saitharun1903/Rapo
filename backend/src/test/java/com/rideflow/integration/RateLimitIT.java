@@ -50,6 +50,7 @@ import org.springframework.test.web.servlet.MvcResult;
     "rideflow.rate-limit.enabled=true",
     "rideflow.rate-limit.rules.LOGIN.limit=" + RateLimitIT.LOGIN_LIMIT,
     "rideflow.rate-limit.rules.REGISTER.limit=" + RateLimitIT.REGISTER_LIMIT,
+    "rideflow.rate-limit.rules.ROUTE.limit=" + RateLimitIT.ROUTE_LIMIT,
     "rideflow.security.client-ip.signing-secret=" + RateLimitIT.CLIENT_IP_SECRET,
     // A long window keeps the upstream test independent of how fast the CI runner is.
     "rideflow.rate-limit.rules.GEOCODING_UPSTREAM.window=1m"
@@ -65,6 +66,10 @@ class RateLimitIT extends IntegrationTestContainers {
     private static final long LOGIN_WINDOW_SECONDS = 60;
     static final int LOGIN_LIMIT = 2;
     static final int REGISTER_LIMIT = 2;
+    static final int ROUTE_LIMIT = 2;
+    private static final String ROUTE_IN_THE_CITY = "/api/geo/route?fromLat=17.44&fromLng=78.38&toLat=17.42&toLng=78.47";
+    /** From Hyderabad to Mumbai: far outside the service area. */
+    private static final String ROUTE_TO_MUMBAI = "/api/geo/route?fromLat=17.44&fromLng=78.38&toLat=19.076&toLng=72.8777";
     /** Requests made after a limit is reached, each claiming yet another address. */
     private static final int ATTEMPTS_OVER_LIMIT = 5;
     /** Documentation range (RFC 5737); each request claims a different address in it. */
@@ -312,5 +317,25 @@ class RateLimitIT extends IntegrationTestContainers {
         // Cache hits never spend the upstream budget.
         assertThat(cached.getResponse().getStatus()).isEqualTo(200);
         assertThat(geocoder.calls()).isEqualTo(1);
+    }
+
+    @Test
+    void routePreviewsAreLimitedPerUserAndOnlyServedNearTheServiceArea() throws Exception {
+        Actor user = fixtures.passenger();
+
+        MvcResult outside = mvc.perform(get(ROUTE_TO_MUMBAI).header(HttpHeaders.AUTHORIZATION, user.bearer())).andReturn();
+        assertThat(outside.getResponse().getStatus()).as(body(outside)).isEqualTo(422);
+        assertThat(JsonPath.<String>read(body(outside), "$.code")).isEqualTo("OUTSIDE_SERVICE_AREA");
+
+        // A refused route is not counted, so the whole limit is still there.
+        for (int i = 0; i < ROUTE_LIMIT; i++) {
+            MvcResult allowed = mvc.perform(get(ROUTE_IN_THE_CITY).header(HttpHeaders.AUTHORIZATION, user.bearer())).andReturn();
+            assertThat(allowed.getResponse().getStatus()).as(body(allowed)).isEqualTo(200);
+        }
+        assertRateLimited(mvc.perform(get(ROUTE_IN_THE_CITY).header(HttpHeaders.AUTHORIZATION, user.bearer())).andReturn(),
+                LOGIN_WINDOW_SECONDS);
+        MvcResult otherUser = mvc.perform(get(ROUTE_IN_THE_CITY)
+                .header(HttpHeaders.AUTHORIZATION, fixtures.passenger().bearer())).andReturn();
+        assertThat(otherUser.getResponse().getStatus()).isEqualTo(200);
     }
 }

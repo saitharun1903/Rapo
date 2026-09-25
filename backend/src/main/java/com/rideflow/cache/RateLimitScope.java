@@ -14,6 +14,8 @@ public enum RateLimitScope {
     GEOCODING,
     /** Global: Nominatim's usage policy allows at most one request per second from the whole application. */
     GEOCODING_UPSTREAM,
+    /** Per user: a route preview that misses the cache is a call to the public router. */
+    ROUTE,
     /** Per passenger: every trip question is a model call, which costs money (external) or CPU time (local). */
     AI_QUESTION,
     /** Per passenger: re-running a failed trip analysis. */
