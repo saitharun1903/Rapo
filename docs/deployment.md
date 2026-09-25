@@ -77,11 +77,11 @@ permanent free tier that fits 32 topics.
   nothing runs in the background: no matching sweeps, no presence sweeps, no outbox relay. On waking, they
   catch up from the database. The upside: a sleeping backend does not query Neon, so Neon can suspend too,
   which keeps it within its compute hours. The outbox relay polls every 250 ms while the backend is awake,
-  which keeps Neon's compute (0.25 CU at the smallest size) awake for as long as the backend is: about
-  0.08 CU-hours per 20 minutes awake, or around 1,200 separate visits a month within the 100 CU-hours.
-- **Slow at 0.1 CPU.** Password hashing (BCrypt, strength 12) and the JVM's warm-up take roughly ten times
-  longer than on a full core. The [free-tier-fit](#measured) numbers show how long login and a whole ride
-  take at this size.
+  which keeps Neon's compute (0.25 CU at the smallest size) awake for as long as the backend is. By
+  arithmetic, not measurement: about 0.08 CU-hours per 20 minutes awake, or around 1,200 separate visits a
+  month within the 100 CU-hours.
+- **Slow at 0.1 CPU.** Measured in CI at a Docker CPU quota of 0.1: a three-minute startup and logins of
+  8.5 s (p50, two at once), while a ride's other steps take about a second each ([Measured](#measured)).
 - **The Redis budget.** 500,000 commands a month is ample for visitors, but a driver simulator run writes
   each driver's position about every two seconds. Run it for a demo, not continuously. If the quota runs
   out, Redis calls fail and the backend fails open (caches miss, rate limits allow), as designed.
@@ -171,8 +171,8 @@ signing in fails. Only the production URL is meant to work.
 
 ### 6. Check it
 
-1. Open the Vercel URL. The first request after a sleep takes about a minute while Render starts the
-   backend.
+1. Open the Vercel URL. The first request after a sleep waits while Render starts the backend: about a
+   minute by Render's account, three minutes at CI's 0.1 CPU quota.
 2. Register a passenger and request a fare estimate: this checks the rewrite, the cookie, PostGIS and Redis.
 3. Sign in as the bootstrap admin. **Admin → System** shows the database and Redis as up, and an outbox
    backlog of 0: events reach Kafka.
@@ -256,7 +256,36 @@ Filled in from real runs only.
 
 ### Free-tier fit (CI)
 
-Not yet run.
+`free-tier-fit` run [36137239023](https://github.com/saitharun1903/Rapo/actions/runs/36137239023) (commit
+f1d2ef0). The runner was 4 vCPU (AMD EPYC 7763). The backend container was limited to 512 MiB with no
+swap and 0.1 CPU, with `render.yaml`'s JVM options, a pool of 5 and one partition per topic. PostGIS,
+Redis, Kafka and k6 ran unconstrained beside it, with the `prod` profile and rate limits off.
+
+| Measure | Value |
+|---|---|
+| Startup to healthy (image built, infrastructure already up) | 180 s |
+| Peak memory after startup | 389 MiB |
+| Peak memory after the scenarios | 441 MiB (86% of the limit) |
+| Out-of-memory kills / restarts | none / 0 |
+
+| Scenario, 2 VUs for 60 s | Result |
+|---|---|
+| Login | p50 8.5 s, p95 12.8 s; 0.2 logins/s; 0 failures |
+| Whole rides (book, offer through Kafka, accept, arrive, start, complete) | 16 completed, 0 offers missed, 0 failed requests |
+| Booking to offer | p50 1.6 s, p95 5.9 s |
+| Booking to completed ride (simulated trip time included) | p50 6.0 s, p95 12.4 s |
+| Booking request | p50 0.8 s, p95 4.4 s |
+
+What this says:
+
+- **It fits:** 441 MiB at peak leaves 71 MiB below the limit, and nothing was killed.
+- **Startup takes three minutes** at a CPU quota of 0.1. Render quotes about a minute for waking a free
+  instance. How Render's 0.1 CPU compares with Docker's quota is measured on the deployment below.
+- **Login is the slow part:** BCrypt at strength 12 takes most of a second on a full core, and 0.1 CPU
+  makes it several seconds; two logins at once share that tenth of a CPU. Everything else in a ride takes
+  about a second a step. Lowering `BCRYPT_STRENGTH` to 10 would make hashing four times cheaper, at a
+  quarter of the brute-force cost per guess. That is left as a decision, not made here; stored hashes keep
+  their own strength either way.
 
 ### The deployment
 
