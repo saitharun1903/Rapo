@@ -23,6 +23,8 @@ export function numberFrom(value: string | undefined, fallback: number): number 
 }
 
 export const config = {
+  /** False only on a Vercel deployment built before its backend existed (lib/hostedBackend.ts). */
+  backendConfigured: process.env.NEXT_PUBLIC_BACKEND_CONFIGURED !== "false",
   /** Empty means same origin: requests go to /api on the frontend, which Next forwards to the backend. */
   apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? "",
   wsUrl: textFrom(process.env.NEXT_PUBLIC_WS_URL, DEFAULT_WS_URL),

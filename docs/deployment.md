@@ -171,20 +171,24 @@ provider's dashboard or in Render's.
    - optional: `NEXT_PUBLIC_SENTRY_DSN` (the frontend project's DSN) and
      `NEXT_PUBLIC_SENTRY_ENVIRONMENT=production`
 
-   A Vercel build without an `https://` `BACKEND_URL` and a `wss://` `NEXT_PUBLIC_WS_URL` fails on purpose
-   (`next.config.ts`), rather than building a site that calls localhost.
+   On Vercel the two URLs go together (`src/lib/hostedBackend.ts`). With neither set, the build passes with a
+   warning and the site says on its sign-in and registration pages that no backend is configured, rather than
+   answering every request with a 404. With only one of them, an `http://` backend or a `ws://` socket, the
+   build fails on purpose.
 3. Deploy. If the production URL differs from what Render's `CORS_ALLOWED_ORIGINS` says, correct it there;
    Render restarts with the new value.
 
 **Preview deployments.** Vercel builds every branch. Without the variables for the Preview environment
-those builds fail on purpose (the check above). With them, preview pages load but signing in fails, since
-their URLs are not in the backend's `CORS_ALLOWED_ORIGINS`. Only the production URL is meant to work. To stop
-building previews, set **Settings → Git → Ignored Build Step** to build only `main`.
+those builds pass as backend-less sites (see above). With them, preview pages load but signing in fails,
+since their URLs are not in the backend's `CORS_ALLOWED_ORIGINS`. Only the production URL is meant to work.
+To stop building previews, set **Settings → Git → Ignored Build Step** to build only `main`.
 
 **If `/api` answers 404:** check the response header `X-Vercel-Error`. `DNS_HOSTNAME_RESOLVED_PRIVATE`
-means the build had no public `BACKEND_URL` (it pointed at `localhost:8080`), so Vercel refused to proxy.
-Set the variables above and redeploy; `NEXT_PUBLIC_*` values and the rewrite are fixed at build time, so a
-new build is needed, not just a restart.
+means the deployment was built before the check above, with no public `BACKEND_URL`, so its rewrite pointed
+at `localhost:8080` and Vercel refused to proxy it (the first deployment, frontend-seven-henna-61, was built
+this way). A backend-less build has no `/api` rewrite at all, so `/api` answers Vercel's plain 404 and the
+pages say why. Either way: set the variables above and redeploy. `NEXT_PUBLIC_*` values and the rewrite are
+fixed at build time, so a new build is needed, not just a restart.
 
 ### 6. Check it
 
