@@ -36,3 +36,8 @@ rideflow:
 management:
   server:
     port: 0
+
+# A developer's .env (imported by application.yml for host runs) must not send test errors to a real Sentry
+# project; ErrorReportingIT points a context at a stand-in instead.
+sentry:
+  dsn: ""

@@ -9,7 +9,8 @@ name: free-tier-fit
 on:
   workflow_dispatch:
   push:
-    paths: ["render.yaml", "infrastructure/free-tier/**", "backend/Dockerfile", ".github/workflows/free-tier-fit.yml"]
+    paths: ["render.yaml", "infrastructure/free-tier/**", "backend/Dockerfile", "docker-compose.yml", "scripts/init-env.sh",
+            "load-tests/scenarios/**", ".github/workflows/free-tier-fit.yml"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
@@ -24,7 +25,7 @@ env:
   VUS: "2"
   DURATION_SECONDS: "60"
   # Copied from render.yaml, so this run uses exactly the deployed values.
-  BLUEPRINT_SETTINGS: JAVA_TOOL_OPTIONS DATABASE_POOL_SIZE KAFKA_PARTITIONS
+  BLUEPRINT_SETTINGS: SPRING_PROFILES_ACTIVE JAVA_TOOL_OPTIONS DATABASE_POOL_SIZE KAFKA_PARTITIONS
 
 jobs:
   fit:
@@ -47,7 +48,6 @@ jobs:
             set_env "$name" "$value"
             echo "$name=$value"
           done
-          set_env SPRING_PROFILES_ACTIVE prod
           # The scenarios log in and book far more often than the per-IP limits allow one address.
           set_env RATE_LIMIT_ENABLED false
           set_env ROUTING_PROVIDER straight-line

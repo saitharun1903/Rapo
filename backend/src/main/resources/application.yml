@@ -72,7 +72,8 @@ spring:
       mode: force
 
 server:
-  port: ${SERVER_PORT:8080}
+  # PORT is what hosts such as Render set for the port they route to.
+  port: ${SERVER_PORT:${PORT:8080}}
   error:
     include-stacktrace: never
     include-message: never

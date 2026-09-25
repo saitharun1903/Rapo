@@ -17,8 +17,10 @@ services:
       # Render routes to the port in PORT.
       - key: PORT
         value: "8080"
-      # prod: JSON logs, no public API docs. demo: the seed accounts the simulator drives (their password is
-      # DEMO_USER_PASSWORD, known only to whoever set it).
+      # prod: JSON logs, no public API docs, and a refusal to start without the infrastructure settings below.
+      # demo: the seed accounts the simulator drives. Their password, DEMO_USER_PASSWORD, is also the password
+      # of the seeded admin (admin@rideflow.example.com), so it is an admin credential; the backend refuses a
+      # weak one.
       - key: SPRING_PROFILES_ACTIVE
         value: prod,demo
       # 512 MB and a tenth of a CPU: a heap of half the memory, the serial collector, the client compiler only
@@ -68,6 +70,10 @@ services:
       # The Vercel production URL, e.g. https://rideflow.vercel.app (REST through its /api rewrite, and the
       # WebSocket's Origin).
       - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      # The browser's address, signed by the Vercel frontend (the same value is set there), so per-address
+      # login and registration limits key on the visitor rather than on Vercel (docs/deployment.md).
+      - key: CLIENT_IP_SIGNING_SECRET
         sync: false
       - key: BOOTSTRAP_ADMIN_EMAIL
         sync: false

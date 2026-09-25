@@ -8,6 +8,11 @@ on:
   push:
     paths: ["load-tests/cache-benchmark/**", ".github/workflows/cache-benchmark.yml"]
 
+# A newer push to the same branch makes a running measurement obsolete; on main every commit keeps its run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

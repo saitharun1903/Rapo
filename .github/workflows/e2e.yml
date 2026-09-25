@@ -8,10 +8,12 @@ name: e2e
 on:
   push:
     paths: ["frontend/**", "backend/**", "simulator/**", "docs/openapi.json", "docker-compose.yml", ".env.example",
-            "scripts/init-env.sh", "infrastructure/**", ".github/workflows/e2e.yml", ".github/scripts/**"]
+            "scripts/init-env.sh", "infrastructure/**", "!infrastructure/free-tier/**", ".github/workflows/e2e.yml",
+            ".github/scripts/**"]
   pull_request:
     paths: ["frontend/**", "backend/**", "simulator/**", "docs/openapi.json", "docker-compose.yml", ".env.example",
-            "scripts/init-env.sh", "infrastructure/**", ".github/workflows/e2e.yml", ".github/scripts/**"]
+            "scripts/init-env.sh", "infrastructure/**", "!infrastructure/free-tier/**", ".github/workflows/e2e.yml",
+            ".github/scripts/**"]
 
 # A newer push to the same branch or pull request makes a running check obsolete, so it is cancelled.
 # On main every commit keeps its own run (the SHA is part of the group), so nothing there is cancelled.
@@ -26,6 +28,9 @@ permissions:
 
 jobs:
   compose:
+    # A pull request from a branch of this repository was already checked by that branch's push; only pull
+    # requests from forks run again.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -122,8 +127,23 @@ jobs:
       # Only images that passed every step above, and only from main. The frontend image is built for this
       # compose stack (/api forwarded to http://backend:8080, WebSocket on ws://localhost:8080/ws); a deployment
       # builds its own with its URLs (docs/development.md).
-      - name: Log in to GHCR
+      # Runs on main overlap (each commit keeps its run), so an older one finishing last could push its images
+      # as latest and deploy them over a newer commit's. Only the newest commit on main publishes; a run that has
+      # been overtaken leaves it to the newer run, which is then still going.
+      - name: Check this is the newest commit on main
+        id: newest
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          head=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$head" = "$GITHUB_SHA" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Not published::main has moved on to ${head:0:12}; its run publishes instead"
+          fi
+
+      - name: Log in to GHCR
+        if: steps.newest.outputs.publish == 'true'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -131,7 +151,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish the images
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: steps.newest.outputs.publish == 'true'
         run: |
           owner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
           published=""
@@ -147,7 +167,7 @@ jobs:
       # The deployed backend (render.yaml) runs the image just published, by its commit tag rather than latest.
       # The hook URL is a secret of this repository; until it is set, the step says so and deploys nothing.
       - name: Deploy the backend
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: steps.newest.outputs.publish == 'true'
         env:
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
