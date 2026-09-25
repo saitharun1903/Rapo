@@ -6,6 +6,12 @@ on:
   pull_request:
     paths: ["frontend/**", "simulator/**", "docs/openapi.json", ".github/workflows/frontend-ci.yml"]
 
+# A newer push to the same branch or pull request makes a running check obsolete, so it is cancelled.
+# On main every commit keeps its own run (the SHA is part of the group), so nothing there is cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

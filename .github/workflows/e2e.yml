@@ -11,6 +11,12 @@ on:
     paths: ["frontend/**", "backend/**", "simulator/**", "docs/openapi.json", "docker-compose.yml", ".env.example",
             "scripts/init-env.sh", ".github/workflows/e2e.yml", ".github/scripts/**"]
 
+# A newer push to the same branch or pull request makes a running check obsolete, so it is cancelled.
+# On main every commit keeps its own run (the SHA is part of the group), so nothing there is cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

@@ -6,6 +6,12 @@ on:
   pull_request:
     paths: ["backend/**", "docs/openapi.json", ".github/workflows/backend-ci.yml", ".github/scripts/**"]
 
+# A newer push to the same branch or pull request makes a running check obsolete, so it is cancelled.
+# On main every commit keeps its own run (the SHA is part of the group), so nothing there is cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -26,14 +32,17 @@ jobs:
           cache: maven
 
       # Unit, web-slice and ArchUnit tests (surefire), then Testcontainers integration tests (failsafe).
-      # Normally a few minutes. If it is still running after 12, a watchdog dumps the threads of every forked
-      # test JVM (summarised below), so an intermittent hang can be diagnosed; the step gives up at 20.
+      # Normally a few minutes. If it is still running after 12, a watchdog records the running JVMs and
+      # containers and dumps every JVM's threads (summarised below), so an intermittent hang can be diagnosed;
+      # the step gives up at 20.
       - name: Build and test
         timeout-minutes: 20
         run: |
+          # Every JVM (Maven and its test forks) and the containers: a stall has been seen with no test fork running.
           ( sleep 720
-            for pid in $(jcmd -l | awk '/ForkedBooter/ { print $1 }'); do jcmd "$pid" Thread.print; done \
-              > "$GITHUB_WORKSPACE/threads.txt" 2>&1 ) > /dev/null 2>&1 &
+            { jcmd -l; docker ps --format '{{.Image}} {{.Status}}'
+              for pid in $(jcmd -l | awk '!/JCmd/ { print $1 }'); do jcmd "$pid" Thread.print; done
+            } > "$GITHUB_WORKSPACE/threads.txt" 2>&1 ) > /dev/null 2>&1 &
           watchdog=$!
           status=0
           ./mvnw -B verify || status=$?
@@ -43,7 +52,10 @@ jobs:
 
       - name: Summarise stalled threads
         if: always() && hashFiles('threads.txt') != ''
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/thread_dump_summary.py" "$GITHUB_WORKSPACE/threads.txt"
+        run: |
+          # The JVMs and containers that were running (the first lines of the file), then the threads.
+          echo "::warning title=Processes at the stall::$(grep -vE '^("|\s|$)' "$GITHUB_WORKSPACE/threads.txt" | head -n 20 | awk 'BEGIN { ORS = "%0A" } { gsub(/%/, "%25"); print }')"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/thread_dump_summary.py" "$GITHUB_WORKSPACE/threads.txt"
 
       # Integration tests skip themselves when Docker is missing; in CI that must never happen silently.
       - name: Assert integration tests actually ran
