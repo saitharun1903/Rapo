@@ -52,7 +52,7 @@ public class StompTestClient implements AutoCloseable {
     /** Connects with the actor's access token and waits for CONNECTED. */
     public Connection connect(Actor actor) throws Exception {
         Connection connection = open(actor, actor.bearer());
-        connection.session = connection.connected.get(TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+        connection.awaitConnected();
         return connection;
     }
 
@@ -61,10 +61,16 @@ public class StompTestClient implements AutoCloseable {
         return open(null, authorization, new WebSocketHttpHeaders());
     }
 
-    /** Opens the handshake with a browser Origin header. */
+    /** Opens the handshake with a browser Origin header, without waiting for CONNECTED. */
     public Connection connectFromOrigin(Actor actor, String origin) {
+        return connectFromOrigin(actor, origin, Map.of());
+    }
+
+    /** Opens the handshake with a browser Origin header and other handshake headers, without waiting. */
+    public Connection connectFromOrigin(Actor actor, String origin, Map<String, String> handshakeHeaders) {
         WebSocketHttpHeaders handshake = new WebSocketHttpHeaders();
         handshake.setOrigin(origin);
+        handshakeHeaders.forEach(handshake::add);
         return open(actor, actor.bearer(), handshake);
     }
 
@@ -164,6 +170,11 @@ public class StompTestClient implements AutoCloseable {
             JsonNode error = errorFrames.poll(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
             assertThat(error).as("ERROR frame").isNotNull();
             return error;
+        }
+
+        /** Waits for CONNECTED. */
+        public void awaitConnected() throws Exception {
+            session = connected.get(TIMEOUT.toSeconds(), TimeUnit.SECONDS);
         }
 
         public void awaitClosed() throws Exception {

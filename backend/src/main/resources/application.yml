@@ -69,7 +69,17 @@ server:
   error:
     include-stacktrace: never
     include-message: never
-  forward-headers-strategy: framework
+  # Forwarding headers (X-Forwarded-For/-Proto/-Host/-Port) are applied by Tomcat's RemoteIpValve, and only on
+  # connections from TRUSTED_PROXIES. The client address is then the right-most X-Forwarded-For hop that is not
+  # a trusted proxy. From anyone else the headers are ignored, so a caller cannot choose its own address for the
+  # per-IP rate limits, or its scheme and host for CORS and the WebSocket Origin check. RFC 7239 "Forwarded" is
+  # never read. See docs/architecture.md section 9.
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      # Comma-separated CIDR ranges of reverse proxies that overwrite or append X-Forwarded-For. Empty trusts
+      # none. Never list the Next.js frontend alone: its /api rewrite passes the browser's header on unchanged.
+      internal-proxies: ${TRUSTED_PROXIES:}
 
 management:
   server:

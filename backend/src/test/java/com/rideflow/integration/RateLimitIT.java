@@ -15,11 +15,17 @@ import com.rideflow.support.RideFixtures.Actor;
 import com.rideflow.support.RideTestConfig;
 import com.rideflow.support.StubProvidersConfig;
 import com.rideflow.support.StubProvidersConfig.CountingGeocoder;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -30,11 +36,14 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-/** Rate limits over HTTP against a real Redis, with small limits so the tests stay fast. */
-@SpringBootTest(properties = {
+/**
+ * Rate limits over HTTP against a real Redis, with small limits so the tests stay fast. A real server as well as
+ * MockMvc: which forwarding headers decide the client address is up to Tomcat, which MockMvc bypasses.
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "rideflow.rate-limit.enabled=true",
-    "rideflow.rate-limit.rules.LOGIN.limit=2",
-    "rideflow.rate-limit.rules.REGISTER.limit=2",
+    "rideflow.rate-limit.rules.LOGIN.limit=" + RateLimitIT.LOGIN_LIMIT,
+    "rideflow.rate-limit.rules.REGISTER.limit=" + RateLimitIT.REGISTER_LIMIT,
     // A long window keeps the upstream test independent of how fast the CI runner is.
     "rideflow.rate-limit.rules.GEOCODING_UPSTREAM.window=1m"
 })
@@ -47,7 +56,18 @@ class RateLimitIT extends IntegrationTestContainers {
     private static final String ATTACKER_IP = "198.51.100.7";
     private static final String OTHER_IP = "198.51.100.8";
     private static final long LOGIN_WINDOW_SECONDS = 60;
+    static final int LOGIN_LIMIT = 2;
+    static final int REGISTER_LIMIT = 2;
+    /** Requests made after a limit is reached, each claiming yet another address. */
+    private static final int ATTEMPTS_OVER_LIMIT = 5;
+    /** Documentation range (RFC 5737); each request claims a different address in it. */
+    private static final String FORGED_IP_PREFIX = "203.0.113.";
+    /** The default CORS_ALLOWED_ORIGINS, and the frontend's host as its /api rewrite reports it. */
+    private static final String FRONTEND_ORIGIN = "http://localhost:3000";
+    private static final String FRONTEND_HOST = "localhost:3000";
 
+    @LocalServerPort
+    private int port;
     @Autowired
     private MockMvc mvc;
     @Autowired
@@ -73,6 +93,16 @@ class RateLimitIT extends IntegrationTestContainers {
         return email;
     }
 
+    private static String loginBody(String email, String password) {
+        return "{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, password);
+    }
+
+    private static String registerBody() {
+        return """
+                {"email":"reg-%s@example.com","password":"%s","fullName":"New User","accountType":"PASSENGER"}
+                """.formatted(UUID.randomUUID(), PASSWORD);
+    }
+
     private MvcResult login(String email, String password, String fromIp) throws Exception {
         return mvc.perform(post("/api/auth/login")
                         .with(request -> {
@@ -80,7 +110,7 @@ class RateLimitIT extends IntegrationTestContainers {
                             return request;
                         })
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, password)))
+                        .content(loginBody(email, password)))
                 .andReturn();
     }
 
@@ -91,18 +121,41 @@ class RateLimitIT extends IntegrationTestContainers {
                             return request;
                         })
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"reg-%s@example.com","password":"%s","fullName":"New User",
-                                 "accountType":"PASSENGER"}
-                                """.formatted(UUID.randomUUID(), PASSWORD)))
+                        .content(registerBody()))
                 .andReturn();
     }
 
+    /** A real request to the running server, from this machine, with the given extra headers. */
+    private HttpResponse<String> postOverHttp(String path, String json, Map<String, String> headers)
+            throws Exception {
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .POST(HttpRequest.BodyPublishers.ofString(json));
+        headers.forEach(request::header);
+        try (HttpClient client = HttpClient.newHttpClient()) {
+            return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+        }
+    }
+
+    private static Map<String, String> claimingToBe(int client) {
+        return Map.of("X-Forwarded-For", FORGED_IP_PREFIX + client);
+    }
+
     private static void assertRateLimited(MvcResult result, long maxRetryAfterSeconds) throws Exception {
-        assertThat(result.getResponse().getStatus()).as(body(result)).isEqualTo(429);
-        assertThat(JsonPath.<String>read(body(result), "$.code")).isEqualTo("RATE_LIMITED");
-        assertThat(Long.parseLong(result.getResponse().getHeader(HttpHeaders.RETRY_AFTER)))
-                .isBetween(1L, maxRetryAfterSeconds);
+        assertRateLimited(result.getResponse().getStatus(), body(result),
+                result.getResponse().getHeader(HttpHeaders.RETRY_AFTER), maxRetryAfterSeconds);
+    }
+
+    private static void assertRateLimited(HttpResponse<String> response, long maxRetryAfterSeconds) {
+        assertRateLimited(response.statusCode(), response.body(),
+                response.headers().firstValue(HttpHeaders.RETRY_AFTER).orElse(null), maxRetryAfterSeconds);
+    }
+
+    private static void assertRateLimited(int status, String body, String retryAfter, long maxRetryAfterSeconds) {
+        assertThat(status).as(body).isEqualTo(429);
+        assertThat(JsonPath.<String>read(body, "$.code")).isEqualTo("RATE_LIMITED");
+        assertThat(retryAfter).as(HttpHeaders.RETRY_AFTER).isNotNull();
+        assertThat(Long.parseLong(retryAfter)).isBetween(1L, maxRetryAfterSeconds);
     }
 
     @Test
@@ -128,6 +181,58 @@ class RateLimitIT extends IntegrationTestContainers {
         assertThat(register(ATTACKER_IP).getResponse().getStatus()).isEqualTo(201);
         assertRateLimited(register(ATTACKER_IP), LOGIN_WINDOW_SECONDS);
         assertThat(register(OTHER_IP).getResponse().getStatus()).isEqualTo(201);
+    }
+
+    /**
+     * Anyone can send X-Forwarded-For: straight to the backend's port, or through the frontend's /api rewrite,
+     * which passes the header on as the browser sent it. Neither is a trusted proxy (TRUSTED_PROXIES is empty),
+     * so claiming a new address on every attempt must not open a new bucket.
+     */
+    @Test
+    void forgingXForwardedForDoesNotBuyMoreLoginAttempts() throws Exception {
+        String email = existingUser();
+        int claimed = 0;
+        for (int attempt = 0; attempt < LOGIN_LIMIT; attempt++) {
+            HttpResponse<String> wrong = postOverHttp("/api/auth/login",
+                    loginBody(email, "Wrong-password-" + attempt), claimingToBe(++claimed));
+            assertThat(wrong.statusCode()).as(wrong.body()).isEqualTo(401);
+        }
+        for (int attempt = 0; attempt < ATTEMPTS_OVER_LIMIT; attempt++) {
+            assertRateLimited(postOverHttp("/api/auth/login", loginBody(email, PASSWORD), claimingToBe(++claimed)),
+                    LOGIN_WINDOW_SECONDS);
+        }
+    }
+
+    @Test
+    void forgingXForwardedForDoesNotBuyMoreRegistrations() throws Exception {
+        int claimed = 0;
+        for (int attempt = 0; attempt < REGISTER_LIMIT; attempt++) {
+            HttpResponse<String> created = postOverHttp("/api/auth/register", registerBody(), claimingToBe(++claimed));
+            assertThat(created.statusCode()).as(created.body()).isEqualTo(201);
+        }
+        for (int attempt = 0; attempt < ATTEMPTS_OVER_LIMIT; attempt++) {
+            assertRateLimited(postOverHttp("/api/auth/register", registerBody(), claimingToBe(++claimed)),
+                    LOGIN_WINDOW_SECONDS);
+        }
+    }
+
+    /**
+     * What the frontend's /api rewrite sends: the browser's Origin, the Host rewritten to the backend, and
+     * X-Forwarded-Host naming the frontend. That hop is not trusted, so the Origin is checked against
+     * CORS_ALLOWED_ORIGINS instead of passing as same-origin on headers the caller chose.
+     */
+    @Test
+    void aForwardedLoginIsCheckedAgainstTheAllowedOriginsNotItsForwardingHeaders() throws Exception {
+        HttpResponse<String> fromFrontend = postOverHttp("/api/auth/login", loginBody(existingUser(), PASSWORD),
+                Map.of(HttpHeaders.ORIGIN, FRONTEND_ORIGIN, "X-Forwarded-Host", FRONTEND_HOST,
+                        "X-Forwarded-Proto", "http"));
+        assertThat(fromFrontend.statusCode()).as(fromFrontend.body()).isEqualTo(200);
+        assertThat(fromFrontend.headers().firstValue(HttpHeaders.SET_COOKIE)).isPresent();
+
+        HttpResponse<String> fromForeignSite = postOverHttp("/api/auth/login", loginBody(existingUser(), PASSWORD),
+                Map.of(HttpHeaders.ORIGIN, "https://evil.example", "X-Forwarded-Host", "evil.example",
+                        "X-Forwarded-Proto", "https", "X-Forwarded-Port", "443"));
+        assertThat(fromForeignSite.statusCode()).as(fromForeignSite.body()).isEqualTo(403);
     }
 
     @Test
