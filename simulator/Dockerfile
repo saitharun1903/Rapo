@@ -2,7 +2,7 @@
 
 # Demo only. Node 24 runs the TypeScript sources directly (type stripping), so there is no build step and
 # only the runtime dependency is installed.
-FROM node:24-alpine
+FROM node:25-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
