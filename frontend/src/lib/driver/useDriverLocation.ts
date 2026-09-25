@@ -43,6 +43,12 @@ export function useDriverLocation(online: boolean) {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);
   const latest = useRef<DriverPosition | null>(null);
+  /**
+   * The device said it has no position (permission revoked, or none available). Its last fix is then not where
+   * the driver is, so it is no longer reported: the server marks the driver stale instead of trusting it. A
+   * timeout does not count: a phone that is not moving may simply have nothing new to say.
+   */
+  const gpsLost = useRef(false);
 
   useEffect(() => {
     latest.current = position;
@@ -53,6 +59,7 @@ export function useDriverLocation(online: boolean) {
       return undefined;
     }
     const watch = navigator.geolocation.watchPosition((fix) => {
+      gpsLost.current = false;
       setGpsError(null);
       setPosition({
         point: { lat: fix.coords.latitude, lng: fix.coords.longitude },
@@ -60,7 +67,10 @@ export function useDriverLocation(online: boolean) {
         speedMps: fix.coords.speed,
         accuracyMeters: fix.coords.accuracy,
       });
-    }, (error) => setGpsError(`${error.message}. Place yourself on the map instead.`),
+    }, (error) => {
+      gpsLost.current = error.code !== error.TIMEOUT;
+      setGpsError(`${error.message}. Place yourself on the map instead.`);
+    },
     { enableHighAccuracy: true, maximumAge: GPS_MAX_AGE_MS, timeout: GPS_TIMEOUT_MS });
     return () => navigator.geolocation.clearWatch(watch);
   }, [mode]);
@@ -78,7 +88,7 @@ export function useDriverLocation(online: boolean) {
     }
     const report = () => {
       const current = latest.current;
-      if (!current) {
+      if (!current || gpsLost.current) {
         return;
       }
       // The device is at this position now, even if the fix itself is older (a parked phone reports no change).
@@ -108,6 +118,7 @@ export function useDriverLocation(online: boolean) {
     gpsError: mode !== "gps" ? null : gpsSupported() ? gpsError : NO_GPS,
     reportError,
     placeManually: (point: GeoPoint) => {
+      gpsLost.current = false;
       setMode("manual");
       setPosition({ point, headingDeg: null, speedMps: null, accuracyMeters: null });
     },

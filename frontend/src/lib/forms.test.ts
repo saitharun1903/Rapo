@@ -15,6 +15,8 @@ describe("safeNextPath", () => {
     ["a backslash the browser reads as a slash", "/\\evil.example.com"],
     ["a script URL", "javascript:alert(1)"],
     ["a relative path", "trips"],
+    ["a tab the browser drops, leaving a protocol-relative URL", "/\t/evil.example.com"],
+    ["a newline the browser drops", "/\n/evil.example.com"],
   ])("rejects %s", (_, next) => {
     expect(safeNextPath(next)).toBeNull();
   });

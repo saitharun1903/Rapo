@@ -58,6 +58,13 @@ function ThemeToggle() {
 
 function ConnectionBanner() {
   const { state } = useRealtime();
+  if (state === "unavailable") {
+    return (
+      <div role="status" className="flex items-center justify-center gap-2 bg-warning-soft px-4 py-1.5 text-sm font-medium text-warning">
+        <WifiOff className="size-4" aria-hidden /> Live updates are unavailable; reload the page to see changes.
+      </div>
+    );
+  }
   if (state !== "reconnecting") {
     return null;
   }

@@ -65,4 +65,5 @@ export type LocationReport = {
   recordedAt: string;
 };
 
-export type ConnectionState = "idle" | "connecting" | "connected" | "reconnecting";
+/** "unavailable": the WebSocket URL cannot work from this page (socketUrl.ts), so no connection is attempted. */
+export type ConnectionState = "idle" | "connecting" | "connected" | "reconnecting" | "unavailable";

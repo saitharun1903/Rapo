@@ -21,7 +21,23 @@ export function applyFieldErrors<T extends FieldValues>(error: unknown, setError
   return applied;
 }
 
-/** Only same-site paths, so a crafted ?next= cannot send the user to another site after signing in. */
+/** Any origin will do: only whether a path stays on it matters. */
+const SAME_SITE = "https://rideflow.invalid";
+
+/**
+ * Only same-site paths, so a crafted ?next= cannot send the user to another site after signing in. The path is
+ * resolved the way the browser will resolve it, which also drops tabs and newlines: a slash, a tab, then
+ * "/evil.example" becomes "//evil.example", another host.
+ */
 export function safeNextPath(next: string | null): string | null {
-  return next !== null && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : null;
+  if (next === null || !next.startsWith("/")) {
+    return null;
+  }
+  let url: URL;
+  try {
+    url = new URL(next, SAME_SITE);
+  } catch {
+    return null;
+  }
+  return url.origin === SAME_SITE ? `${url.pathname}${url.search}${url.hash}` : null;
 }

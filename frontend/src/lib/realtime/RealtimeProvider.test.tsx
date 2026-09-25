@@ -157,18 +157,19 @@ describe("RealtimeProvider", () => {
     expect(logged).toHaveBeenCalledOnce();
   });
 
-  it("after a reconnect subscribes again and refetches the realtime snapshots, but not on the first connect", async () => {
+  it("refetches the realtime snapshots after subscribing on every connect, the first one included", async () => {
     const { queryClient, invalidate } = renderProvider();
     const client = FakeClient.latest();
     await connected(client);
-    expect(invalidate).not.toHaveBeenCalled();
+    // A push sent between the page's first fetch and the subscription exists only in a snapshot read after it.
+    expect(invalidate).toHaveBeenCalledOnce();
 
     act(() => client.drop(1006));
     expect(screen.getByTestId("state")).toHaveTextContent("reconnecting");
     await connected(client);
 
     expect(client.subscriptions.filter((subscription) => subscription.destination === Destinations.rides)).toHaveLength(2);
-    expect(invalidate).toHaveBeenCalledOnce();
+    expect(invalidate).toHaveBeenCalledTimes(2);
     const { predicate } = invalidate.mock.calls[0][0] as { predicate: (query: unknown) => boolean };
     const snapshot = queryClient.getQueryCache().build(queryClient, { queryKey: ["snapshot"], meta: REALTIME_SNAPSHOT });
     const other = queryClient.getQueryCache().build(queryClient, { queryKey: ["other"] });
@@ -212,6 +213,21 @@ describe("RealtimeProvider", () => {
 
     expect(refreshSession).toHaveBeenCalledOnce();
     expect(client.connectHeaders).toEqual({ Authorization: "Bearer token-2" });
+  });
+
+  it("keeps reconnecting when refreshing the token fails, instead of stopping for good", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.mocked(refreshSession).mockRejectedValue(new TypeError("Failed to fetch"));
+    renderProvider();
+    const client = FakeClient.latest();
+    await connected(client);
+
+    act(() => client.drop(4001));
+    await expect(client.ready).resolves.toBeUndefined();
+
+    expect(refreshSession).toHaveBeenCalledOnce();
+    expect(client.active).toBe(true);
+    expect(client.connectHeaders).toEqual({ Authorization: "Bearer token-1" });
   });
 
   it("stops reconnecting once the user has signed out", async () => {

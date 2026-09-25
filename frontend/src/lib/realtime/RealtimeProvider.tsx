@@ -7,6 +7,7 @@ import { refreshSession } from "@/lib/api/client";
 import { session } from "@/lib/auth/session";
 import { config } from "@/lib/config";
 import { reconnectDelay } from "./backoff";
+import { socketUrlProblem } from "./socketUrl";
 import type { ConnectionState, LocationReport, Payloads, SubscribableDestination } from "./types";
 import { Destinations } from "./types";
 
@@ -38,7 +39,8 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * One STOMP connection per signed-in tab, following the protocol in docs/events.md §2.5: backoff with full
- * jitter, a fresh token before each connect, re-subscription after it, then snapshot refetches.
+ * jitter, a fresh token before each connect, subscriptions after it, then snapshot refetches (the first
+ * connection included: a push sent before the subscriptions existed is only in the snapshot).
  */
 export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
@@ -60,12 +62,18 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  // Fixed for the page's lifetime: the URL is built in and the page's protocol does not change.
+  const [urlProblem] = useState(() => typeof window === "undefined" ? null : socketUrlProblem(config.wsUrl, window.location.protocol));
+
   useEffect(() => {
+    if (urlProblem !== null) {
+      console.error(`Live updates are off: ${urlProblem} (NEXT_PUBLIC_WS_URL)`);
+      return undefined;
+    }
     const active = subscriptions.current;
     /** 0 for the first connection; n for the n-th retry since the last successful one. */
     let attempt = 0;
     let tokenRejected = false;
-    let connectedBefore = false;
     const client = new Client({
       brokerURL: config.wsUrl,
       reconnectDelay: STOMP_RETRY_DELAY_MS,
@@ -81,7 +89,13 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       attempt += 1;
       if (tokenRejected || session.expiresWithin(TOKEN_MARGIN_MS)) {
         tokenRejected = false;
-        await refreshSession();
+        try {
+          await refreshSession();
+        } catch (error) {
+          // stompjs stops for good if beforeConnect throws. Connecting with the current token instead fails at
+          // the server if it has expired, which marks it rejected and retries with backoff.
+          console.warn("Refreshing the session before reconnecting failed", error);
+        }
       }
       const token = session.accessToken();
       if (token === null) {
@@ -100,10 +114,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       setState("connected");
       active.clear();
       handlers.current.forEach((_, destination) => listen(client, destination));
-      if (connectedBefore) {
-        void queryClient.invalidateQueries({ predicate: (query) => query.meta?.realtime === true });
-      }
-      connectedBefore = true;
+      void queryClient.invalidateQueries({ predicate: (query) => query.meta?.realtime === true });
     };
 
     client.onWebSocketClose = (event) => {
@@ -129,7 +140,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       active.clear();
       void client.deactivate();
     };
-  }, [listen, queryClient]);
+  }, [listen, queryClient, urlProblem]);
 
   const subscribe = useCallback(<D extends SubscribableDestination>(
     destination: D, handler: (payload: Payloads[D]) => void,
@@ -161,7 +172,8 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     return true;
   }, []);
 
-  const value = useMemo(() => ({ state, subscribe, sendLocation }), [state, subscribe, sendLocation]);
+  const shownState: ConnectionState = urlProblem === null ? state : "unavailable";
+  const value = useMemo(() => ({ state: shownState, subscribe, sendLocation }), [shownState, subscribe, sendLocation]);
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>;
 }
 

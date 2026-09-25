@@ -5,6 +5,8 @@ import { distanceMeters, PathWalker, randomPointNear, type Point } from "./geo.t
 import { log, logError, sleep } from "./log.ts";
 
 const MS_PER_SECOND = 1_000;
+/** The server closes a socket whose access token expired with this code (docs/events.md §2.1). */
+const TOKEN_EXPIRED_CLOSE_CODE = 4001;
 /** The server's pickup geofence is 150 m; the car parks at the pickup point itself. */
 const ARRIVE_ATTEMPTS = 3;
 const TERMINAL = new Set(["COMPLETED", "CANCELLED", "EXPIRED"]);
@@ -30,6 +32,8 @@ export class DriverBot {
   private heading: number | null = null;
   private speed = 0;
   private busy = false;
+  /** Set when the server closed the socket because the token expired: sign in again before reconnecting. */
+  private tokenExpired = false;
   /** Aborted when the current ride ends early, e.g. the passenger cancels. */
   private rideAbort: AbortController | null = null;
   private currentRideId: string | null = null;
@@ -45,8 +49,22 @@ export class DriverBot {
       reconnectDelay: 2 * MS_PER_SECOND,
       heartbeatIncoming: 10 * MS_PER_SECOND,
       heartbeatOutgoing: 10 * MS_PER_SECOND,
-      beforeConnect: () => {
+      beforeConnect: async () => {
+        if (this.tokenExpired) {
+          this.tokenExpired = false;
+          try {
+            await this.api.signIn();
+          } catch (error) {
+            // Not fatal: the connect below is refused and the next attempt tries again.
+            logError(this.name, "signing in again before reconnecting failed", error);
+          }
+        }
         this.stomp.connectHeaders = { Authorization: `Bearer ${this.api.accessToken}` };
+      },
+      onWebSocketClose: (event) => {
+        if (event.code === TOKEN_EXPIRED_CLOSE_CODE) {
+          this.tokenExpired = true;
+        }
       },
       onConnect: () => this.onConnect(),
       onStompError: (frame) => log(this.name, `STOMP error ${frame.headers.message ?? ""}`),
