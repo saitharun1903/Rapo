@@ -349,4 +349,60 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- The coverage gate needs the integration tests, which skip themselves without Docker, so it is on in CI
+             (GitHub Actions sets CI) and on request elsewhere: ./mvnw verify -Pcoverage-gate -->
+        <profile>
+            <id>coverage-gate</id>
+            <activation>
+                <property>
+                    <name>env.CI</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <executions>
+                            <!-- The service layer holds the business rules, so it has a floor. Set just under the first
+                                 measured baseline (90.3 % lines, 71.1 % branches in CI, Phase 9): a real drop fails the
+                                 build, the few lines that asynchronous paths cover on some runs and not others do not. -->
+                            <execution>
+                                <id>service-coverage-gate</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>check</goal>
+                                </goals>
+                                <configuration>
+                                    <dataFile>${project.build.directory}/jacoco-merged.exec</dataFile>
+                                    <includes>
+                                        <include>com/rideflow/service/**</include>
+                                    </includes>
+                                    <rules>
+                                        <rule>
+                                            <element>BUNDLE</element>
+                                            <limits>
+                                                <limit>
+                                                    <counter>LINE</counter>
+                                                    <value>COVEREDRATIO</value>
+                                                    <minimum>0.88</minimum>
+                                                </limit>
+                                                <limit>
+                                                    <counter>BRANCH</counter>
+                                                    <value>COVEREDRATIO</value>
+                                                    <minimum>0.70</minimum>
+                                                </limit>
+                                            </limits>
+                                        </rule>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

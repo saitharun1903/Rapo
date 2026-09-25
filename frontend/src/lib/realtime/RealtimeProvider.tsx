@@ -62,6 +62,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const active = subscriptions.current;
+    /** 0 for the first connection; n for the n-th retry since the last successful one. */
     let attempt = 0;
     let tokenRejected = false;
     let connectedBefore = false;
@@ -93,7 +94,9 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     };
 
     client.onConnect = () => {
-      attempt = 0;
+      // If this connection drops, the next one is a retry and waits its jittered delay, so clients that lost
+      // the same server do not all come back at once.
+      attempt = 1;
       setState("connected");
       active.clear();
       handlers.current.forEach((_, destination) => listen(client, destination));

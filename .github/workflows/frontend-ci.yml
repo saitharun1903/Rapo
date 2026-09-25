@@ -34,7 +34,14 @@ jobs:
 
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
+      - name: Unit and component tests, with coverage
+        run: npm run test:coverage
+
+      - name: Coverage summary
+        run: |
+          node scripts/coverage-summary.mjs >> "$GITHUB_STEP_SUMMARY"
+          node scripts/coverage-summary.mjs --annotate
+
       - run: npm run build
 
   simulator:

@@ -1,22 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { RideResponse } from "@/lib/api/types";
+import { ride } from "@/test/fixtures";
 import { currentTarget, newerRide, nextDriverAction } from "./status";
-
-function ride(overrides: Partial<RideResponse>): RideResponse {
-  return {
-    id: "r1",
-    status: "MATCHING",
-    version: 1,
-    vehicleCategory: "ECONOMY",
-    pickup: { point: { lat: 17.44, lng: 78.38 }, address: "Pickup" },
-    dropoff: { point: { lat: 17.42, lng: 78.47 }, address: "Dropoff" },
-    paymentMethod: "CASH",
-    estimate: { distanceMeters: 1000, durationSeconds: 300, source: "ROUTED", fare: null, breakdown: null },
-    matching: { round: 1, radiusMeters: 3000 },
-    timestamps: { requestedAt: "2026-09-25T10:00:00Z" },
-    ...overrides,
-  };
-}
 
 describe("newerRide", () => {
   it("applies an update with a higher version", () => {

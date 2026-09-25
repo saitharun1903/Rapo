@@ -1,24 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { SessionStore } from "@/lib/auth/session";
-import type { AuthResponse } from "./types";
+import { auth, json } from "@/test/fixtures";
 import { createAuthenticatedFetch, createRefresher, REFRESH_MARGIN_MS } from "./http";
 
 const NOW = 1_000_000;
 const EXPIRES_IN_SECONDS = 900;
 const MS_PER_SECOND = 1_000;
-
-function auth(token: string, expiresIn = EXPIRES_IN_SECONDS): AuthResponse {
-  return {
-    accessToken: token,
-    tokenType: "Bearer",
-    expiresIn,
-    user: { id: "u1", email: "a@example.com", fullName: "Asha", role: "PASSENGER", status: "ACTIVE", createdAt: "2026-09-01T00:00:00Z" },
-  };
-}
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-}
 
 function signedInStore(token = "old"): SessionStore {
   const store = new SessionStore(() => NOW);
