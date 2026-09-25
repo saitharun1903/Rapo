@@ -2,9 +2,9 @@ name: backend-ci
 
 on:
   push:
-    paths: ["backend/**", "docs/openapi.json", ".github/workflows/backend-ci.yml"]
+    paths: ["backend/**", "docs/openapi.json", ".github/workflows/backend-ci.yml", ".github/scripts/coverage_summary.py"]
   pull_request:
-    paths: ["backend/**", "docs/openapi.json", ".github/workflows/backend-ci.yml"]
+    paths: ["backend/**", "docs/openapi.json", ".github/workflows/backend-ci.yml", ".github/scripts/coverage_summary.py"]
 
 permissions:
   contents: read
@@ -33,6 +33,21 @@ jobs:
         run: |
           summary=target/failsafe-reports/failsafe-summary.xml
           grep -q "<skipped>0</skipped>" "$summary" || { cat "$summary"; echo "Integration tests were skipped"; exit 1; }
+
+      # The merged unit + integration report: a table on the run page, notices readable through the checks API,
+      # and the HTML report as an artifact.
+      - name: Coverage summary
+        if: success()
+        run: |
+          python3 ../.github/scripts/coverage_summary.py target/site/jacoco/jacoco.csv >> "$GITHUB_STEP_SUMMARY"
+          python3 ../.github/scripts/coverage_summary.py target/site/jacoco/jacoco.csv --annotate
+
+      - name: Upload coverage report
+        if: success()
+        uses: actions/upload-artifact@v5
+        with:
+          name: backend-coverage
+          path: backend/target/site/jacoco
 
       # Surface each failing test class as an annotation so failures are readable on the commit/PR page.
       # Workflow commands need '%' and newlines percent-encoded.

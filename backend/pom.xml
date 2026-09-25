@@ -25,6 +25,10 @@
         <anthropic.version>2.65.0</anthropic.version>
         <resilience4j.version>2.4.0</resilience4j.version>
         <wiremock.version>3.13.2</wiremock.version>
+        <jacoco.version>0.8.15</jacoco.version>
+        <!-- Set by JaCoCo's prepare-agent goals; empty when JaCoCo is skipped (-Djacoco.skip=true). -->
+        <jacocoUnitArgLine/>
+        <jacocoItArgLine/>
         <!-- Tests that need a real local model; run with -Dexcluded.test.groups=none -Dgroups=local-model -->
         <excluded.test.groups>local-model</excluded.test.groups>
     </properties>
@@ -252,7 +256,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <argLine>-javaagent:${org.mockito:mockito-core:jar} -Xshare:off</argLine>
+                    <argLine>@{jacocoUnitArgLine} -javaagent:${org.mockito:mockito-core:jar} -Xshare:off</argLine>
                     <excludedGroups>${excluded.test.groups}</excludedGroups>
                     <excludes>
                         <exclude>**/*IT.java</exclude>
@@ -263,7 +267,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <configuration>
-                    <argLine>-javaagent:${org.mockito:mockito-core:jar} -Xshare:off</argLine>
+                    <argLine>@{jacocoItArgLine} -javaagent:${org.mockito:mockito-core:jar} -Xshare:off</argLine>
                 </configuration>
                 <executions>
                     <execution>
@@ -271,6 +275,63 @@
                             <goal>integration-test</goal>
                             <goal>verify</goal>
                         </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Coverage: unit tests write jacoco.exec, integration tests jacoco-it.exec; verify merges them into one
+                 report (target/site/jacoco) so code exercised only by the Testcontainers tests counts. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <id>unit-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                        <configuration>
+                            <propertyName>jacocoUnitArgLine</propertyName>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>integration-agent</id>
+                        <goals>
+                            <goal>prepare-agent-integration</goal>
+                        </goals>
+                        <configuration>
+                            <propertyName>jacocoItArgLine</propertyName>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>merge</id>
+                        <phase>post-integration-test</phase>
+                        <goals>
+                            <goal>merge</goal>
+                        </goals>
+                        <configuration>
+                            <fileSets>
+                                <fileSet>
+                                    <directory>${project.build.directory}</directory>
+                                    <includes>
+                                        <include>jacoco.exec</include>
+                                        <include>jacoco-it.exec</include>
+                                    </includes>
+                                </fileSet>
+                            </fileSets>
+                            <destFile>${project.build.directory}/jacoco-merged.exec</destFile>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                        <configuration>
+                            <dataFile>${project.build.directory}/jacoco-merged.exec</dataFile>
+                            <outputDirectory>${project.reporting.outputDirectory}/jacoco</outputDirectory>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
