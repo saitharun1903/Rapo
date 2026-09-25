@@ -294,3 +294,4 @@ rideflow:
     admin:
       email: ${BOOTSTRAP_ADMIN_EMAIL:}
       password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+# Bisect control run: unchanged behaviour (throwaway branch, do not merge).
