@@ -1,0 +1,113 @@
+name: e2e
+
+# Playwright smoke tests against the whole stack: PostGIS, Redis and Kafka from docker-compose, the backend
+# with the demo profile, the driver simulator, and the built frontend.
+on:
+  push:
+    paths: ["frontend/**", "backend/**", "simulator/**", "docs/openapi.json", "docker-compose.yml", ".github/workflows/e2e.yml"]
+  pull_request:
+    paths: ["frontend/**", "backend/**", "simulator/**", "docs/openapi.json", "docker-compose.yml", ".github/workflows/e2e.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SPRING_PROFILES_ACTIVE: demo
+      REFRESH_COOKIE_SECURE: "false"
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
+      BACKEND_URL: http://localhost:8080
+      NEXT_PUBLIC_WS_URL: ws://localhost:8080/ws
+      API_BASE_URL: http://localhost:8080
+      WS_URL: ws://localhost:8080/ws
+      # Fast simulated drivers so a whole ride fits in a smoke test.
+      SIM_SPEED_MPS: "60"
+      SIM_BOARDING_MS: "2000"
+    steps:
+      - uses: actions/checkout@v5
+
+      # Credentials for this run only, generated here and masked in the logs; nothing is stored in the repo.
+      - name: Generate throwaway credentials
+        run: |
+          for name in POSTGRES_PASSWORD REDIS_PASSWORD DEMO_USER_PASSWORD; do
+            value="e2e$(openssl rand -hex 16)"
+            echo "::add-mask::$value"
+            echo "$name=$value" >> "$GITHUB_ENV"
+          done
+          jwt=$(openssl rand -base64 48 | tr -d '\n')
+          echo "::add-mask::$jwt"
+          echo "JWT_SECRET=$jwt" >> "$GITHUB_ENV"
+
+      - name: Start PostGIS, Redis and Kafka
+        run: docker compose up -d --wait postgres redis kafka
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Build and start the backend
+        working-directory: backend
+        run: |
+          ./mvnw -B -q -DskipTests package
+          jar=$(find target -maxdepth 1 -name "rideflow-backend-*.jar" ! -name "*-plain.jar" | head -n 1)
+          DATABASE_PASSWORD="$POSTGRES_PASSWORD" nohup java -jar "$jar" > ../backend.log 2>&1 &
+          for attempt in $(seq 1 90); do
+            if curl -fsS http://localhost:8081/actuator/health/readiness > /dev/null; then echo "backend ready"; exit 0; fi
+            sleep 2
+          done
+          echo "backend did not become ready"; tail -n 100 ../backend.log; exit 1
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            simulator/package-lock.json
+
+      - name: Start the driver simulator
+        working-directory: simulator
+        run: |
+          npm ci
+          nohup node src/index.ts > ../simulator.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if grep -q "drivers online" ../simulator.log; then echo "simulator ready"; exit 0; fi
+            sleep 2
+          done
+          echo "simulator did not start"; cat ../simulator.log; exit 1
+
+      - name: Build the frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install Playwright's browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright smoke tests
+        working-directory: frontend
+        run: npx playwright test
+
+      - name: Show service logs
+        if: failure()
+        run: |
+          echo "--- backend (last 150 lines)"; tail -n 150 backend.log || true
+          echo "--- simulator (last 100 lines)"; tail -n 100 simulator.log || true
+
+      - name: Upload report and logs
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: e2e-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+            backend.log
+            simulator.log

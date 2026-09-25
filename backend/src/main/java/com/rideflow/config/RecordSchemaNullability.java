@@ -23,7 +23,9 @@ import org.springframework.util.ClassUtils;
  * have to treat every field as possibly missing.
  *
  * <p>Schemas are matched to records by name (the {@code @Schema} name or the simple class name), so two
- * records that would produce the same schema name fail here instead of silently sharing one schema.
+ * records that would produce the same schema name fail here instead of silently sharing one schema. A generic
+ * record such as {@code PageResponse<T>} becomes one schema per type argument ({@code PageResponseUserResponse});
+ * those are matched by prefix.
  */
 final class RecordSchemaNullability implements OpenApiCustomizer {
 
@@ -31,6 +33,7 @@ final class RecordSchemaNullability implements OpenApiCustomizer {
 
     private final Map<String, Class<?>> recordsBySchemaName;
     private final Map<String, List<Class<?>>> duplicates;
+    private final Map<String, Class<?>> genericRecordsByPrefix = new HashMap<>();
 
     RecordSchemaNullability(String... basePackages) {
         Map<String, List<Class<?>>> byName = new HashMap<>();
@@ -41,6 +44,9 @@ final class RecordSchemaNullability implements OpenApiCustomizer {
             for (BeanDefinition candidate : scanner.findCandidateComponents(basePackage)) {
                 Class<?> type = ClassUtils.resolveClassName(candidate.getBeanClassName(), getClass().getClassLoader());
                 byName.computeIfAbsent(schemaName(type), name -> new ArrayList<>()).add(type);
+                if (type.getTypeParameters().length > 0) {
+                    genericRecordsByPrefix.put(schemaName(type), type);
+                }
             }
         }
         this.recordsBySchemaName = new HashMap<>();
@@ -64,11 +70,19 @@ final class RecordSchemaNullability implements OpenApiCustomizer {
                 throw new IllegalStateException("Records " + duplicates.get(name) + " all map to schema '" + name
                         + "'; give them distinct @Schema(name = ...)");
             }
-            Class<?> type = recordsBySchemaName.get(name);
+            Class<?> type = recordsBySchemaName.containsKey(name) ? recordsBySchemaName.get(name) : genericRecord(name);
             if (type != null && schema.getProperties() != null) {
                 apply(type, schema);
             }
         });
+    }
+
+    private Class<?> genericRecord(String schemaName) {
+        return genericRecordsByPrefix.entrySet().stream()
+                .filter(entry -> schemaName.startsWith(entry.getKey()))
+                .map(Map.Entry::getValue)
+                .findFirst()
+                .orElse(null);
     }
 
     private static void apply(Class<?> type, Schema<?> schema) {

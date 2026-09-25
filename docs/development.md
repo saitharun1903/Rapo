@@ -6,7 +6,7 @@
 |---|---|---|
 | JDK | 21 | Maven itself is not needed: use the wrapper `backend/mvnw` |
 | Docker Desktop | recent | Runs PostGIS, Redis and Kafka, and the Testcontainers integration tests |
-| Node.js | 22+ | Frontend (Phase 8) |
+| Node.js | 24+ | Frontend and driver simulator (the simulator runs TypeScript directly on Node 24) |
 
 > **Windows / OneDrive:** keep the repository outside OneDrive-synced folders. OneDrive locks files in
 > `backend/target` and `node_modules`, which makes `mvnw clean` fail intermittently.
@@ -28,6 +28,34 @@ cd backend
   `driver.arjun@`, `driver.farhan@`, `driver.lakshmi@`, `driver.vikram@`, `driver.sneha@rideflow.example.com`
   (verified drivers) and `driver.karthik@rideflow.example.com` (pending verification).
 
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev                       # http://localhost:3000
+```
+
+The browser calls `/api/*` on the frontend's own origin and Next forwards it to `BACKEND_URL`
+(default `http://localhost:8080`), so the refresh cookie stays first-party. The WebSocket goes straight to
+`NEXT_PUBLIC_WS_URL` (default `ws://localhost:8080/ws`); the backend's `CORS_ALLOWED_ORIGINS` must include
+the frontend's origin. Other optional variables: `NEXT_PUBLIC_MAP_STYLE_URL` (default OpenFreeMap, no key),
+`NEXT_PUBLIC_MAP_CENTER_LAT` / `_LNG`.
+
+### Driver simulator (demo only)
+
+```bash
+cd simulator
+npm install
+DEMO_USER_PASSWORD=... npm start              # seeded drivers go online and serve rides booked in the web app
+DEMO_USER_PASSWORD=... node src/index.ts --trips 5   # seeded passengers also book 5 rides, then it exits
+```
+
+It signs in as the seeded drivers through the public API, streams their positions over the same STOMP
+destination as the web app, accepts offers and drives the routed path. Speed, report interval and start
+area are `SIM_*` variables (see `simulator/src/config.ts`). A driver in the web app can also place
+themself on the map when the browser has no GPS.
+
 ## Tests
 
 ```bash
@@ -48,6 +76,42 @@ unavailable, so `verify` passing locally without Docker does not mean they ran: 
 | `SchemaMigrationIT` | Flyway migrations apply, Hibernate mappings validate, DB constraints enforce invariants |
 | `AuthAndOnboardingFlowIT` | End-to-end: register → login → refresh rotation → reuse detection; driver onboarding → admin verification; suspension |
 | `DemoSeedIT` | Seed loads and pgcrypto-hashed demo passwords work with the application's password encoder |
+| `ReportingIT` | Earnings, admin overview, analytics series, ride search and detail against a real completed and paid ride; vehicle replacement rules and its audit entry |
+| `OpenApiContractTest` | `docs/openapi.json` matches the code (see below) |
+
+### API contract
+
+`docs/openapi.json` is generated from the controllers and DTOs. After changing an endpoint or a DTO:
+
+```bash
+cd backend && ./mvnw test -Dtest=OpenApiContractTest -Dopenapi.write=true
+cd ../frontend && npm run api:types     # regenerates src/lib/api/schema.d.ts
+```
+
+A record component that can be `null` must be annotated with JSpecify `@Nullable`; everything else is
+marked required in the schema. The backend build fails when the file is stale, and the frontend build
+fails when the generated types are.
+
+### Frontend and simulator
+
+```bash
+cd frontend
+npm run lint && npm run typecheck && npm test && npm run build
+cd ../simulator && npm run typecheck && npm test
+```
+
+### End-to-end (Playwright)
+
+`frontend/e2e` holds smoke tests that need the whole stack: infrastructure, the backend with the `demo`
+profile and the simulator (the `e2e` workflow starts all of it). Locally, with those running:
+
+```bash
+cd frontend
+npx playwright install chromium
+DEMO_USER_PASSWORD=... npm run build && DEMO_USER_PASSWORD=... npm run e2e
+```
+
+Run the simulator with `SIM_SPEED_MPS=60` so a whole ride fits in the test's time limit.
 
 ## Environment variables
 

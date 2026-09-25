@@ -880,6 +880,7 @@
             "type" : "integer"
           }
         },
+        "required" : [ "content", "page", "size", "sort", "totalElements", "totalPages" ],
         "type" : "object"
       },
       "PageResponseAuditLogResponse" : {
@@ -910,6 +911,7 @@
             "type" : "integer"
           }
         },
+        "required" : [ "content", "page", "size", "sort", "totalElements", "totalPages" ],
         "type" : "object"
       },
       "PageResponseDriverResponse" : {
@@ -940,6 +942,7 @@
             "type" : "integer"
           }
         },
+        "required" : [ "content", "page", "size", "sort", "totalElements", "totalPages" ],
         "type" : "object"
       },
       "PageResponseNotificationResponse" : {
@@ -970,6 +973,7 @@
             "type" : "integer"
           }
         },
+        "required" : [ "content", "page", "size", "sort", "totalElements", "totalPages" ],
         "type" : "object"
       },
       "PageResponseRideSummaryResponse" : {
@@ -1000,6 +1004,7 @@
             "type" : "integer"
           }
         },
+        "required" : [ "content", "page", "size", "sort", "totalElements", "totalPages" ],
         "type" : "object"
       },
       "PageResponseUserResponse" : {
@@ -1030,6 +1035,7 @@
             "type" : "integer"
           }
         },
+        "required" : [ "content", "page", "size", "sort", "totalElements", "totalPages" ],
         "type" : "object"
       },
       "PassengerInfo" : {

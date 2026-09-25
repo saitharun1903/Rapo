@@ -1,0 +1,56 @@
+name: frontend-ci
+
+on:
+  push:
+    paths: ["frontend/**", "simulator/**", "docs/openapi.json", ".github/workflows/frontend-ci.yml"]
+  pull_request:
+    paths: ["frontend/**", "simulator/**", "docs/openapi.json", ".github/workflows/frontend-ci.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      # The API types are generated from docs/openapi.json, which the backend build checks against the code.
+      - name: API types match the contract
+        run: |
+          npm run api:types
+          git diff --exit-code -- src/lib/api/schema.d.ts || { echo "Run 'npm run api:types' and commit the result"; exit 1; }
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  simulator:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: simulator
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: simulator/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
