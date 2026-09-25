@@ -10,6 +10,9 @@ const EXTERNAL_BASE_URL = process.env.PLAYWRIGHT_BASE_URL;
 const BASE_URL = EXTERNAL_BASE_URL ?? `http://localhost:${LOCAL_PORT}`;
 const SERVER_START_TIMEOUT_MS = 120_000;
 const TEST_TIMEOUT_MS = 8 * 60_000;
+const DESKTOP = { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } };
+/** The Grafana dashboards, after the app's tests have made rides; only where Grafana runs (the e2e workflow). */
+const DASHBOARDS = /dashboards\.spec\.ts/;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -26,7 +29,12 @@ export default defineConfig({
     screenshot: "only-on-failure",
     viewport: { width: 1440, height: 900 },
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } }],
+  projects: [
+    { name: "chromium", use: DESKTOP, testIgnore: DASHBOARDS },
+    ...(process.env.GRAFANA_URL
+      ? [{ name: "dashboards", use: DESKTOP, testMatch: DASHBOARDS, dependencies: ["chromium"] }]
+      : []),
+  ],
   webServer: EXTERNAL_BASE_URL ? undefined : {
     command: "npm run start",
     url: BASE_URL,

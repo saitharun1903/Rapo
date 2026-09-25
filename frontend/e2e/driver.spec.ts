@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PassengerApi } from "./passengerApi";
-import { DEMO, demoPassword, gps, north, OUTSKIRTS, signIn, unique, type Point } from "./support";
+import { capture, DEMO, demoPassword, gps, north, OUTSKIRTS, signIn, unique, type Point } from "./support";
 
 /**
  * A driver's whole first day in the browser: they register, submit their licence and vehicle, an admin verifies
@@ -77,7 +77,9 @@ test("a new driver is verified, goes online, and completes a ride from offer to 
   const passenger = await PassengerApi.signIn(request, DEMO.driverTestPassenger, demoPassword());
   const rideId = await passenger.book(PICKUP, DROPOFF);
   const offers = page.getByRole("region", { name: "Ride offers" });
-  await offers.getByRole("button", { name: "Accept" }).click({ timeout: OFFER_TIMEOUT_MS });
+  await expect(offers.getByRole("button", { name: "Accept" })).toBeVisible({ timeout: OFFER_TIMEOUT_MS });
+  await capture(page, "driver-offer");
+  await offers.getByRole("button", { name: "Accept" }).click();
   await expect(page.getByRole("heading", { name: "Driver assigned" })).toBeVisible();
 
   await step(page, "Start driving to pickup", "Driver arriving");
@@ -90,6 +92,7 @@ test("a new driver is verified, goes online, and completes a ride from offer to 
       lng: PICKUP.lng + ((DROPOFF.lng - PICKUP.lng) * index) / ROUTE_STEPS,
     });
   }
+  await capture(page, "driver-trip");
   await page.getByRole("button", { name: "Complete trip" }).click();
   await expect(page.getByRole("heading", { name: "Trip complete" })).toBeVisible();
   expect(await passenger.rideStatus(rideId)).toBe("COMPLETED");
@@ -104,4 +107,5 @@ test("a new driver is verified, goes online, and completes a ride from offer to 
     await expect(page.getByText("Earned")).toBeVisible();
     await expect(page.getByText("No completed trips in this period")).toHaveCount(0);
   }).toPass({ timeout: PAYMENT_TIMEOUT_MS });
+  await capture(page, "driver-earnings");
 });

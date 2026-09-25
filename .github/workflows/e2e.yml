@@ -94,12 +94,24 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
+      # Also renders the Grafana dashboards after the rides, and saves the README's screenshots on the way.
       - name: Playwright against the compose stack
         working-directory: frontend
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3000
+          GRAFANA_URL: http://localhost:3001
+          SCREENSHOTS_DIR: ${{ github.workspace }}/screenshots
         run: |
-          DEMO_USER_PASSWORD=$(grep '^DEMO_USER_PASSWORD=' ../.env | cut -d= -f2-) npx playwright test
+          DEMO_USER_PASSWORD=$(grep '^DEMO_USER_PASSWORD=' ../.env | cut -d= -f2-) \
+            GRAFANA_PASSWORD=$(grep '^GRAFANA_ADMIN_PASSWORD=' ../.env | cut -d= -f2-) \
+            npx playwright test
+
+      - name: Upload the screenshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: screenshots
+          path: screenshots
+          if-no-files-found: error
 
       # The rides above were scraped by Prometheus: the dashboards must show them.
       - name: Dashboards show live data
@@ -184,3 +196,34 @@ jobs:
       - name: Stop the stack
         if: always()
         run: docker compose --profile demo down -v
+
+  # The screenshots of a passing run, on the branch screenshots/<branch> (replaced each time), from where they
+  # are copied into docs/screenshots by hand. Pushes only: a pull request's token cannot write.
+  screenshots:
+    needs: compose
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: screenshots
+          path: screenshots
+
+      - name: Push to screenshots/${{ github.ref_name }}
+        working-directory: screenshots
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          branch="screenshots/$GITHUB_REF_NAME"
+          printf 'Screenshots from e2e run %s on commit %s (%s): the Playwright suite against the compose stack.\n' \
+            "$GITHUB_RUN_ID" "$GITHUB_SHA" "$GITHUB_REF_NAME" > README.md
+          git init -q -b "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -q -m "Screenshots from e2e run $GITHUB_RUN_ID on $GITHUB_SHA"
+          git push -q --force "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/$branch"
+          echo "::notice title=Screenshots::$(ls *.png | wc -l) screenshots on $branch"

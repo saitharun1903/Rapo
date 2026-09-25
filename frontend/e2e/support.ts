@@ -1,3 +1,4 @@
+import path from "node:path";
 import { expect, type Page } from "@playwright/test";
 
 /** The password the backend's demo profile gave every seeded account (env DEMO_USER_PASSWORD). */
@@ -69,4 +70,20 @@ export async function clickMap(page: Page, mapName: string, x: number, y: number
     throw new Error("The map has no size");
   }
   await map.click({ position: { x: box.width * x, y: box.height * y } });
+}
+
+/** Map tiles and markers have no DOM signal for "drawn"; this is how long a capture waits for them. */
+const CAPTURE_SETTLE_MS = 2_500;
+
+/**
+ * Saves what the page shows as SCREENSHOTS_DIR/<name>.png, for the README. The e2e workflow sets the directory,
+ * so every screenshot comes from a passing run against the compose stack; without it this does nothing.
+ */
+export async function capture(page: Page, name: string, options: { fullPage?: boolean } = {}): Promise<void> {
+  const directory = process.env.SCREENSHOTS_DIR;
+  if (!directory) {
+    return;
+  }
+  await page.waitForTimeout(CAPTURE_SETTLE_MS);
+  await page.screenshot({ path: path.join(directory, `${name}.png`), fullPage: options.fullPage ?? false });
 }
