@@ -187,6 +187,32 @@ PLAYWRIGHT_BASE_URL=http://localhost:3000 DEMO_USER_PASSWORD=... npm run e2e
 Without `PLAYWRIGHT_BASE_URL`, Playwright starts the frontend itself (`npm run build` first) against a
 backend and simulator you run on the host.
 
+## Continuous integration
+
+| Workflow | Runs on | Checks |
+|---|---|---|
+| `backend-ci` | changes to `backend/` or the API contract | Build, unit, web and ArchUnit tests, integration tests on Testcontainers, merged coverage with a gate on the service layer |
+| `frontend-ci` | changes to `frontend/`, `simulator/` or the API contract | Generated API types match `docs/openapi.json`, ESLint, `tsc`, Vitest with coverage, production build; simulator typecheck and tests |
+| `e2e` | changes to any app, the compose file or `infrastructure/` | The compose stack from a clean checkout, the Playwright suite, every Grafana panel; on `main`, publishes the tested images to GHCR |
+| `secret-scan` | every push and pull request | gitleaks over the whole history |
+| `load-test` | changes to `load-tests/scenarios/`, or by hand | k6 scenarios at 10/50/100 VUs ([performance.md](performance.md)) |
+| `cache-benchmark` | changes to `load-tests/cache-benchmark/`, or by hand | Cache on/off comparison |
+
+Dependabot opens weekly update pull requests (`.github/dependabot.yml`), which go through the same checks.
+`python scripts/ci_status.py [commit]` shows every run for a commit once, without waiting; a workflow with
+no run was not triggered by that change.
+
+**Secret scanning locally:** with [gitleaks](https://github.com/gitleaks/gitleaks) installed,
+`gitleaks git --redact .` scans the history the way CI does. A finding that is not a secret (a test
+fixture, say) is accepted by adding its fingerprint, printed by the scan and by the CI annotation, to
+`.gitleaksignore` with a comment saying why.
+
+**Published images:** every commit on `main` that passes `e2e` is pushed as
+`ghcr.io/saitharun1903/rideflow-{backend,frontend,simulator}` with the commit SHA and `latest`. The backend
+and simulator images take all settings from the environment. The frontend image is built for the compose
+stack's URLs, so a deployment builds its own:
+`docker build --build-arg BACKEND_URL=... --build-arg NEXT_PUBLIC_WS_URL=... frontend`.
+
 ## Environment variables
 
 Defined in `.env.example`. Variables without a default are required; the application fails fast at

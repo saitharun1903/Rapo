@@ -809,16 +809,31 @@ All endpoints and credentials come from environment variables. There is no provi
 
 ```mermaid
 flowchart LR
-    PUSH["push / PR"] --> BCI["backend-ci.yml"]
-    PUSH --> FCI["frontend-ci.yml"]
-    BCI --> B1["checkout, JDK 21, Maven cache"] --> B2["spotless check + compile"] --> B3["unit + ArchUnit tests"] --> B4["integration tests<br/>Testcontainers on runner Docker"] --> B5["package + JaCoCo report"]
-    FCI --> F1["checkout, Node, npm ci"] --> F2["lint + typecheck"] --> F3["vitest"] --> F4["next build"]
-    PUSH --> DK["e2e.yml"]
-    DK --> D1["init-env.sh, build backend, frontend and simulator images"] --> D2["compose up --wait, login through the frontend, Playwright suite"] --> D3{"main branch<br/>and registry secrets?"}
-    D3 -->|yes| D4["push images to GHCR, optional deploy hook"]
-    D3 -->|no| D5["skip publish"]
-    PUSH --> SEC["gitleaks secret scan"]
+    PUSH["push / PR"] --> BCI["backend-ci.yml<br/>(backend/**)"]
+    PUSH --> FCI["frontend-ci.yml<br/>(frontend/**, simulator/**)"]
+    PUSH --> E2E["e2e.yml<br/>(any app, compose or infrastructure change)"]
+    PUSH --> SEC["secret-scan.yml<br/>(every push)"]
+    BCI --> B1["JDK 21, Maven cache"] --> B2["compile, unit + web + ArchUnit tests"] --> B3["integration tests<br/>Testcontainers on the runner's Docker"] --> B4["merged JaCoCo report,<br/>service-layer gate"]
+    FCI --> F1["npm ci"] --> F2["API types match the contract,<br/>ESLint, tsc"] --> F3["Vitest with coverage"] --> F4["next build"]
+    E2E --> D1["init-env.sh, bake the three images<br/>(layers cached per image)"] --> D2["compose up --wait, login through<br/>the frontend, Playwright suite"] --> D3["every Grafana panel query<br/>against the run's Prometheus"] --> D4{"push to main?"}
+    D4 -->|yes| D5["publish the tested images to GHCR<br/>(commit SHA and latest)"]
+    D4 -->|no| D6["done"]
+    SEC --> S1["gitleaks over the whole history,<br/>accepted findings by fingerprint"]
+    MAN["manual / load-tests change"] --> LT["load-test.yml: k6 scenarios<br/>at 10/50/100 VUs"]
+    BOT["Dependabot, weekly"] --> PR2["update PRs: Maven, npm, Actions,<br/>Dockerfiles, compose images"] --> PUSH
 ```
+
+- **Path filters** keep a frontend change from running the backend's build of several minutes, and the
+  other way round. A workflow a change does not concern has no run for that commit, which is not a failure
+  (`scripts/ci_status.py` says so).
+- **Concurrency:** a newer push to the same branch cancels a running check that it made obsolete; on
+  `main` every commit keeps its own run.
+- **What is published is what was tested:** the images pushed to GHCR are the ones the e2e job just built
+  and ran Playwright against, not a rebuild. The frontend image is built for the compose stack's URLs, since
+  Next fixes them at build time; a deployment builds its own (Phase 14).
+- **No formatter gate.** Style is kept by review (plus ESLint for the frontend and ArchUnit's layering rules
+  for the backend), not by an automatic formatter: adding one now would reformat every file in one change
+  too large to review.
 
 ---
 

@@ -1,0 +1,5 @@
+# Findings reviewed and accepted, by fingerprint (commit:file:rule:line). A fingerprint matches only that
+# line in that commit, so any later change to it is scanned again.
+#
+# Password of throwaway accounts that exist only in the integration tests' Testcontainers database.
+70e3c2169db58ed577ae3e74e71a568e13e3a039:backend/src/test/java/com/rideflow/integration/AuthAndOnboardingFlowIT.java:generic-api-key:36
