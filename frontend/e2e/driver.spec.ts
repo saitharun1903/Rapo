@@ -47,7 +47,7 @@ test("a new driver is verified, goes online, and completes a ride from offer to 
 
   await page.getByLabel("Driving licence number").fill(`E2E-${id}`);
   await page.getByLabel("Make").fill("Maruti Suzuki");
-  await page.getByLabel("Model").fill("Dzire");
+  await page.getByLabel("Model", { exact: true }).fill("Dzire");
   await page.getByLabel("Colour").fill("White");
   await page.getByLabel("Plate number").fill(`E2E ${id.slice(-8)}`);
   await page.getByLabel("Model year").fill(String(new Date().getFullYear() - 1));

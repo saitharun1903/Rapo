@@ -4,9 +4,9 @@ name: e2e
 # with the demo profile, the driver simulator, and the built frontend.
 on:
   push:
-    paths: ["frontend/**", "backend/**", "simulator/**", "docs/openapi.json", "docker-compose.yml", ".github/workflows/e2e.yml"]
+    paths: ["frontend/**", "backend/**", "simulator/**", "docs/openapi.json", "docker-compose.yml", ".github/workflows/e2e.yml", ".github/scripts/**"]
   pull_request:
-    paths: ["frontend/**", "backend/**", "simulator/**", "docs/openapi.json", "docker-compose.yml", ".github/workflows/e2e.yml"]
+    paths: ["frontend/**", "backend/**", "simulator/**", "docs/openapi.json", "docker-compose.yml", ".github/workflows/e2e.yml", ".github/scripts/**"]
 
 permissions:
   contents: read
@@ -56,8 +56,19 @@ jobs:
           ./mvnw -B -q -DskipTests package
           jar=$(find target -maxdepth 1 -name "rideflow-backend-*.jar" ! -name "*-plain.jar" | head -n 1)
           DATABASE_PASSWORD="$POSTGRES_PASSWORD" nohup java -jar "$jar" > ../backend.log 2>&1 &
-          for attempt in $(seq 1 90); do
-            if curl -fsS http://localhost:8081/actuator/health/readiness > /dev/null; then echo "backend ready"; exit 0; fi
+          pid=$!
+          # Ready in well under a minute normally. A slow start gets one thread dump (summarised below) to show
+          # what it is waiting for; five minutes is a failure.
+          start=$SECONDS
+          dumped=""
+          while (( SECONDS - start < 300 )); do
+            if curl -fsS --max-time 5 http://localhost:8081/actuator/health/readiness > /dev/null; then
+              echo "::notice title=Backend startup::ready after $(( SECONDS - start )) s"; exit 0
+            fi
+            if [ -z "$dumped" ] && (( SECONDS - start > 90 )); then
+              jcmd "$pid" Thread.print > "$GITHUB_WORKSPACE/threads.txt" 2>&1 || true
+              dumped=1
+            fi
             sleep 2
           done
           echo "backend did not become ready"; tail -n 100 ../backend.log; exit 1
@@ -94,6 +105,10 @@ jobs:
       - name: Playwright smoke tests
         working-directory: frontend
         run: npx playwright test
+
+      - name: Summarise a slow backend start
+        if: always() && hashFiles('threads.txt') != ''
+        run: python3 .github/scripts/thread_dump_summary.py threads.txt
 
       - name: Show service logs
         if: failure()

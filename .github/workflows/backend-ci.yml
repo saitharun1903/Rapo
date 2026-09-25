@@ -2,9 +2,9 @@ name: backend-ci
 
 on:
   push:
-    paths: ["backend/**", "docs/openapi.json", ".github/workflows/backend-ci.yml", ".github/scripts/coverage_summary.py"]
+    paths: ["backend/**", "docs/openapi.json", ".github/workflows/backend-ci.yml", ".github/scripts/**"]
   pull_request:
-    paths: ["backend/**", "docs/openapi.json", ".github/workflows/backend-ci.yml", ".github/scripts/coverage_summary.py"]
+    paths: ["backend/**", "docs/openapi.json", ".github/workflows/backend-ci.yml", ".github/scripts/**"]
 
 permissions:
   contents: read
@@ -26,8 +26,24 @@ jobs:
           cache: maven
 
       # Unit, web-slice and ArchUnit tests (surefire), then Testcontainers integration tests (failsafe).
+      # Normally a few minutes. If it is still running after 12, a watchdog dumps the threads of every forked
+      # test JVM (summarised below), so an intermittent hang can be diagnosed; the step gives up at 20.
       - name: Build and test
-        run: ./mvnw -B verify
+        timeout-minutes: 20
+        run: |
+          ( sleep 720
+            for pid in $(jcmd -l | awk '/ForkedBooter/ { print $1 }'); do jcmd "$pid" Thread.print; done \
+              > "$GITHUB_WORKSPACE/threads.txt" 2>&1 ) > /dev/null 2>&1 &
+          watchdog=$!
+          status=0
+          ./mvnw -B verify || status=$?
+          pkill -P "$watchdog" 2>/dev/null || true
+          kill "$watchdog" 2>/dev/null || true
+          exit "$status"
+
+      - name: Summarise stalled threads
+        if: always() && hashFiles('threads.txt') != ''
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/thread_dump_summary.py" "$GITHUB_WORKSPACE/threads.txt"
 
       # Integration tests skip themselves when Docker is missing; in CI that must never happen silently.
       - name: Assert integration tests actually ran
