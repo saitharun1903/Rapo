@@ -26,7 +26,9 @@ ENV BACKEND_URL=$BACKEND_URL \
     NEXT_OUTPUT=standalone
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+# public/ holds no files today (the icon lives in src/app), and git keeps no empty directories; create it so
+# the runtime stage can copy it either way.
+RUN mkdir -p public && npm run build
 
 # ---- Runtime: Node only, non-root ------------------------------------------------------------------------------
 FROM node:24-alpine
