@@ -57,6 +57,8 @@ public class RideFixtures {
         kafka.awaitIdle();
         clock.reset();
         jdbc.update("DELETE FROM notifications");
+        jdbc.update("DELETE FROM trip_questions");
+        jdbc.update("DELETE FROM trip_analyses");
         jdbc.update("DELETE FROM ratings");
         jdbc.update("DELETE FROM payments");
         jdbc.update("DELETE FROM rides");

@@ -73,6 +73,13 @@ class ArchitectureTest {
             .that().resideInAPackage("..kafka.consumer..")
             .should().beAnnotatedWith(Transactional.class);
 
+    /** The AI layer sees only facts and prompts: never the database, services or transport layers. */
+    @ArchTest
+    static final ArchRule aiProvidersDoNotReachIntoTheApplication = noClasses()
+            .that().resideInAPackage("com.rideflow.ai..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                    "..repository..", "..service..", "..controller..", "..kafka..", "..websocket..", "..entity..");
+
     @ArchTest
     static final ArchRule entitiesDependOnlyOnDomainTypes = noClasses()
             .that().resideInAPackage("..entity..")

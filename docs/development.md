@@ -80,6 +80,13 @@ startup if one is missing.
 | `KAFKA_BOOTSTRAP_SERVERS` | no | `localhost:29092` | Kafka brokers for the backend |
 | `KAFKA_TOPIC_PREFIX` | no | (empty) | Prepended to every topic and consumer group, to share one cluster between environments |
 | `KAFKA_REPLICATION_FACTOR` | no | `1` | Replication of the declared topics; at least 3 on a real cluster |
+| `AI_PROVIDER` | no | `disabled` | `local` (Ollama), `external` (Anthropic API) or `disabled`; trips still get their computed observations when disabled |
+| `AI_LOCAL_BASE_URL` | no | `http://localhost:11434` | Ollama server |
+| `AI_LOCAL_MODEL` | no | `llama3.2` | A model already pulled into Ollama (`ollama pull <model>`) |
+| `AI_LOCAL_TIMEOUT` | no | `120s` | Whole call, response included. 7B models took 66–159 s per analysis on a laptop GPU; use `300s` for them ([ai.md](ai.md) §5) |
+| `ANTHROPIC_API_KEY` | with `external` | — | Anthropic API key; startup fails if `AI_PROVIDER=external` and it is missing. Never commit it |
+| `AI_EXTERNAL_MODEL` | no | `claude-opus-5` | Claude model id |
+| `AI_EXTERNAL_BASE_URL` | no | `https://api.anthropic.com` | |
 | `JWT_SECRET` | **yes** | — | HS256 signing key, ≥ 32 bytes (`openssl rand -base64 48`) |
 | `JWT_ISSUER` | no | `rideflow` | `iss` claim, validated on every request |
 | `JWT_ACCESS_TOKEN_TTL` | no | `15m` | Access-token lifetime |

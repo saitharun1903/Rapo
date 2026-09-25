@@ -1,0 +1,11 @@
+Trip facts (JSON):
+{{facts}}
+
+Observations computed by the app:
+{{observations}}
+
+<question>
+{{question}}
+</question>
+
+Answer as JSON with the fields answerable, answer and factKeysUsed.

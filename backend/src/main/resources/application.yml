@@ -192,6 +192,8 @@ rideflow:
       FARE_ESTIMATE: { limit: 30, window: 1m }
       GEOCODING: { limit: 30, window: 1m }
       GEOCODING_UPSTREAM: { limit: 1, window: 1s }
+      AI_QUESTION: { limit: 10, window: 1h }
+      AI_REGENERATE: { limit: 3, window: 1h }
   kafka:
     prefix: ${KAFKA_TOPIC_PREFIX:}
     partitions: 3
@@ -216,6 +218,43 @@ rideflow:
     retention: 3d
   payments:
     platform-fee-rate: 0.20
+  ai:
+    # local (Ollama) | external (Anthropic API) | disabled. Disabled by default so a fresh clone needs neither.
+    provider: ${AI_PROVIDER:disabled}
+    pending-timeout: 15m
+    local:
+      base-url: ${AI_LOCAL_BASE_URL:http://localhost:11434}
+      model: ${AI_LOCAL_MODEL:llama3.2}
+      temperature: 0.2
+      connect-timeout: 2s
+      timeout: ${AI_LOCAL_TIMEOUT:120s}
+      max-output-tokens: 1024
+    external:
+      api-key: ${ANTHROPIC_API_KEY:}
+      base-url: ${AI_EXTERNAL_BASE_URL:https://api.anthropic.com}
+      model: ${AI_EXTERNAL_MODEL:claude-opus-5}
+      effort: low
+      timeout: 60s
+      # Room for adaptive thinking before the JSON answer.
+      max-output-tokens: 4096
+    resilience:
+      max-attempts: 2
+      backoff: 1s
+      max-retry-after: 10s
+      failure-rate-threshold: 50
+      sliding-window-size: 20
+      open-duration: 60s
+      max-concurrent-calls: 4
+    observations:
+      fare-delta-percent: 5
+      distance-delta-percent: 10
+      duration-delta-percent: 20
+      detour-ratio: 1.5
+      history-min-trips: 3
+      history-max-trips: 20
+      history-fare-per-km-delta-percent: 20
+    validation:
+      numeric-tolerance: 0.01
   geocoding:
     provider: ${GEOCODING_PROVIDER:nominatim}
     base-url: ${GEOCODING_BASE_URL:https://nominatim.openstreetmap.org}

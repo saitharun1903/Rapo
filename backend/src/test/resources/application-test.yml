@@ -20,6 +20,9 @@ rideflow:
     provider: straight-line
   geocoding:
     provider: disabled
+  # No model in CI; AiTripInsightsIT points a context at a WireMock stand-in instead.
+  ai:
+    provider: disabled
   # Integration tests share one Redis and create many users per minute; RateLimitIT enables limiting itself.
   rate-limit:
     enabled: false

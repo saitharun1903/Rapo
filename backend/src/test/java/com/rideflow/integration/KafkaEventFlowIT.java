@@ -1,18 +1,13 @@
 package com.rideflow.integration;
 
-import static com.rideflow.support.GeoTestPoints.HITECH_CITY;
-import static com.rideflow.support.GeoTestPoints.HUSSAIN_SAGAR;
-import static com.rideflow.support.GeoTestPoints.offset;
 import static com.rideflow.support.RideApi.body;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
 
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.Option;
 import com.rideflow.entity.PaymentMethod;
-import com.rideflow.entity.VehicleCategory;
 import com.rideflow.kafka.event.EventDecodingException;
 import com.rideflow.kafka.event.EventTopic;
 import com.rideflow.kafka.event.KafkaNames;
@@ -22,6 +17,7 @@ import com.rideflow.support.MutableClock;
 import com.rideflow.support.RideApi;
 import com.rideflow.support.RideFixtures;
 import com.rideflow.support.RideFixtures.Actor;
+import com.rideflow.support.RideJourneys;
 import com.rideflow.support.RideTestConfig;
 import com.rideflow.support.TopicRecorder;
 import io.micrometer.core.instrument.Counter;
@@ -64,9 +60,6 @@ import org.springframework.test.web.servlet.MvcResult;
 @Import(RideTestConfig.class)
 class KafkaEventFlowIT extends IntegrationTestContainers {
 
-    private static final Duration AWAIT = Duration.ofSeconds(15);
-    /** Shorter than the access token lifetime, which the test clock also governs. */
-    private static final Duration TRIP = Duration.ofMinutes(10);
     private static final Configuration LENIENT = Configuration.defaultConfiguration().addOptions(Option.SUPPRESS_EXCEPTIONS);
     private static final BigDecimal PLATFORM_FEE_RATE = new BigDecimal("0.20");
     /** Initial retry interval 1 s, multiplier 2, 3 retries (application.yml): 1 + 2 + 4 seconds. */
@@ -271,25 +264,11 @@ class KafkaEventFlowIT extends IntegrationTestContainers {
     // --- helpers ---
 
     private Actor onlineDriver() throws Exception {
-        Actor driver = fixtures.verifiedDriver(VehicleCategory.ECONOMY);
-        assertStatus(api.goOnline(driver, offset(HITECH_CITY, 300, 0)), 200);
-        return driver;
+        return RideJourneys.onlineDriver(fixtures, api);
     }
 
-    /** Books, matches (through Kafka), drives and completes a ride. */
     private UUID completedRide(Actor passenger, Actor driver, PaymentMethod paymentMethod) throws Exception {
-        UUID rideId = api.book(passenger, HITECH_CITY, HUSSAIN_SAGAR, paymentMethod);
-        await().atMost(AWAIT).until(() -> api.openOfferCount(driver) == 1);
-        String ride = "/api/rides/" + rideId;
-        assertStatus(api.call(driver, "POST", ride + "/accept", null), 200);
-        assertStatus(api.call(driver, "POST", ride + "/en-route", null), 200);
-        assertStatus(api.reportLocation(driver, offset(HITECH_CITY, 40, 0), clock.instant()), 202);
-        assertStatus(api.call(driver, "POST", ride + "/arrive", null), 200);
-        assertStatus(api.call(driver, "POST", ride + "/start", null), 200);
-        clock.advance(TRIP);
-        assertStatus(api.reportLocation(driver, HUSSAIN_SAGAR, clock.instant()), 202);
-        assertStatus(api.call(driver, "POST", ride + "/complete", null), 200);
-        return rideId;
+        return RideJourneys.completedRide(api, clock, passenger, driver, paymentMethod);
     }
 
     /** The {@code ride.completed} envelope exactly as the outbox relayed it. */

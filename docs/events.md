@@ -37,7 +37,7 @@ Every event is JSON with the same envelope (`EventEnvelope`, written and read by
 | `ride.driver.arriving` | `RideStatusChangedEvent` | rideId | outbox | `notifications`, `realtime-{instance}` | 7 d |
 | `ride.driver.arrived` | `RideStatusChangedEvent` | rideId | outbox | `notifications`, `realtime-{instance}` | 7 d |
 | `ride.started` | `RideStatusChangedEvent` (→ IN_PROGRESS) | rideId | outbox | `notifications`, `realtime-{instance}` | 7 d |
-| `ride.completed` | `RideStatusChangedEvent` | rideId | outbox | `payments`, `notifications`, `realtime-{instance}` (Phase 7 adds `trip-analysis`) | 7 d |
+| `ride.completed` | `RideStatusChangedEvent` | rideId | outbox | `payments`, `notifications`, `trip-analysis`, `realtime-{instance}` | 7 d |
 | `ride.cancelled` | `RideStatusChangedEvent` | rideId | outbox | `notifications`, `realtime-{instance}` | 7 d |
 | `ride.expired` | `RideStatusChangedEvent` | rideId | outbox | `notifications`, `realtime-{instance}` | 7 d |
 | `ride.dispatch.requested` | `MatchingRoundRequestedEvent` | rideId | outbox | `matching` | 7 d |
@@ -105,7 +105,8 @@ Payloads carry IDs and ride data, not full views. A consumer that needs more rea
 
 **Consuming**
 - Consumers are **at least once**: offsets are committed after the handler returns.
-- Handlers with side effects insert `(consumer, eventId)` into `processed_events` in the same transaction as the side effect (`ProcessedEvents`). A redelivered event is skipped; a rolled-back one is processed again. This covers matching, payments and notifications.
+- Handlers with side effects insert `(consumer, eventId)` into `processed_events` in the same transaction as the side effect (`ProcessedEvents`). A redelivered event is skipped; a rolled-back one is processed again. This covers matching, payments, notifications and trip analysis.
+- `trip-analysis` fetches one record per poll and allows 15 minutes between polls, because a local model can take minutes per trip. AI failures are recorded on the analysis and never thrown, so they are neither retried by Kafka nor dead-lettered.
 - Natural idempotency adds a second guard:
   - one payment per ride (`payments.ride_id` unique);
   - one notification per user and event (`notifications (user_id, source_event_id)` unique);

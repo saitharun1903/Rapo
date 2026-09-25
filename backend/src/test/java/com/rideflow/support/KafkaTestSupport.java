@@ -38,7 +38,7 @@ public class KafkaTestSupport implements DisposableBean {
     private static final Duration POLL = Duration.ofMillis(50);
     /** Consumer groups whose work tests wait for; the realtime bridge only pushes and is not waited on. */
     private static final List<String> SHARED_GROUPS =
-            List.of("matching", "payments", "notifications", "location-persistence");
+            List.of("matching", "payments", "notifications", "location-persistence", "trip-analysis");
 
     private final KafkaListenerEndpointRegistry registry;
     private final KafkaNames names;

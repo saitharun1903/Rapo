@@ -283,31 +283,33 @@ Indexes: `(user_id, created_at DESC)`, `ix_notifications_unread (user_id) WHERE 
 | column | type | notes |
 |---|---|---|
 | id | uuid PK | |
-| ride_id | uuid NOT NULL UNIQUE FK rides | |
-| status | varchar(16) NOT NULL | PENDING, COMPLETED, FAILED, UNAVAILABLE |
-| failure_code | varchar(30) NULL | TIMEOUT, PROVIDER_ERROR, RATE_LIMITED, INVALID_RESPONSE, BUSY |
-| provider | varchar(30) NULL | |
+| ride_id | uuid NOT NULL UNIQUE FK rides | one analysis per ride; a redelivered event cannot create a second |
+| status | varchar(16) NOT NULL | CHECK IN (PENDING, COMPLETED, FAILED, UNAVAILABLE) |
+| failure_code | varchar(30) NULL | CHECK IN (TIMEOUT, PROVIDER_ERROR, RATE_LIMITED, INVALID_RESPONSE, REFUSED, BUSY, UNAVAILABLE) |
+| provider | varchar(30) NULL | `local`, `external`, `disabled` |
 | model | varchar(80) NULL | |
-| prompt_version | varchar(20) NOT NULL | |
-| facts | jsonb NOT NULL | exact grounded input |
-| observations | jsonb NOT NULL | deterministic, computed observations |
-| result | jsonb NULL | validated AI output |
+| prompt_version | varchar(40) NOT NULL | e.g. `trip-analysis/v1` |
+| facts | jsonb NOT NULL | the exact grounded input (`TripFacts`: values + observation texts) |
+| observations | jsonb NOT NULL | deterministic observations `[{key, text}]` |
+| result | jsonb NULL | validated AI output; CHECK present iff COMPLETED |
 | latency_ms | integer NULL | |
-| input_tokens, output_tokens | integer NULL | |
-| attempts | smallint NOT NULL DEFAULT 0 | |
-| created_at, updated_at | | |
+| input_tokens, output_tokens | integer NULL | summed over the calls of the run (including a corrective retry) |
+| attempts | smallint NOT NULL DEFAULT 0 | runs: the first and each regeneration |
+| created_at, updated_at | timestamptz NOT NULL | `updated_at` also detects abandoned PENDING runs |
 
 ### trip_questions
 | column | type | notes |
 |---|---|---|
 | id | uuid PK | |
 | ride_id | uuid NOT NULL FK rides | |
-| user_id | uuid NOT NULL FK users | |
+| user_id | uuid NOT NULL FK users ON DELETE CASCADE | the passenger who asked |
 | question | varchar(500) NOT NULL | |
-| status | varchar(16) NOT NULL | COMPLETED, FAILED, UNAVAILABLE |
-| answer | jsonb NULL | |
+| status | varchar(16) NOT NULL | CHECK IN (COMPLETED, FAILED, UNAVAILABLE) |
+| failure_code | varchar(30) NULL | as in trip_analyses |
+| answer | jsonb NULL | `{answerable, answer, factKeysUsed}`; CHECK present iff COMPLETED |
 | provider, model, prompt_version | varchar | |
-| created_at | timestamptz | |
+| latency_ms | integer NULL | |
+| created_at | timestamptz NOT NULL | |
 
 Index: `(ride_id, created_at)`.
 
@@ -364,6 +366,6 @@ Index `(processed_at)`. Purged after 7 days, longer than the Kafka retention of 
 
 ## Migration plan
 
-Implemented: `V1__extensions.sql` → `V2__users_auth_audit.sql` (users, refresh_tokens, audit_logs) → `V3__drivers_vehicles_locations.sql` → `V4__rides_offers_fares.sql` (rides, ride_offers, ride_status_events, fare_breakdowns, ride_track_points) → `V5__payments_ratings_notifications.sql` → `V6__outbox_processed_events.sql`. Planned: `V7__ai.sql` (Phase 7).
+Implemented: `V1__extensions.sql` → `V2__users_auth_audit.sql` (users, refresh_tokens, audit_logs) → `V3__drivers_vehicles_locations.sql` → `V4__rides_offers_fares.sql` (rides, ride_offers, ride_status_events, fare_breakdowns, ride_track_points) → `V5__payments_ratings_notifications.sql` → `V6__outbox_processed_events.sql` → `V7__ai.sql` (trip_analyses, trip_questions).
 
 Seed: `db/seed/R__demo_seed.sql` (repeatable, `demo` profile only). Seed passwords are never committed: they are hashed inside PostgreSQL with pgcrypto `crypt()` from the `${demo_password}` Flyway placeholder, which comes from the `DEMO_USER_PASSWORD` environment variable.

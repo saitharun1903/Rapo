@@ -172,34 +172,37 @@ Errors common to driver actions: `404 RIDE_NOT_FOUND` (not your ride or offer), 
 
 ## Trips: AI Trip Intelligence
 
+Passenger of the ride only (drivers 403, other passengers 404), and only once the ride is `COMPLETED` (else `409 RIDE_NOT_COMPLETED`). Design: [architecture.md](architecture.md) §12, [ai.md](ai.md).
+
 | Method | Path | Description |
 |---|---|---|
-| GET | `/trips/{id}/ai-analysis` | Analysis for a completed ride the caller took part in |
-| POST | `/trips/{id}/ai-analysis/regenerate` | Re-run if `FAILED`/`UNAVAILABLE` (rate limited) → 202 |
-| POST | `/trips/{id}/ai-analysis/questions` | `{question ≤ 500 chars}` → answer, synchronous with timeout |
-| GET | `/trips/{id}/ai-analysis/questions` | Q&A history |
+| GET | `/trips/{id}/ai-analysis` | Computed observations, plus the AI insights once ready. `PENDING` right after completion (observations already present) |
+| POST | `/trips/{id}/ai-analysis/regenerate` | Re-run a `FAILED`, `UNAVAILABLE` or abandoned (`PENDING` > 15 min) analysis in the background → `202` with the `PENDING` analysis. `409 AI_ANALYSIS_NOT_REGENERABLE` otherwise; `429` after 3 per hour |
+| POST | `/trips/{id}/ai-analysis/questions` | `{question: 1–500 chars}` → answer, synchronous. `503 AI_UNAVAILABLE` when the provider is disabled, down, too slow or gave no valid answer; `429` after 10 per hour |
+| GET | `/trips/{id}/ai-analysis/questions` | The caller's questions about this trip, oldest first, including failed ones |
 
 ```json
 // GET /trips/{id}/ai-analysis
 {
   "rideId": "…", "status": "COMPLETED",              // PENDING | COMPLETED | FAILED | UNAVAILABLE
-  "failureCode": null,
-  "observations": [                                   // deterministic, computed by backend; always present
-    { "key": "surge.applied", "text": "A 1.2× demand multiplier was applied at booking time." }
+  "failureCode": null,                                // TIMEOUT | PROVIDER_ERROR | RATE_LIMITED | INVALID_RESPONSE | REFUSED | BUSY | UNAVAILABLE
+  "observations": [                                   // computed by the backend; always present
+    { "key": "surge.applied", "text": "A demand multiplier of 1.2× was locked in at booking time; it applies equally to the estimate and the final fare." }
   ],
-  "insights": {                                       // AI output, validated; null unless COMPLETED
+  "insights": {                                       // validated AI output; null unless COMPLETED
     "summary": "…", "fareExplanation": "…",
-    "observations": [ { "type": "FARE", "text": "…" } ],
+    "observations": [ { "type": "FARE", "text": "…" } ],   // FARE | ROUTE | TIME | COMPARISON | OTHER
     "recommendations": [ "…" ],
-    "comparison": "…"                                 // null when < 3 prior trips
+    "comparison": null,                               // null unless ≥ 3 earlier trips
+    "factKeysUsed": [ "fare.final.total", "distance.actualKm" ]
   },
   "provider": "local", "model": "…", "promptVersion": "trip-analysis/v1",
-  "generatedAt": "…"
+  "updatedAt": "…"
 }
 
 // POST /trips/{id}/ai-analysis/questions → 200
-{ "answerable": true, "answer": "…", "factKeysUsed": ["fare.final.total", "history.avgFare"] }
-// → 503 AI_UNAVAILABLE when provider disabled / circuit open; 429 when rate limited
+{ "id": "…", "question": "Why did I pay more than the estimate?", "status": "COMPLETED", "failureCode": null,
+  "answerable": true, "answer": "…", "factKeysUsed": ["fare.final.total", "distance.actualKm"], "askedAt": "…" }
 ```
 
 ## Notifications

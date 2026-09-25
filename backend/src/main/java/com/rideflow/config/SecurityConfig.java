@@ -84,6 +84,7 @@ public class SecurityConfig {
                                 "/api/rides/*/en-route", "/api/rides/*/arrive", "/api/rides/*/start",
                                 "/api/rides/*/complete").hasRole("DRIVER")
                         .requestMatchers("/api/rides/**").hasAnyRole("PASSENGER", "DRIVER")
+                        .requestMatchers("/api/trips/**").hasRole("PASSENGER")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter))

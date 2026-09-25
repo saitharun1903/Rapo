@@ -135,6 +135,7 @@ backend/src/main/java/com/rideflow/
 │   ├── payment/     # PaymentService, PaymentGateway port
 │   ├── rating/
 │   ├── notification/
+│   ├── ai/          # TripFactsAssembler, observations, TripInsightsService, analysis runner
 │   ├── analytics/   # admin overview / time series (read-only queries)
 │   └── audit/
 ├── repository/      # Spring Data JPA repositories + native PostGIS queries
@@ -150,7 +151,7 @@ backend/src/main/java/com/rideflow/
 │   └── consumer/    # thin listeners: decode, then delegate to a service or the realtime publisher
 ├── geospatial/      # GeoPoint value object, RoutingProvider, GeocodingProvider, PostGIS helpers
 ├── cache/           # Redis key registry, rate limiter, typed cache helpers
-├── ai/              # AIService, LocalAIService, ExternalAIService, prompts, validators, TripFactsAssembler
+├── ai/              # AIService, LlmClient (Ollama, Anthropic, disabled), ResilientLlmClient, prompts, validator
 ├── monitoring/      # custom Micrometer metrics, Sentry scrubbing
 └── utility/         # small pure helpers (clock, money rounding)
 ```
@@ -462,7 +463,7 @@ flowchart LR
 **Where Kafka is used, and where it is not**
 
 - ✅ Matching: decouples the passenger's `POST /rides` (fast `201`) from a multi-step search and offer process.
-- ✅ Payments, notifications (and AI analysis in Phase 7): side effects of completion that must not slow or fail the driver's "complete" request.
+- ✅ Payments, notifications, AI analysis: side effects of completion that must not slow or fail the driver's "complete" request.
 - ✅ Location: absorbs high-frequency writes and feeds both batch persistence and fan-out.
 - ✅ WebSocket fan-out: an instance pushes to its own sessions, so every instance must see every event.
 - ❌ Accept, start, complete, fare estimate, login, ratings: the caller needs the result immediately, so these are synchronous REST calls.
@@ -508,57 +509,87 @@ total          = max(minimumFare, surged + bookingFee), rounded per currency rul
 
 ## 12. AI Trip Intelligence
 
+Implemented in Phase 7 (`com.rideflow.ai` for providers, prompts and validation; `com.rideflow.service.ai` for facts, observations and persistence). Details, prompts and a recorded run against a real local model: [ai.md](ai.md).
+
 ### 12.1 Architecture
 
 ```mermaid
 flowchart TB
-    EV["ride.completed"] --> TAC["TripAnalysisConsumer"]
-    TAC --> TFA["TripFactsAssembler<br/>DB only: ride, fare breakdowns,<br/>timeline, track stats, rating,<br/>passenger history aggregates"]
-    TFA --> OBS["DeterministicObservations<br/>surge applied, estimate vs actual delta,<br/>detour ratio, vs personal average"]
-    OBS --> PT["PromptTemplateRegistry<br/>resources/prompts/trip-analysis/v1"]
-    PT --> SVC{"AIService"}
-    SVC -->|AI_PROVIDER=local| LOC["LocalAIService<br/>Ollama HTTP API"]
-    SVC -->|AI_PROVIDER=external| EXT["ExternalAIService<br/>hosted LLM API"]
-    SVC -->|AI_PROVIDER=disabled| UNA["throws AIUnavailableException"]
-    LOC & EXT --> VAL["AIResponseValidator<br/>JSON schema, lengths,<br/>fact-key subset, numeric grounding"]
+    EV["ride.completed"] --> TAC["trip-analysis consumer<br/>(own group, 1 record per poll)"]
+    TAC --> TFA["TripFactsAssembler<br/>DB only: ride, estimate + final fare,<br/>passenger's own recent history"]
+    TFA --> OBS["TripObservationCalculator<br/>deterministic: surge, estimate vs actual,<br/>detour, vs personal average"]
+    OBS --> PEND["trip_analyses PENDING<br/>(facts + observations stored)"]
+    PEND --> PT["PromptTemplates<br/>prompts/trip-analysis/v1"]
+    PT --> SVC{"AIService<br/>(DefaultAIService)"}
+    SVC --> RES["ResilientLlmClient<br/>bulkhead → circuit breaker → retry"]
+    RES -->|AI_PROVIDER=local| LOC["OllamaLlmClient<br/>POST /api/chat, JSON-schema format"]
+    RES -->|AI_PROVIDER=external| EXT["AnthropicLlmClient<br/>official Java SDK, structured outputs"]
+    RES -->|AI_PROVIDER=disabled| UNA["DisabledLlmClient → UNAVAILABLE"]
+    LOC & EXT --> VAL["AIResponseValidator<br/>shape, limits, fact keys,<br/>numeric grounding"]
     VAL -->|valid| OK["trip_analyses COMPLETED"]
     VAL -->|invalid after 1 corrective retry| FAIL["trip_analyses FAILED"]
     UNA --> UN["trip_analyses UNAVAILABLE"]
 ```
 
+The model call never runs inside a database transaction: the PENDING row with its facts is committed first, the model is called, and the outcome is written with one statement. Questions (`POST /api/trips/{id}/ai-analysis/questions`) use the same service synchronously, with the facts stored for the trip.
+
 ### 12.2 Contract
 
 ```java
 public interface AIService {
-    TripInsights analyzeTrip(TripFacts facts);                       // after completion
-    TripAnswer   answerQuestion(TripFacts facts, String question);   // "why was this ride more expensive?"
-    AIProviderInfo providerInfo();                                   // provider + model, persisted with results
+    AIResult<TripInsights> analyzeTrip(TripFacts facts);                     // after completion
+    AIResult<TripAnswer>   answerQuestion(TripFacts facts, String question); // "why was this ride more expensive?"
+    AIProviderInfo providerInfo();                                           // provider + model, stored with results
 }
 ```
 
+`AIResult` carries the validated value plus provider, model, tokens, latency and the number of model calls. Provider clients implement a narrower `LlmClient` (one JSON-schema-constrained completion), so adding a provider does not touch prompts or validation.
+
 ### 12.3 Grounding and guardrails
 
-- **Facts only from the database.** `TripFacts` is a flat, keyed structure (`fare.final.total`, `distance.actualMeters`, `history.avgFarePerKm`, …). The exact facts JSON sent is persisted in `trip_analyses.facts` for auditability.
-- **History comparison only with enough data.** History aggregates are included only when the passenger has ≥ 3 prior completed rides. Otherwise the prompt states that no comparison is possible.
-- **Structured output.** The model must return JSON: `summary`, `fareExplanation`, `observations[]`, `recommendations[]`, `comparison|null`, `factKeysUsed[]`.
-- **Validation.** Parse → Bean Validation (lengths, counts) → `factKeysUsed ⊆ provided keys` → every number appearing in text must match a supplied fact value (± 1 % tolerance, currency- and unit-aware). On failure, one corrective retry, then `FAILED(INVALID_RESPONSE)`.
-- **Prompt injection.** User questions are placed in a delimited data block. The system prompt forbids following instructions inside it and allows `answerable: false` for off-topic questions.
-- **Privacy.** No names, emails, phone numbers or raw coordinates go to the provider, only locality-level address labels and numeric trip facts.
-- **Deterministic observations are shown regardless of AI status.** They are computed facts, labelled as such, not AI output.
+- **Facts only from the database.** `TripFacts` is a flat, keyed structure (`fare.final.total`, `distance.actualKm`, `history.avgFarePerKm`, …) rounded to the precision a person would quote. The exact facts are stored in `trip_analyses.facts`.
+- **History comparison only with enough data.** History facts appear only when the passenger has ≥ 3 earlier completed trips (the most recent 20, same currency); otherwise the prompt says no comparison is possible and the validator rejects one.
+- **Structured output.** The answer schema is sent to the provider (Ollama `format`, Anthropic `output_config.format`); lengths and counts, which structured-output modes do not all support, are validated client-side.
+- **Validation.**
+  1. Parse the JSON.
+  2. Bean Validation (lengths, counts).
+  3. `factKeysUsed ⊆` the supplied keys.
+  4. Every number in the text must be a supplied value, within 1 % or as rounded to 0 or 1 decimal. Numbers in the computed observations count as supplied, and signs are ignored.
+
+  On failure the model gets one corrective retry with the list of problems; a second failure is `FAILED(INVALID_RESPONSE)`.
+- **What validation cannot catch.** A model can state only true numbers and still draw a wrong conclusion from them. The real run in ai.md shows a 7B model attributing a fare increase to a multiplier that applied equally to estimate and fare. Two things mitigate this: the computed observation spells out that the multiplier is locked in at booking, and the prompts carry a rule about differences. Larger models, or the external provider, are recommended where answers matter.
+- **Prompt injection.** Questions go inside `<question>` tags with `<` and `>` removed, so they cannot close the block. The system prompt treats the block as data and allows `answerable: false`. In the recorded runs codegemma declined an injection attempt every time, but codeqwen followed it (told a joke), and the validator cannot catch that. The harm is limited: the model sees only non-identifying trip facts, has no tools, and answers only the passenger who asked. See ai.md §5.
+- **Privacy.** Facts contain no names, emails, phone numbers, addresses or coordinates, only trip numbers and categories, so they can go to an external provider. Only the ride's passenger can read the analysis or ask (the facts include their own history); drivers get 403 and other passengers 404.
+- **Deterministic observations are shown regardless of AI status.** They are computed from the facts, labelled as such, and their numbers are the facts' numbers.
 
 ### 12.4 Failure handling
 
 | Failure | Mechanism | Result |
 |---|---|---|
-| Timeout | HTTP client connect/read timeouts + Resilience4j `TimeLimiter` | `FAILED(TIMEOUT)`, retryable by user |
-| 5xx / network | Resilience4j `Retry` (2 attempts, exponential backoff) | `FAILED(PROVIDER_ERROR)` |
-| 429 rate limit | Honour `Retry-After` once, then fail | `FAILED(RATE_LIMITED)` |
-| Repeated failures | Resilience4j `CircuitBreaker` (opens at 50 % over 20 calls, 60 s) | `UNAVAILABLE` without calling provider |
-| Provider disabled / no key | `AI_PROVIDER=disabled` | `UNAVAILABLE` |
-| Invalid output | `AIResponseValidator` | `FAILED(INVALID_RESPONSE)` |
-| Concurrency | Resilience4j `Bulkhead` (max 4 concurrent) | queued / rejected → `FAILED(BUSY)` |
+| Timeout | Deadline over the whole call, body included (local 120 s, external 60 s); not retried | `FAILED(TIMEOUT)` |
+| 5xx / 529 / network | Retry: 2 attempts, exponential backoff from 1 s | `FAILED(PROVIDER_ERROR)` |
+| 4xx (e.g. model not pulled, bad request) | Not retried | `FAILED(PROVIDER_ERROR)` |
+| 429 rate limit | Honour `Retry-After` once if ≤ 10 s, else fail | `FAILED(RATE_LIMITED)` |
+| Refusal | Anthropic server-side fallbacks (`fallbacks: "default"`); a refusal that still comes back | `FAILED(REFUSED)` |
+| Repeated failures | Resilience4j `CircuitBreaker`: opens at 50 % failures over the last 20 calls, for 60 s | `UNAVAILABLE`, provider not called |
+| Provider disabled | `AI_PROVIDER=disabled` (the default) | `UNAVAILABLE` |
+| Invalid output | `AIResponseValidator`, one corrective retry | `FAILED(INVALID_RESPONSE)` |
+| Concurrency | Resilience4j `Bulkhead`: 4 calls in flight per instance, no queueing | `FAILED(BUSY)` |
 
-The ride lifecycle never depends on AI. Analysis is a separate consumer group on `ride.completed`, so failures there cannot roll back or delay completion.
+Changed from the Phase 1 design:
+- **No Resilience4j `TimeLimiter`.** Each client bounds the whole call itself: Ollama with `HttpClient.sendAsync(...).get(timeout)` and cancel, Anthropic with the SDK request timeout (OkHttp call timeout). A plain JDK request timeout covers only the wait for headers; a real run went 641 s past a 300 s limit before this was fixed (ai.md §5).
+- **Retries are a small loop in `ResilientLlmClient`** rather than Resilience4j `Retry`. That makes "honour Retry-After once" and "never retry timeouts" explicit.
+- **The SDK's own retries are off**, so the circuit breaker sees every failure.
+
+FAILED and UNAVAILABLE analyses can be regenerated (`POST …/regenerate`, rate limited to 3 per hour). So can a PENDING analysis older than 15 minutes, whose instance died mid-run.
+
+The ride lifecycle never depends on AI. Analysis is a separate consumer group on `ride.completed`, so failures there cannot roll back or delay completion or payment (`AITripInsightsIT` checks this with a failing provider).
+
+Metrics:
+- `rideflow_ai_requests_total{operation, provider, outcome}`
+- `rideflow_ai_latency_seconds{operation, provider}`
+- `rideflow_ai_calls_active`
+- `rideflow_ai_circuit_open`
 
 ---
 
@@ -642,7 +673,7 @@ Logs, metrics and errors are three separate signals:
 
 - HTTP: `http_server_requests_seconds` (count, latency histogram, status → error rate), auto-instrumented.
 - JVM / CPU / GC / threads, Hikari pool (`hikaricp_connections_*`), Lettuce Redis command latency, Kafka client and consumer-lag metrics, all through Micrometer binders.
-- Custom (`monitoring/RideFlowMetrics`): `rideflow_rides_total{event}`, `rideflow_matching_duration_seconds` (requested → assigned), `rideflow_offers_total{outcome}`, `rideflow_ws_sessions_active{role}`, `rideflow_location_updates_total{result}`, `rideflow_outbox_pending`, `rideflow_outbox_published_total`, `rideflow_outbox_failures_total`, `rideflow_kafka_dead_letters_total{topic}`, `rideflow_location_publish_failures_total`, `rideflow_ai_requests_total{provider,outcome}`, `rideflow_ai_latency_seconds`, `rideflow_rate_limit_rejections_total{scope}`.
+- Custom (`monitoring/RideFlowMetrics`): `rideflow_rides_total{event}`, `rideflow_matching_duration_seconds` (requested → assigned), `rideflow_offers_total{outcome}`, `rideflow_ws_sessions_active{role}`, `rideflow_location_updates_total{result}`, `rideflow_outbox_pending`, `rideflow_outbox_published_total`, `rideflow_outbox_failures_total`, `rideflow_kafka_dead_letters_total{topic}`, `rideflow_location_publish_failures_total`, `rideflow_ai_requests_total{operation,provider,outcome}`, `rideflow_ai_latency_seconds`, `rideflow_ai_circuit_open`, `rideflow_rate_limit_rejections_total{scope}`.
 
 **Grafana (provisioned from `infrastructure/grafana/`):**
 

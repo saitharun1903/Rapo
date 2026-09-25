@@ -1,0 +1,9 @@
+Trip facts (JSON):
+{{facts}}
+
+Observations computed by the app:
+{{observations}}
+
+{{history_note}}
+
+Write the trip analysis as JSON with the fields summary, fareExplanation, observations (each with type FARE, ROUTE, TIME, COMPARISON or OTHER, and text), recommendations, comparison and factKeysUsed.
