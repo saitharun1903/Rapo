@@ -18,7 +18,7 @@ function healthTone(status: string): Tone {
 }
 
 /** Its own message, so the issue is recognisable in Sentry and can be resolved without a second look. */
-const BROWSER_TEST_ERROR = "Deliberate test error from the RideFlow admin console (browser); safe to resolve";
+const BROWSER_TEST_ERROR = "Deliberate test error from the Raido admin console (browser); safe to resolve";
 
 function flag(value: boolean | null | undefined, whenTrue: string, whenFalse: string): string {
   return value === null || value === undefined ? "Not reported" : value ? whenTrue : whenFalse;

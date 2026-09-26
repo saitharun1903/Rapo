@@ -17,7 +17,7 @@ export function RideOutcome({ ride, onDone }: { ride: RideResponse; onDone: () =
         {completed
           ? <CheckCircle2 className="size-10 text-success" aria-hidden />
           : <XCircle className="size-10 text-fg-muted" aria-hidden />}
-        <h1 className="text-xl font-bold" aria-live="polite">{passengerHeadline(ride.status)}</h1>
+        <h1 className="text-xl font-semibold" aria-live="polite">{passengerHeadline(ride.status)}</h1>
         {completed && ride.actual && (
           <>
             <p className="text-3xl font-extrabold tabular-nums">{formatMoney(ride.actual.fare)}</p>

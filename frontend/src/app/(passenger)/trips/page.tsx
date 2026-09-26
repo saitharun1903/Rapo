@@ -49,7 +49,7 @@ export default function TripsPage() {
           <ul className="flex flex-col gap-2">
             {trips.data.content.map((trip) => (
               <li key={trip.id}>
-                <Link href={`/trips/${trip.id}`} className="flex items-center gap-4 rounded-2xl border border-line bg-surface p-4 hover:bg-surface-2">
+                <Link href={`/trips/${trip.id}`} className="flex items-center gap-4 rounded-card border border-line bg-surface p-4 hover:bg-surface-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusBadge status={trip.status} />
@@ -59,7 +59,7 @@ export default function TripsPage() {
                     <p className="truncate text-sm text-fg-muted">→ {trip.dropoffAddress}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold tabular-nums text-fg">{formatMoney(trip.fare)}</p>
+                    <p className="font-semibold tabular-nums text-fg">{formatMoney(trip.fare)}</p>
                     <p className="text-xs text-fg-muted">{trip.fareIsFinal ? "Final" : "Estimate"}</p>
                   </div>
                   <ChevronRight className="size-5 text-fg-muted" aria-hidden />

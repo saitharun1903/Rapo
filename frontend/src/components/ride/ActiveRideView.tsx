@@ -74,12 +74,12 @@ export function ActiveRideView({ ride }: { ride: RideResponse }) {
     <div className="grid h-[calc(100dvh-4rem)] grid-rows-[1fr_auto] lg:grid-cols-[26rem_1fr] lg:grid-rows-1">
       <section aria-label="Your ride" className="order-2 overflow-y-auto border-line bg-surface p-4 lg:order-1 lg:border-r">
         <div className="flex items-center justify-between gap-2">
-          <h1 className="text-xl font-bold tracking-tight" aria-live="polite">{passengerHeadline(ride.status)}</h1>
+          <h1 className="text-xl font-semibold tracking-[-0.02em]" aria-live="polite">{passengerHeadline(ride.status)}</h1>
           <StatusBadge status={ride.status} />
         </div>
 
         {searching && (
-          <div className="mt-4 flex items-center gap-3 rounded-2xl bg-brand-soft p-4 text-sm text-brand">
+          <div className="mt-4 flex items-center gap-3 rounded-card bg-brand-soft p-4 text-sm text-brand-strong">
             <span className="relative flex size-3"><span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-60" /><span className="relative inline-flex size-3 rounded-full bg-brand" /></span>
             {ride.matching.round > 0
               ? `Asking drivers within ${formatDistance(ride.matching.radiusMeters)} (round ${ride.matching.round})`
@@ -103,13 +103,13 @@ export function ActiveRideView({ ride }: { ride: RideResponse }) {
 
         {live.eta && (
           <p className="mt-4 flex items-center gap-2 text-sm font-semibold text-fg">
-            <Clock className="size-4 text-brand" aria-hidden />
+            <Clock className="size-4 text-brand-strong" aria-hidden />
             {live.eta.target === "PICKUP" ? "Arrives in" : "At destination in"} {formatDuration(live.eta.seconds)}
             <span className="font-normal text-fg-muted">· {formatDistance(live.eta.distanceMeters)}</span>
           </p>
         )}
         {live.signalLost && (
-          <p role="status" className="mt-3 flex items-center gap-2 rounded-xl bg-warning-soft px-3 py-2 text-sm text-warning">
+          <p role="status" className="mt-3 flex items-center gap-2 rounded-control bg-warning-soft px-3 py-2 text-sm text-warning">
             <SignalLow className="size-4" aria-hidden /> Location signal lost. Showing the last known position.
           </p>
         )}
@@ -128,7 +128,7 @@ export function ActiveRideView({ ride }: { ride: RideResponse }) {
               )}
             </div>
             {ride.driver.vehicle && (
-              <span className="rounded-lg border-2 border-fg px-2 py-1 font-mono text-sm font-bold tracking-wider">{ride.driver.vehicle.plateNumber}</span>
+              <span className="rounded-control border-2 border-fg px-2 py-1 font-mono text-sm font-semibold tracking-wider">{ride.driver.vehicle.plateNumber}</span>
             )}
           </Card>
         )}

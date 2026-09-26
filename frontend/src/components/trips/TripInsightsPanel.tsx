@@ -73,13 +73,13 @@ export function TripInsightsPanel({ rideId }: { rideId: string }) {
               {data.observations.map((observation) => <li key={observation.key}>{observation.text}</li>)}
             </ul>
           )}
-        <p className="mt-3 text-xs text-fg-muted">Calculated by RideFlow from the recorded trip, not by AI.</p>
+        <p className="mt-3 text-xs text-fg-muted">Calculated by Raido from the recorded trip, not by AI.</p>
       </Card>
 
       <Card aria-busy={data.status === "PENDING"}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-base font-semibold">
-            <Sparkles className="size-4 text-brand" aria-hidden /> AI summary
+            <Sparkles className="size-4 text-brand-strong" aria-hidden /> AI summary
           </h2>
           <Badge tone={data.status === "COMPLETED" ? "brand" : data.status === "PENDING" ? "warning" : "neutral"}>
             {data.status === "PENDING" ? "Writing…" : humanize(data.status)}
@@ -94,7 +94,7 @@ export function TripInsightsPanel({ rideId }: { rideId: string }) {
           <div className="flex flex-col gap-3 text-sm">
             <p className="text-fg">{insights.summary}</p>
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-muted">Your fare</h3>
+              <h3 className="eyebrow">Your fare</h3>
               <p className="mt-1 text-fg">{insights.fareExplanation}</p>
             </div>
             {insights.observations.length > 0 && (
@@ -109,13 +109,13 @@ export function TripInsightsPanel({ rideId }: { rideId: string }) {
             )}
             {insights.comparison && (
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-muted">Compared with your usual trips</h3>
+                <h3 className="eyebrow">Compared with your usual trips</h3>
                 <p className="mt-1 text-fg">{insights.comparison}</p>
               </div>
             )}
             {insights.recommendations.length > 0 && (
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-muted">Tips</h3>
+                <h3 className="eyebrow">Tips</h3>
                 <ul className="mt-1 list-disc pl-5 text-fg">{insights.recommendations.map((tip) => <li key={tip}>{tip}</li>)}</ul>
               </div>
             )}

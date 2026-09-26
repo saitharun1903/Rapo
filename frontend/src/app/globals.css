@@ -4,75 +4,122 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * RideFlow design tokens. The identity is violet (routes, primary actions) with coral for destinations:
- * deliberately unlike the black, pink, green or yellow of existing ride-hailing brands.
+ * Raido design tokens (docs/design-system.md).
+ *
+ * One warm-neutral grey family, ink for primary actions and one signal colour for what is live: the route, the
+ * moving car, the brand dot. Status colours are for status only, and always come with an icon or words.
  */
 :root {
-  --bg: #f6f6fa;
+  --bg: #f4f4f1;
   --surface: #ffffff;
-  --surface-2: #f0f0f7;
-  --line: #e2e2ee;
-  --fg: #15151f;
-  --fg-muted: #5c5c72;
-  --brand: #5b4bdb;
-  --brand-strong: #4636c2;
-  --brand-soft: #ecebfd;
-  --brand-fg: #ffffff;
-  --accent: #f0603f;
-  --accent-soft: #fde9e3;
-  --success: #17875c;
-  --success-soft: #e2f5ec;
-  --warning: #a86d00;
-  --warning-soft: #fdf1d8;
-  --danger: #c93a3a;
-  --danger-soft: #fbe7e7;
-  --focus: #5b4bdb;
+  --surface-2: #ecece8;
+  --line: #deded8;
+  --line-strong: #c9c9c1;
+  --fg: #121311;
+  --fg-muted: #5f6059;
+  --ink: #121311;
+  --ink-fg: #fafaf7;
+  --brand: #e5561f;
+  --brand-strong: #b13f11;
+  --brand-soft: #fcebe3;
+  --brand-fg: #121311;
+  --success: #12774a;
+  --success-soft: #e0f2e8;
+  --warning: #8f5f00;
+  --warning-soft: #faefd6;
+  --danger: #c2242d;
+  --danger-soft: #fbe4e4;
+  --focus: #e5561f;
+  --map-water: #cfdbe1;
+  --shadow-color: 24 25 22;
   color-scheme: light;
 }
 
 .dark {
-  --bg: #0d0d15;
-  --surface: #15151f;
-  --surface-2: #1d1d2b;
-  --line: #2a2a3c;
-  --fg: #ececf5;
-  --fg-muted: #9e9eb5;
-  --brand: #8f83f3;
-  --brand-strong: #a99fff;
-  --brand-soft: #262250;
-  --brand-fg: #0d0d15;
-  --accent: #ff8466;
-  --accent-soft: #3a2019;
-  --success: #45c08d;
-  --success-soft: #133024;
-  --warning: #e3a936;
-  --warning-soft: #33280f;
-  --danger: #f07171;
-  --danger-soft: #3a1a1a;
-  --focus: #a99fff;
+  --bg: #0f100e;
+  --surface: #171815;
+  --surface-2: #20211e;
+  --line: #2c2d29;
+  --line-strong: #3b3c37;
+  --fg: #ecece6;
+  --fg-muted: #a1a298;
+  --ink: #ecece6;
+  --ink-fg: #121311;
+  --brand: #ff7440;
+  --brand-strong: #ff9368;
+  --brand-soft: #3a1c0e;
+  --brand-fg: #121311;
+  --success: #45c08a;
+  --success-soft: #11291c;
+  --warning: #e3a63b;
+  --warning-soft: #2f240d;
+  --danger: #f2686c;
+  --danger-soft: #361717;
+  --focus: #ff7440;
+  --map-water: #1b2328;
+  --shadow-color: 0 0 0;
   color-scheme: dark;
 }
 
 @theme inline {
-  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
+
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
+  --color-ink: var(--ink);
+  --color-ink-fg: var(--ink-fg);
   --color-brand: var(--brand);
   --color-brand-strong: var(--brand-strong);
   --color-brand-soft: var(--brand-soft);
   --color-brand-fg: var(--brand-fg);
-  --color-accent: var(--accent);
-  --color-accent-soft: var(--accent-soft);
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
+
+  /* Tight on controls, softer on containers, softest on sheets that float over the map. */
+  --radius-control: 10px;
+  --radius-card: 14px;
+  --radius-sheet: 20px;
+
+  --shadow-float: 0 1px 2px rgb(var(--shadow-color) / 0.08), 0 10px 30px -8px rgb(var(--shadow-color) / 0.22);
+  --shadow-raise: 0 1px 2px rgb(var(--shadow-color) / 0.06), 0 4px 12px -4px rgb(var(--shadow-color) / 0.14);
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --animate-rise: rise 280ms var(--ease-out-soft) both;
+  --animate-fade: fade 200ms ease-out both;
+  --animate-search: search 2.4s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes search {
+    0% { transform: scale(0.35); opacity: 0.55; }
+    100% { transform: scale(1); opacity: 0; }
+  }
+}
+
+/* Layers, lowest first. The native <dialog> top layer sits above all of them. */
+:root {
+  --z-map-controls: 10;
+  --z-float: 20;
+  --z-header: 40;
+  --z-sheet: 50;
+  --z-toast: 60;
 }
 
 @layer base {
@@ -81,10 +128,30 @@
     height: 100%;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     background: var(--bg);
     color: var(--fg);
     -webkit-font-smoothing: antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* One stroke weight for every icon. */
+  svg.lucide {
+    stroke-width: 1.75;
   }
 
   :focus-visible {
@@ -93,17 +160,55 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
     *,
     *::before,
     *::after {
       animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
     }
   }
 }
 
-/* MapLibre's attribution control, restyled to the theme. */
+@utility num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+@utility eyebrow {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--fg-muted);
+}
+
+/* MapLibre's controls and attribution, restyled to the theme. */
 .maplibregl-ctrl-attrib {
   background: color-mix(in srgb, var(--surface) 85%, transparent) !important;
   color: var(--fg-muted);
+  font-size: 10px;
+}
+
+.maplibregl-ctrl-attrib a {
+  color: inherit !important;
+}
+
+.maplibregl-ctrl-group {
+  background: var(--surface) !important;
+  border-radius: var(--radius-control) !important;
+  box-shadow: var(--shadow-raise) !important;
+  overflow: hidden;
+}
+
+.maplibregl-ctrl-group button + button {
+  border-top-color: var(--line) !important;
+}
+
+.dark .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: invert(1);
 }

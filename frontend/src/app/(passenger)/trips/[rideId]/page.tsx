@@ -49,7 +49,7 @@ export default function TripDetailPage() {
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2"><StatusBadge status={trip.status} /><span className="text-sm text-fg-muted">{formatDateTime(trip.timestamps.requestedAt)}</span></div>
-          <h1 className="mt-2 text-xl font-bold tracking-tight">{trip.pickup.address}</h1>
+          <h1 className="mt-2 text-xl font-semibold tracking-[-0.02em]">{trip.pickup.address}</h1>
           <p className="text-fg-muted">→ {trip.dropoff.address}</p>
         </div>
         <div className="text-right">

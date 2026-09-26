@@ -64,10 +64,10 @@ export function PlaceField({ label, tone, value, onChange, near, picking, onPick
   };
 
   return (
-    <div className={clsx("rounded-2xl border p-3", picking ? "border-brand ring-2 ring-brand/20" : "border-line")}>
+    <div className={clsx("rounded-card border p-3", picking ? "border-brand ring-2 ring-brand/20" : "border-line")}>
       <div className="flex items-center gap-2">
-        <MapPin className={clsx("size-4 shrink-0", tone === "brand" ? "text-brand" : "text-accent")} aria-hidden />
-        <label htmlFor={inputId} className="text-xs font-semibold uppercase tracking-wide text-fg-muted">{label}</label>
+        <MapPin className={clsx("size-4 shrink-0", tone === "brand" ? "text-brand-strong" : "text-fg")} aria-hidden />
+        <label htmlFor={inputId} className="eyebrow">{label}</label>
       </div>
       {value && <p className="mt-1 line-clamp-2 text-sm font-medium text-fg">{value.address}</p>}
       <form onSubmit={search} role="search" className="mt-2 flex gap-2">
@@ -93,7 +93,7 @@ export function PlaceField({ label, tone, value, onChange, near, picking, onPick
           {results.length === 0 && <li className="px-2 py-2 text-sm text-fg-muted">No places found.</li>}
           {results.map((place) => (
             <li key={`${place.point.lat},${place.point.lng}`}>
-              <button type="button" onClick={() => choose(place)} className="w-full rounded-xl px-2 py-2 text-left hover:bg-surface-2">
+              <button type="button" onClick={() => choose(place)} className="w-full rounded-control px-2 py-2 text-left hover:bg-surface-2">
                 <span className="block text-sm font-semibold text-fg">{place.name}</span>
                 <span className="block truncate text-xs text-fg-muted">{place.address}</span>
               </button>

@@ -84,7 +84,7 @@ function ReplaceVehicleForm({ driver, onDone }: { driver: DriverResponse; onDone
   return (
     <Card>
       <CardTitle>Replace vehicle</CardTitle>
-      {!offline && <p className="mb-3 rounded-xl bg-warning-soft px-3 py-2 text-sm text-warning">Go offline before changing your vehicle.</p>}
+      {!offline && <p className="mb-3 rounded-control bg-warning-soft px-3 py-2 text-sm text-warning">Go offline before changing your vehicle.</p>}
       <form onSubmit={handleSubmit(({ vehicle }) => replace.mutate(vehicle))} noValidate className="flex flex-col gap-4">
         <fieldset disabled={!offline} className="contents">
           <VehicleFields field={(name) => register(`vehicle.${name}`)} errors={errors.vehicle} />
@@ -114,7 +114,7 @@ export default function OnboardingPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
-      <PageHeader title={driver ? "Profile and vehicle" : "Become a RideFlow driver"}
+      <PageHeader title={driver ? "Profile and vehicle" : "Become a Raido driver"}
         description={driver ? undefined : "Tell us about your licence and vehicle. An admin verifies them before your first ride."} />
       {!driver && <OnboardingForm onDone={(created) => { setJustSubmitted(true); store(created); }} />}
       {driver && (

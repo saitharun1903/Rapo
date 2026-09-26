@@ -16,9 +16,9 @@ export default function GlobalError({ error, retry }: { error: Error & { digest?
     <html lang="en">
       <body className="font-sans">
         <main role="alert" className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
-          <title>Something went wrong · RideFlow</title>
-          <h1 className="text-2xl font-bold">Something went wrong</h1>
-          <p className="max-w-md text-fg-muted">RideFlow could not load. Trying again usually helps.</p>
+          <title>Something went wrong · Raido</title>
+          <h1 className="text-2xl font-semibold">Something went wrong</h1>
+          <p className="max-w-md text-fg-muted">Raido could not load. Trying again usually helps.</p>
           <Button onClick={retry}>Try again</Button>
         </main>
       </body>

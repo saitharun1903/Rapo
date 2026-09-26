@@ -50,12 +50,12 @@ export function TripQuestions({ rideId }: { rideId: string }) {
 
   return (
     <Card>
-      <CardTitle><span className="flex items-center gap-2"><MessageCircleQuestion className="size-4 text-brand" aria-hidden /> Ask about this trip</span></CardTitle>
+      <CardTitle><span className="flex items-center gap-2"><MessageCircleQuestion className="size-4 text-brand-strong" aria-hidden /> Ask about this trip</span></CardTitle>
       {history.isPending && <Skeleton className="h-16" />}
       {history.data && history.data.length > 0 && (
         <ol className="mb-4 flex flex-col gap-3">
           {history.data.map((item) => (
-            <li key={item.id} className="rounded-xl bg-surface-2 p-3">
+            <li key={item.id} className="rounded-control bg-surface-2 p-3">
               <p className="text-sm font-semibold text-fg">{item.question}</p>
               <Answer item={item} />
               <p className="mt-1 text-xs text-fg-muted">{formatTime(item.askedAt)}</p>

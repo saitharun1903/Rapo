@@ -133,7 +133,7 @@ export function BookingView() {
   return (
     <div className="grid h-[calc(100dvh-4rem)] grid-rows-[1fr_minmax(0,1.2fr)] lg:grid-cols-[26rem_1fr] lg:grid-rows-1">
       <section aria-label="Book a ride" className="order-2 overflow-y-auto border-line bg-surface p-4 lg:order-1 lg:border-r">
-        <h1 className="mb-4 text-xl font-bold tracking-tight">Where to?</h1>
+        <h1 className="mb-4 text-xl font-semibold tracking-[-0.02em]">Where to?</h1>
         <div className="flex flex-col gap-3">
           <PlaceField label="Pickup" tone="brand" value={pickup} onChange={(place) => set("pickup", place)} near={near}
             picking={picking === "pickup"} onPickOnMap={() => setPicking(picking === "pickup" ? null : "pickup")}
@@ -152,7 +152,7 @@ export function BookingView() {
             {estimate.isPending && <div className="flex flex-col gap-2"><Skeleton className="h-16" /><Skeleton className="h-16" /></div>}
             {estimate.isError && (
               isApiError(estimate.error, "OUTSIDE_SERVICE_AREA", "PICKUP_EQUALS_DROPOFF")
-                ? <p role="alert" className="rounded-xl bg-warning-soft p-3 text-sm text-warning">{errorMessage(estimate.error)}</p>
+                ? <p role="alert" className="rounded-control bg-warning-soft p-3 text-sm text-warning">{errorMessage(estimate.error)}</p>
                 : <ErrorState error={estimate.error} onRetry={() => void estimate.refetch()} title="Could not price this trip" />
             )}
             {estimate.data && (
@@ -161,24 +161,24 @@ export function BookingView() {
                   {formatDistance(estimate.data.distanceMeters)} · about {formatDuration(estimate.data.durationSeconds)}
                   {estimate.data.estimateSource === "APPROXIMATE" && <Badge tone="warning">Approximate route</Badge>}
                   {Number(estimate.data.surgeMultiplier) > 1 && (
-                    <Badge tone="accent"><TrendingUp className="size-3" aria-hidden /> High demand {estimate.data.surgeMultiplier}×</Badge>
+                    <Badge tone="warning"><TrendingUp className="size-3" aria-hidden /> High demand {estimate.data.surgeMultiplier}×</Badge>
                   )}
                 </p>
                 <div role="radiogroup" aria-label="Vehicle category" className="flex flex-col gap-2">
                   {quotes.map((quote) => (
                     <button key={quote.quoteId} type="button" role="radio" aria-checked={selected?.vehicleCategory === quote.vehicleCategory}
                       onClick={() => setCategory(quote.vehicleCategory)}
-                      className={clsx("flex items-center justify-between rounded-2xl border px-4 py-3 text-left transition-colors",
+                      className={clsx("flex items-center justify-between rounded-card border px-4 py-3 text-left transition-colors",
                         selected?.vehicleCategory === quote.vehicleCategory ? "border-brand bg-brand-soft" : "border-line hover:bg-surface-2")}>
                       <span className="font-semibold text-fg">{humanize(quote.vehicleCategory)}</span>
-                      <span className="text-base font-bold tabular-nums text-fg">{formatMoney(quote.estimatedFare)}</span>
+                      <span className="text-base font-semibold tabular-nums text-fg">{formatMoney(quote.estimatedFare)}</span>
                     </button>
                   ))}
                 </div>
                 <div role="radiogroup" aria-label="Payment method" className="mt-4 grid grid-cols-2 gap-2">
                   {PAYMENT_METHODS.map(({ value, label, note, icon: Icon }) => (
                     <button key={value} type="button" role="radio" aria-checked={paymentMethod === value} onClick={() => setPaymentMethod(value)}
-                      className={clsx("flex items-center gap-2 rounded-xl border px-3 py-2 text-left",
+                      className={clsx("flex items-center gap-2 rounded-control border px-3 py-2 text-left",
                         paymentMethod === value ? "border-brand bg-brand-soft" : "border-line hover:bg-surface-2")}>
                       <Icon className="size-4 text-fg-muted" aria-hidden />
                       <span><span className="block text-sm font-semibold text-fg">{label}</span><span className="block text-xs text-fg-muted">{note}</span></span>

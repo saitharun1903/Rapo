@@ -60,11 +60,11 @@ export function DriverTripPanel({ ride }: { ride: RideResponse }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-xl font-bold tracking-tight" aria-live="polite">{humanize(ride.status)}</h1>
+        <h1 className="text-xl font-semibold tracking-[-0.02em]" aria-live="polite">{humanize(ride.status)}</h1>
         <StatusBadge status={ride.status} />
       </div>
       <Card className="flex items-center gap-3 p-4">
-        <div className="flex size-11 items-center justify-center rounded-full bg-brand-soft text-brand"><UserRound className="size-5" aria-hidden /></div>
+        <div className="flex size-11 items-center justify-center rounded-full bg-brand-soft text-brand-strong"><UserRound className="size-5" aria-hidden /></div>
         <div className="min-w-0 flex-1">
           <p className="font-semibold">{ride.passenger?.fullName ?? "Passenger"}</p>
           <p className="text-sm text-fg-muted">{humanize(ride.paymentMethod)} · est. {formatMoney(ride.estimate.fare)}</p>

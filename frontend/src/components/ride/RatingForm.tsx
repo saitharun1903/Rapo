@@ -34,7 +34,7 @@ export function RatingForm({ rideId, subject }: { rideId: string; subject: "driv
         <div className="flex gap-1">
           {SCORES.map((value) => (
             <button key={value} type="button" onClick={() => setScore(value)} aria-pressed={score === value}
-              aria-label={`${value} star${value === 1 ? "" : "s"}`} className="rounded-lg p-1 hover:bg-surface-2">
+              aria-label={`${value} star${value === 1 ? "" : "s"}`} className="rounded-control p-1 hover:bg-surface-2">
               <Star className={clsx("size-7", score !== null && value <= score ? "fill-warning text-warning" : "text-fg-muted")} aria-hidden />
             </button>
           ))}

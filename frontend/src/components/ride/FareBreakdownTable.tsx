@@ -24,7 +24,7 @@ export function FareBreakdownTable({ estimate, final }: { estimate: FareBreakdow
     <table className="w-full text-sm">
       <caption className="sr-only">Fare breakdown{final ? ", estimate and final" : ""}</caption>
       <thead>
-        <tr className="text-left text-xs uppercase tracking-wide text-fg-muted">
+        <tr className="text-left eyebrow">
           <th scope="col" className="py-2 font-medium">Item</th>
           <th scope="col" className="py-2 text-right font-medium">Estimate</th>
           {final && <th scope="col" className="py-2 text-right font-medium">Final</th>}

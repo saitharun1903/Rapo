@@ -49,16 +49,16 @@ function RegisterFormView() {
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Create your account</h1>
+        <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.03em]">Create your account</h1>
         <p className="mt-1 text-sm text-fg-muted">It takes a minute.</p>
       </div>
-      {formError && <p role="alert" className="rounded-xl bg-danger-soft px-3 py-2 text-sm font-medium text-danger">{formError}</p>}
+      {formError && <p role="alert" className="rounded-control bg-danger-soft px-3 py-2 text-sm font-medium text-danger">{formError}</p>}
       <div role="radiogroup" aria-label="Account type" className="grid grid-cols-2 gap-2">
         {ACCOUNT_TYPES.map(({ value, label, icon: Icon }) => (
           <button key={value} type="button" role="radio" aria-checked={accountType === value}
             onClick={() => setValue("accountType", value)}
-            className={clsx("flex flex-col items-center gap-1 rounded-xl border px-3 py-3 text-sm font-semibold",
-              accountType === value ? "border-brand bg-brand-soft text-brand" : "border-line text-fg-muted hover:bg-surface-2")}>
+            className={clsx("flex flex-col items-center gap-1 rounded-control border px-3 py-3 text-sm font-semibold",
+              accountType === value ? "border-brand bg-brand-soft text-brand-strong" : "border-line text-fg-muted hover:bg-surface-2")}>
             <Icon className="size-5" aria-hidden />
             {label}
           </button>
@@ -87,7 +87,7 @@ function RegisterFormView() {
       </Field>
       <Button type="submit" size="lg" loading={isSubmitting}>Create account</Button>
       <p className="text-center text-sm text-fg-muted">
-        Already have an account? <Link href="/login" className="font-semibold text-brand">Sign in</Link>
+        Already have an account? <Link href="/login" className="font-semibold text-brand-strong">Sign in</Link>
       </p>
     </form>
   );

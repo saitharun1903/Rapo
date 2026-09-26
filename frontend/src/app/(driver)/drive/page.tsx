@@ -52,7 +52,7 @@ function TripSummary({ ride, onDone }: { ride: RideResponse; onDone: () => void 
     <div className="flex flex-col gap-4">
       <Card className="flex flex-col items-center gap-2 text-center">
         <CheckCircle2 className="size-10 text-success" aria-hidden />
-        <h1 className="text-xl font-bold">{ride.status === "COMPLETED" ? "Trip complete" : "Ride ended"}</h1>
+        <h1 className="text-xl font-semibold">{ride.status === "COMPLETED" ? "Trip complete" : "Ride ended"}</h1>
         {ride.actual && (
           <>
             <p className="text-3xl font-extrabold tabular-nums">{formatMoney(ride.actual.fare)}</p>
@@ -191,7 +191,7 @@ export default function DrivePage() {
         ) : (
           <>
             <div className="flex items-center justify-between">
-              <h1 className="text-xl font-bold tracking-tight">{online ? "You are online" : "You are offline"}</h1>
+              <h1 className="text-xl font-semibold tracking-[-0.02em]">{online ? "You are online" : "You are offline"}</h1>
               <Badge tone={online ? "success" : "neutral"}>{online ? "Online" : "Offline"}</Badge>
             </div>
             {online ? (
@@ -207,7 +207,7 @@ export default function DrivePage() {
             {online && (
               <section aria-label="Ride offers" aria-live="polite" className="flex flex-col gap-3">
                 {openOffers.length === 0
-                  ? <p className="rounded-2xl bg-surface-2 p-4 text-center text-sm text-fg-muted">Waiting for ride requests nearby…</p>
+                  ? <p className="rounded-card bg-surface-2 p-4 text-center text-sm text-fg-muted">Waiting for ride requests nearby…</p>
                   : openOffers.map((offer) => (
                     <OfferCard key={offer.offerId} offer={offer} now={now}
                       onAccept={() => accept.mutate(offer.rideId)} onDecline={() => decline.mutate(offer.rideId)}
@@ -220,7 +220,7 @@ export default function DrivePage() {
         )}
 
         <Card className="mt-auto p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-fg-muted">Your position</p>
+          <p className="eyebrow">Your position</p>
           <p className="mt-1 text-sm text-fg">
             {location.mode === "manual" ? "Placed on the map (testing without GPS)" : here ? "From this device's GPS" : "Locating…"}
           </p>

@@ -52,8 +52,8 @@ function useTokenColors(): { brand: string } {
 
 function Pin({ tone, label }: { tone: "brand" | "accent"; label: string }) {
   return (
-    <div aria-label={label} className={clsx("flex size-8 items-center justify-center rounded-full border-4 border-white shadow-lg",
-      tone === "brand" ? "bg-brand" : "bg-accent")}>
+    <div aria-label={label} className={clsx("flex size-8 items-center justify-center rounded-full border-4 border-white shadow-float",
+      tone === "brand" ? "bg-brand" : "bg-ink")}>
       <div className="size-2 rounded-full bg-white" />
     </div>
   );
@@ -126,7 +126,7 @@ export default function MapView({ label, center = config.mapCenter, pickup, drop
         {dropoff && <Marker latitude={dropoff.lat} longitude={dropoff.lng}><Pin tone="accent" label="Destination" /></Marker>}
         {driver && (
           <Marker latitude={driver.point.lat} longitude={driver.point.lng}>
-            <div aria-label="Driver" className="flex size-10 items-center justify-center rounded-full border-4 border-white bg-fg text-bg shadow-xl"
+            <div aria-label="Driver" className="flex size-10 items-center justify-center rounded-full border-4 border-white bg-fg text-bg shadow-float"
               style={driver.headingDeg === null || driver.headingDeg === undefined ? undefined : { transform: `rotate(${driver.headingDeg}deg)` }}>
               <Car className="size-5" aria-hidden />
             </div>

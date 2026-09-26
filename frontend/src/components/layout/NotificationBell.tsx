@@ -78,19 +78,19 @@ export function NotificationBell({ role }: { role: Role }) {
     <div ref={containerRef} className="relative">
       <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-haspopup="true"
         aria-label={count > 0 ? `Notifications, ${count} unread` : "Notifications"}
-        className="relative rounded-xl p-2 text-fg-muted hover:bg-surface-2 hover:text-fg">
+        className="relative rounded-control p-2 text-fg-muted hover:bg-surface-2 hover:text-fg">
         <Bell className="size-5" aria-hidden />
         {count > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex size-5 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-white">
+          <span className="absolute -right-0.5 -top-0.5 flex size-5 items-center justify-center rounded-full bg-brand text-[10px] font-semibold text-brand-fg">
             {count > BADGE_MAX ? `${BADGE_MAX}+` : count}
           </span>
         )}
       </button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-line bg-surface shadow-xl">
+        <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-card border border-line bg-surface shadow-float">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <span className="text-sm font-semibold">Notifications</span>
-            <button type="button" className="text-xs font-medium text-brand disabled:opacity-50"
+            <button type="button" className="text-xs font-medium text-brand-strong disabled:opacity-50"
               disabled={count === 0 || markAllRead.isPending} onClick={() => markAllRead.mutate()}>
               Mark all read
             </button>
@@ -108,12 +108,12 @@ export function NotificationBell({ role }: { role: Role }) {
                 <div className="mt-1 flex items-center gap-3 text-xs text-fg-muted">
                   <span>{formatDateTime(item.createdAt)}</span>
                   {item.rideId && role === "PASSENGER" && (
-                    <Link href={`/trips/${item.rideId}`} className="font-medium text-brand" onClick={() => setOpen(false)}>
+                    <Link href={`/trips/${item.rideId}`} className="font-medium text-brand-strong" onClick={() => setOpen(false)}>
                       View trip
                     </Link>
                   )}
                   {!item.read && (
-                    <button type="button" className="font-medium text-brand" onClick={() => markRead.mutate(item.id)}>
+                    <button type="button" className="font-medium text-brand-strong" onClick={() => markRead.mutate(item.id)}>
                       Mark read
                     </button>
                   )}

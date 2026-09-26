@@ -34,10 +34,10 @@ function LoginForm() {
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
+        <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.03em]">Welcome back</h1>
         <p className="mt-1 text-sm text-fg-muted">Sign in to book or drive.</p>
       </div>
-      {formError && <p role="alert" className="rounded-xl bg-danger-soft px-3 py-2 text-sm font-medium text-danger">{formError}</p>}
+      {formError && <p role="alert" className="rounded-control bg-danger-soft px-3 py-2 text-sm font-medium text-danger">{formError}</p>}
       <Field label="Email" error={errors.email?.message}>
         {({ id, describedBy, invalid }) => (
           <Input id={id} type="email" autoComplete="email" aria-describedby={describedBy} aria-invalid={invalid} {...register("email")} />
@@ -51,7 +51,7 @@ function LoginForm() {
       </Field>
       <Button type="submit" size="lg" loading={isSubmitting}>Sign in</Button>
       <p className="text-center text-sm text-fg-muted">
-        New to RideFlow? <Link href="/register" className="font-semibold text-brand">Create an account</Link>
+        New to Raido? <Link href="/register" className="font-semibold text-brand-strong">Create an account</Link>
       </p>
     </form>
   );

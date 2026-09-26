@@ -73,7 +73,7 @@ export default function AdminRidesPage() {
             <tbody>
               {rides.data.content.map((ride) => (
                 <Tr key={ride.id}>
-                  <Td><Link href={`/admin/rides/${ride.id}`} className="font-medium text-brand hover:underline">{formatDateTime(ride.requestedAt)}</Link></Td>
+                  <Td><Link href={`/admin/rides/${ride.id}`} className="font-medium text-brand-strong hover:underline">{formatDateTime(ride.requestedAt)}</Link></Td>
                   <Td><StatusBadge status={ride.status} /></Td>
                   <Td>{humanize(ride.vehicleCategory)}</Td>
                   <Td className="max-w-56 truncate">{ride.pickupAddress}</Td>

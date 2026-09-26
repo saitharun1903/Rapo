@@ -27,7 +27,7 @@ export class ApiError extends Error {
 
   static network(cause: unknown): ApiError {
     const error = new ApiError(NETWORK_STATUS, "NETWORK_ERROR",
-      "Cannot reach RideFlow right now. Check your connection and try again.");
+      "Cannot reach Raido right now. Check your connection and try again.");
     error.cause = cause;
     return error;
   }
@@ -38,11 +38,11 @@ export class ApiError extends Error {
     if (parsed) {
       return new ApiError(response.status, parsed.code, parsed.message, parsed.fieldErrors ?? [], retryAfter);
     }
-    // No RideFlow error body: the answer came from something in between, such as the proxy failing to reach
+    // No Raido error body: the answer came from something in between, such as the proxy failing to reach
     // the backend.
     if (response.status >= SERVER_ERROR) {
       return new ApiError(response.status, "SERVER_UNAVAILABLE",
-        "RideFlow is not responding right now. Please try again in a moment.", [], retryAfter);
+        "Raido is not responding right now. Please try again in a moment.", [], retryAfter);
     }
     return new ApiError(response.status, "UNEXPECTED_RESPONSE",
       `The server answered ${response.status}. Please try again.`, [], retryAfter);

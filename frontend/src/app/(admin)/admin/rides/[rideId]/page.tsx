@@ -34,7 +34,7 @@ export default function AdminRideDetailPage() {
         <ArrowLeft className="size-4" aria-hidden /> All rides
       </Link>
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-bold tracking-tight">Ride</h1>
+        <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.03em]">Ride</h1>
         <StatusBadge status={ride.status} />
         <span className="font-mono text-xs text-fg-muted">{ride.id}</span>
       </div>
