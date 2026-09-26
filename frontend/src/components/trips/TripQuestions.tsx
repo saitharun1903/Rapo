@@ -12,6 +12,7 @@ import { errorMessage, isApiError } from "@/lib/api/errors";
 import type { TripQuestion } from "@/lib/api/types";
 import { formatTime } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
+import { aiSwitchedOff, analysisQuery } from "./TripInsightsPanel";
 
 const QUESTION_MAX = 500;
 const SUGGESTIONS = ["Why did I pay more than the estimate?", "How was my fare calculated?", "Was my route longer than expected?"];
@@ -26,6 +27,7 @@ function Answer({ item }: { item: TripQuestion }) {
 export function TripQuestions({ rideId }: { rideId: string }) {
   const queryClient = useQueryClient();
   const [question, setQuestion] = useState("");
+  const analysis = useQuery(analysisQuery(rideId));
   const history = useQuery({
     queryKey: queryKeys.questions(rideId),
     queryFn: () => unwrap(api.GET("/api/trips/{rideId}/ai-analysis/questions", { params: { path: { rideId } } })),
@@ -47,6 +49,19 @@ export function TripQuestions({ rideId }: { rideId: string }) {
       ask.mutate(text.trim());
     }
   };
+
+  if (aiSwitchedOff(analysis.data) && history.data?.length === 0) {
+    // Questions are answered by the AI assistant; with it switched off, a question box could only fail.
+    return (
+      <Card>
+        <CardTitle><span className="flex items-center gap-2"><MessageCircleQuestion className="size-4 text-fg-muted" aria-hidden /> Ask about this trip</span></CardTitle>
+        <p className="text-sm text-fg-muted">
+          Questions are answered by Raido&apos;s AI assistant, which is switched off on this deployment. The fare
+          breakdown below shows how this fare was calculated.
+        </p>
+      </Card>
+    );
+  }
 
   return (
     <Card>

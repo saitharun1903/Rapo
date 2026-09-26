@@ -25,7 +25,24 @@ const FAILURE_MESSAGES: Record<string, string> = {
   UNAVAILABLE: "AI insights are not available right now.",
 };
 
+/** AI is switched off on this deployment (AI_PROVIDER=disabled), as opposed to failing for a while. */
+export function aiSwitchedOff(analysis: TripAnalysis | undefined): boolean {
+  return analysis?.provider === "disabled";
+}
+
+/** The analysis query, shared with the questions panel so both read one request. */
+export function analysisQuery(rideId: string) {
+  return {
+    queryKey: queryKeys.analysis(rideId),
+    queryFn: () => unwrap(api.GET("/api/trips/{rideId}/ai-analysis", { params: { path: { rideId } } })),
+    refetchInterval: (query: { state: { data?: TripAnalysis } }) => (query.state.data?.status === "PENDING" ? PENDING_POLL_MS : false),
+  };
+}
+
 function statusNote(analysis: TripAnalysis): string {
+  if (aiSwitchedOff(analysis)) {
+    return "AI summaries are switched off on this Raido deployment. Everything above comes from your trip's recorded data.";
+  }
   if (analysis.status === "UNAVAILABLE") {
     return "AI insights are switched off or unavailable. The figures below come straight from your trip.";
   }
@@ -34,11 +51,7 @@ function statusNote(analysis: TripAnalysis): string {
 
 export function TripInsightsPanel({ rideId }: { rideId: string }) {
   const queryClient = useQueryClient();
-  const analysis = useQuery({
-    queryKey: queryKeys.analysis(rideId),
-    queryFn: () => unwrap(api.GET("/api/trips/{rideId}/ai-analysis", { params: { path: { rideId } } })),
-    refetchInterval: (query) => (query.state.data?.status === "PENDING" ? PENDING_POLL_MS : false),
-  });
+  const analysis = useQuery(analysisQuery(rideId));
   const regenerate = useMutation({
     mutationFn: () => unwrap(api.POST("/api/trips/{rideId}/ai-analysis/regenerate", { params: { path: { rideId } } })),
     onSuccess: (pending) => queryClient.setQueryData(queryKeys.analysis(rideId), pending),
@@ -128,9 +141,11 @@ export function TripInsightsPanel({ rideId }: { rideId: string }) {
         {(data.status === "FAILED" || data.status === "UNAVAILABLE") && (
           <div className="flex flex-col items-start gap-3">
             <p className="text-sm text-fg-muted">{statusNote(data)}</p>
-            <Button variant="secondary" size="sm" loading={regenerate.isPending} onClick={() => regenerate.mutate()}>
-              <RefreshCw className="size-4" aria-hidden /> Try again
-            </Button>
+            {!aiSwitchedOff(data) && (
+              <Button variant="secondary" size="sm" loading={regenerate.isPending} onClick={() => regenerate.mutate()}>
+                <RefreshCw className="size-4" aria-hidden /> Try again
+              </Button>
+            )}
           </div>
         )}
       </Card>

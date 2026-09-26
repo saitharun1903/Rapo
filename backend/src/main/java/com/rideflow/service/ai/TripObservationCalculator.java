@@ -38,6 +38,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class TripObservationCalculator {
 
+    /** Durations closer than this to the estimate are not remarked on, whatever the percentage. */
+    static final BigDecimal MIN_DURATION_DIFFERENCE_MINUTES = BigDecimal.valueOf(2);
+
     private final AIProperties.Observations thresholds;
 
     public TripObservationCalculator(AIProperties properties) {
@@ -77,11 +80,16 @@ public class TripObservationCalculator {
                     "Too little GPS data was recorded during the trip, so the fare used the estimated distance."));
         }
         BigDecimal durationPercent = decimal(facts, DURATION_VS_ESTIMATE_PERCENT);
-        if (reaches(durationPercent, thresholds.durationDeltaPercent())) {
+        BigDecimal actualMinutes = decimal(facts, DURATION_ACTUAL_MINUTES);
+        BigDecimal estimatedMinutes = decimal(facts, DURATION_ESTIMATED_MINUTES);
+        // On short trips a large percentage is a minute or two of difference: not worth saying.
+        boolean noticeable = actualMinutes != null && estimatedMinutes != null
+                && actualMinutes.subtract(estimatedMinutes).abs().compareTo(MIN_DURATION_DIFFERENCE_MINUTES) >= 0;
+        if (noticeable && reaches(durationPercent, thresholds.durationDeltaPercent())) {
             observations.add(new TripObservation("duration.vsEstimate", "The trip took "
-                    + plain(decimal(facts, DURATION_ACTUAL_MINUTES)) + " minutes, " + plain(durationPercent.abs()) + "% "
+                    + minutes(actualMinutes) + ", " + plain(durationPercent.abs()) + "% "
                     + (durationPercent.signum() > 0 ? "longer" : "shorter") + " than the estimated "
-                    + plain(decimal(facts, DURATION_ESTIMATED_MINUTES)) + " minutes."));
+                    + minutes(estimatedMinutes) + "."));
         }
         BigDecimal detour = decimal(facts, DETOUR_RATIO);
         if (tracked && detour != null && detour.compareTo(thresholds.detourRatio()) >= 0) {
@@ -114,6 +122,14 @@ public class TripObservationCalculator {
     }
 
     /** Without trailing zeros: "1.2", "13". */
+    /** "less than a minute", "1 minute", "38 minutes". */
+    private static String minutes(BigDecimal value) {
+        if (value.signum() == 0) {
+            return "less than a minute";
+        }
+        return plain(value) + (value.compareTo(BigDecimal.ONE) == 0 ? " minute" : " minutes");
+    }
+
     private static String plain(BigDecimal value) {
         return value.stripTrailingZeros().toPlainString();
     }

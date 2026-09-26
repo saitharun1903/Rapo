@@ -34,6 +34,32 @@ class TripObservationCalculatorTest {
     }
 
     @Test
+    void aShortTripsDurationIsNotRemarkedOnForAMinutesDifference() {
+        Map<String, Object> facts = TripFactsFixture.surgeTripValues();
+        facts.put(TripFactKeys.DURATION_ACTUAL_MINUTES, new BigDecimal("0"));
+        facts.put(TripFactKeys.DURATION_ESTIMATED_MINUTES, new BigDecimal("1"));
+        facts.put(TripFactKeys.DURATION_VS_ESTIMATE_PERCENT, new BigDecimal("-100"));
+
+        assertThat(keys(facts)).doesNotContain("duration.vsEstimate");
+    }
+
+    @Test
+    void durationsAreWordedInTheSingularAndUnderAMinute() {
+        Map<String, Object> facts = TripFactsFixture.surgeTripValues();
+        facts.put(TripFactKeys.DURATION_ACTUAL_MINUTES, new BigDecimal("0"));
+        facts.put(TripFactKeys.DURATION_ESTIMATED_MINUTES, new BigDecimal("3"));
+        facts.put(TripFactKeys.DURATION_VS_ESTIMATE_PERCENT, new BigDecimal("-100"));
+        assertThat(calculator.observe(facts)).extracting(TripObservation::text)
+                .contains("The trip took less than a minute, 100% shorter than the estimated 3 minutes.");
+
+        facts.put(TripFactKeys.DURATION_ACTUAL_MINUTES, new BigDecimal("1"));
+        facts.put(TripFactKeys.DURATION_ESTIMATED_MINUTES, new BigDecimal("4"));
+        facts.put(TripFactKeys.DURATION_VS_ESTIMATE_PERCENT, new BigDecimal("-75"));
+        assertThat(calculator.observe(facts)).extracting(TripObservation::text)
+                .contains("The trip took 1 minute, 75% shorter than the estimated 4 minutes.");
+    }
+
+    @Test
     void smallDifferencesAndAnOrdinaryRouteAreNotMentioned() {
         Map<String, Object> facts = TripFactsFixture.surgeTripValues();
         facts.put(TripFactKeys.SURGE_MULTIPLIER, new BigDecimal("1.00"));

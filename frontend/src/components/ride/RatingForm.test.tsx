@@ -21,7 +21,9 @@ function renderForm() {
   );
 }
 
-beforeEach(() => post.mockReset());
+beforeEach(() => {
+  post.mockReset();
+});
 
 describe("RatingForm", () => {
   it("needs a score, then sends it with the trimmed comment", async () => {
