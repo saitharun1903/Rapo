@@ -75,7 +75,8 @@ export function RideOutcome({ ride, onDone }: { ride: RideResponse; onDone: () =
           </div>
         )}
 
-        <TripSummary ride={ride} showFare={!completed} />
+        <TripSummary pickup={ride.pickup} dropoff={ride.dropoff}
+          fare={completed ? undefined : { label: "Estimated fare", amount: ride.estimate.fare }} />
 
         <div className="flex flex-col gap-2">
           {completed && <ButtonLink href={`/trips/${ride.id}`} variant="secondary">Trip details and insights</ButtonLink>}

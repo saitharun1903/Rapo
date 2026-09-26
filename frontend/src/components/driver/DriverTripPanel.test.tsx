@@ -12,9 +12,14 @@ import { DriverTripPanel } from "./DriverTripPanel";
 
 vi.mock("@/lib/api/client", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/api/client")>(),
-  api: { POST: vi.fn() },
+  api: { GET: vi.fn(), POST: vi.fn() },
 }));
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }));
+// The chat's pushes are not under test here.
+vi.mock("@/lib/realtime/RealtimeProvider", () => ({
+  REALTIME_SNAPSHOT: { realtime: true },
+  useRealtimeSubscription: () => undefined,
+}));
 
 const post = vi.mocked(api.POST);
 
@@ -30,6 +35,7 @@ function renderPanel(current: RideResponse) {
 
 beforeEach(() => {
   post.mockReset();
+  answer(vi.mocked(api.GET), []);
   vi.mocked(toast.error).mockReset();
 });
 
@@ -84,5 +90,19 @@ describe("DriverTripPanel", () => {
   it("cannot be cancelled once the trip has started", () => {
     renderPanel(ride({ status: "IN_PROGRESS" }));
     expect(screen.queryByRole("button", { name: /Release|did not show up/ })).not.toBeInTheDocument();
+  });
+
+  it("sends the driver to the pickup, then to the drop-off, in their navigation app", () => {
+    const { unmount } = render(
+      <QueryClientProvider client={new QueryClient()}><DriverTripPanel ride={ride({ status: "DRIVER_ASSIGNED" })} /></QueryClientProvider>,
+    );
+    expect(screen.getByRole("link", { name: /Open directions/ }))
+      .toHaveAttribute("href", expect.stringContaining("destination=17.44,78.38"));
+    unmount();
+
+    renderPanel(ride({ status: "IN_PROGRESS" }));
+    expect(screen.getByText("Drop-off")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open directions/ }))
+      .toHaveAttribute("href", expect.stringContaining("destination=17.42,78.47"));
   });
 });

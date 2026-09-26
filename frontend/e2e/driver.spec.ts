@@ -80,12 +80,12 @@ test("a new driver is verified, goes online, and completes a ride from offer to 
   await expect(offers.getByRole("button", { name: "Accept" })).toBeVisible({ timeout: OFFER_TIMEOUT_MS });
   await capture(page, "driver-offer");
   await offers.getByRole("button", { name: "Accept" }).click();
-  await expect(page.getByRole("heading", { name: "Driver assigned" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ride accepted" })).toBeVisible();
 
-  await step(page, "Start driving to pickup", "Driver arriving");
+  await step(page, "Start driving to pickup", "Heading to the pickup");
   await driveTo(page, PICKUP);
-  await step(page, "I have arrived", "Driver arrived");
-  await step(page, "Start trip", "In progress");
+  await step(page, "I have arrived", "Waiting for your passenger");
+  await step(page, "Start trip", "On the trip");
   for (let index = 1; index <= ROUTE_STEPS; index++) {
     await driveTo(page, {
       lat: PICKUP.lat + ((DROPOFF.lat - PICKUP.lat) * index) / ROUTE_STEPS,

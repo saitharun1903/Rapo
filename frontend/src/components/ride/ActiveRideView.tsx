@@ -219,7 +219,7 @@ export function ActiveRideView({ ride }: { ride: RideResponse }) {
           </div>
         )}
 
-        <TripSummary ride={ride} />
+        <TripSummary pickup={ride.pickup} dropoff={ride.dropoff} fare={{ label: "Estimated fare", amount: ride.estimate.fare }} />
 
         {PASSENGER_CANCELLABLE.includes(ride.status) && (
           <Button variant="ghost" className="w-full text-danger hover:bg-danger-soft" onClick={() => setCancelling(true)}>Cancel ride</Button>

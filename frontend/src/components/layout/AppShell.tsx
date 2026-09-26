@@ -24,6 +24,7 @@ const NAVIGATION: Record<Role, NavItem[]> = {
   ],
   DRIVER: [
     { href: "/drive", label: "Drive", exact: true },
+    { href: "/drive/trips", label: "Trips" },
     { href: "/drive/earnings", label: "Earnings" },
     { href: "/drive/onboarding", label: "Vehicle" },
   ],

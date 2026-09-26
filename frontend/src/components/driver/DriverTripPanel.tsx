@@ -1,19 +1,20 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserRound } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { StatusBadge } from "@/components/ride/StatusBadge";
+import { initialsOf } from "@/components/ride/DriverCard";
+import { RideChat, RideChatButton, useRideChat } from "@/components/ride/RideChat";
+import { TripSummary } from "@/components/ride/TripSummary";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Card } from "@/components/ui/surface";
 import { api, unwrap } from "@/lib/api/client";
 import { errorMessage, isApiError } from "@/lib/api/errors";
 import type { RideResponse } from "@/lib/api/types";
 import { formatMoney, humanize } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
-import { nextDriverAction, type DriverAction } from "@/lib/ride/status";
+import { currentTarget, driverHeadline, nextDriverAction, type DriverAction } from "@/lib/ride/status";
 
 const ACTION_ERRORS: Record<string, string> = {
   NOT_AT_PICKUP: "You are not at the pickup point yet. Move closer and try again.",
@@ -33,11 +34,20 @@ function describe(error: unknown): string {
   return isApiError(error) && ACTION_ERRORS[error.code] ? ACTION_ERRORS[error.code] : errorMessage(error);
 }
 
+/** Turn-by-turn directions are left to the driver's navigation app; this opens it at the next stop. */
+function directionsUrl(point: { lat: number; lng: number }): string {
+  return `https://www.google.com/maps/dir/?api=1&destination=${point.lat},${point.lng}&travelmode=driving`;
+}
+
 export function DriverTripPanel({ ride }: { ride: RideResponse }) {
   const queryClient = useQueryClient();
   const [confirmCancel, setConfirmCancel] = useState(false);
   const action = nextDriverAction(ride.status);
   const beforeArrival = ride.status === "DRIVER_ASSIGNED" || ride.status === "DRIVER_ARRIVING";
+  const target = currentTarget(ride);
+  const passengerName = ride.passenger?.fullName ?? "Passenger";
+  const firstName = passengerName.split(" ")[0];
+  const chat = useRideChat(ride.id, "DRIVER", true);
 
   const apply = (updated: RideResponse) => queryClient.setQueryData(queryKeys.activeRide, updated);
   const advance = useMutation({
@@ -58,30 +68,46 @@ export function DriverTripPanel({ ride }: { ride: RideResponse }) {
   });
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold tracking-[-0.02em]" aria-live="polite">{humanize(ride.status)}</h1>
-        <StatusBadge status={ride.status} />
-      </div>
-      <Card className="flex items-center gap-3 p-4">
-        <div className="flex size-11 items-center justify-center rounded-full bg-brand-soft text-brand-strong"><UserRound className="size-5" aria-hidden /></div>
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold">{ride.passenger?.fullName ?? "Passenger"}</p>
-          <p className="text-sm text-fg-muted">{humanize(ride.paymentMethod)} · est. {formatMoney(ride.estimate.fare)}</p>
+    <div key={ride.status} className="flex flex-col gap-5 animate-fade">
+      <header>
+        <p className="eyebrow">{humanize(ride.vehicleCategory)} · {ride.paymentMethod === "CASH" ? "Collect cash" : "Card, nothing to collect"}</p>
+        <h1 className="mt-1 text-[1.35rem] font-semibold leading-tight tracking-[-0.02em]" aria-live="polite">{driverHeadline(ride.status)}</h1>
+      </header>
+
+      <div className="flex items-center gap-3.5">
+        <div aria-hidden className="flex size-12 shrink-0 items-center justify-center rounded-control bg-surface-2 text-sm font-semibold tracking-wide text-fg">
+          {initialsOf(passengerName)}
         </div>
-      </Card>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-        <dt className="text-fg-muted">Pickup</dt><dd className="font-medium text-fg">{ride.pickup.address}</dd>
-        <dt className="text-fg-muted">Drop</dt><dd className="text-fg">{ride.dropoff.address}</dd>
-      </dl>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium text-fg">{passengerName}</p>
+          <p className="num text-sm text-fg-muted">Estimated {formatMoney(ride.estimate.fare)}</p>
+        </div>
+      </div>
+
+      <div className="rounded-card bg-surface-2 p-4">
+        <p className="eyebrow">{ride.status === "IN_PROGRESS" ? "Drop-off" : "Pickup"}</p>
+        <p className="mt-1 text-sm font-medium text-fg">{target.address}</p>
+        <a href={directionsUrl(target.point)} target="_blank" rel="noopener noreferrer"
+          className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-brand-strong hover:underline">
+          Open directions <ExternalLink className="size-3.5" aria-hidden />
+        </a>
+      </div>
+
+      <div className="flex gap-2">
+        <RideChatButton chat={chat} label={`Message ${firstName}`} />
+      </div>
+
       {action && (
         <div>
           <Button size="lg" className="w-full" loading={advance.isPending} onClick={() => advance.mutate(action)}>{action.label}</Button>
-          <p className="mt-1 text-center text-xs text-fg-muted">{action.hint}</p>
+          <p className="mt-1.5 text-center text-xs text-fg-muted">{action.hint}</p>
         </div>
       )}
+
+      <TripSummary pickup={ride.pickup} dropoff={ride.dropoff} />
+
       {ride.status !== "IN_PROGRESS" && (
-        <Button variant="ghost" onClick={() => setConfirmCancel(true)}>
+        <Button variant="ghost" className="text-fg-muted" onClick={() => setConfirmCancel(true)}>
           {beforeArrival ? "Release this ride" : "Passenger did not show up"}
         </Button>
       )}
@@ -97,6 +123,7 @@ export function DriverTripPanel({ ride }: { ride: RideResponse }) {
           <Button variant="danger" loading={cancel.isPending} onClick={() => cancel.mutate()}>Confirm</Button>
         </div>
       </Dialog>
+      <RideChat rideId={ride.id} me="DRIVER" otherName={firstName} canSend chat={chat} />
     </div>
   );
 }

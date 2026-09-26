@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import clsx from "clsx";
 import { CheckCircle2, Crosshair, LocateFixed, Power } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -8,13 +9,14 @@ import { DriverTripPanel } from "@/components/driver/DriverTripPanel";
 import { OfferCard } from "@/components/driver/OfferCard";
 import { LazyMap } from "@/components/map/LazyMap";
 import { RatingForm } from "@/components/ride/RatingForm";
+import { RideScreen } from "@/components/ride/RideScreen";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { Badge, Card, EmptyState, ErrorState, LoadingBlock } from "@/components/ui/surface";
+import { EmptyState, ErrorState, LoadingBlock } from "@/components/ui/surface";
 import { api, unwrap } from "@/lib/api/client";
 import { errorMessage, isApiError } from "@/lib/api/errors";
 import type { DriverResponse, GeoPoint, RideOffer, RideResponse } from "@/lib/api/types";
 import { useDriverLocation } from "@/lib/driver/useDriverLocation";
-import { formatDistance, formatDuration, formatMoney } from "@/lib/format";
+import { formatDistance, formatDuration, formatMoney, humanize } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import { REALTIME_SNAPSHOT, useRealtimeSubscription } from "@/lib/realtime/RealtimeProvider";
 import { Destinations } from "@/lib/realtime/types";
@@ -47,22 +49,31 @@ function VerificationNotice({ driver }: { driver: DriverResponse }) {
   );
 }
 
-function TripSummary({ ride, onDone }: { ride: RideResponse; onDone: () => void }) {
+function TripDone({ ride, onDone }: { ride: RideResponse; onDone: () => void }) {
+  const completed = ride.status === "COMPLETED";
   return (
-    <div className="flex flex-col gap-4">
-      <Card className="flex flex-col items-center gap-2 text-center">
-        <CheckCircle2 className="size-10 text-success" aria-hidden />
-        <h1 className="text-xl font-semibold">{ride.status === "COMPLETED" ? "Trip complete" : "Ride ended"}</h1>
-        {ride.actual && (
-          <>
-            <p className="text-3xl font-extrabold tabular-nums">{formatMoney(ride.actual.fare)}</p>
-            <p className="text-sm text-fg-muted">
-              {formatDistance(ride.actual.distanceMeters)} · {formatDuration(ride.actual.durationSeconds)} · collect {ride.paymentMethod === "CASH" ? "cash" : "nothing (card)"}
+    <div className="flex flex-col gap-5 animate-rise">
+      <header className="flex items-start gap-3">
+        <CheckCircle2 className={clsx("mt-1 size-6 shrink-0", completed ? "text-success" : "text-fg-muted")} aria-hidden />
+        <div>
+          <h1 className="text-[1.35rem] font-semibold leading-tight tracking-[-0.02em]">{completed ? "Trip complete" : "Ride ended"}</h1>
+          {ride.cancellation && (
+            <p className="mt-0.5 text-sm text-fg-muted">
+              Cancelled by {humanize(ride.cancellation.cancelledBy).toLowerCase()}{ride.cancellation.reason ? `: ${ride.cancellation.reason}` : "."}
             </p>
-          </>
-        )}
-      </Card>
-      {ride.status === "COMPLETED" && <Card><RatingForm rideId={ride.id} subject="passenger" /></Card>}
+          )}
+        </div>
+      </header>
+      {ride.actual && (
+        <div className="rounded-card bg-surface-2 p-4">
+          <p className="num text-[2.25rem] font-semibold leading-none tracking-[-0.03em]">{formatMoney(ride.actual.fare)}</p>
+          <p className="mt-2 text-sm font-medium text-fg">{ride.paymentMethod === "CASH" ? "Collect this in cash." : "Paid by card: nothing to collect."}</p>
+          <p className="num mt-1 text-xs text-fg-muted">
+            {formatDistance(ride.actual.distanceMeters)} · {formatDuration(ride.actual.durationSeconds)}
+          </p>
+        </div>
+      )}
+      {completed && <RatingForm rideId={ride.id} subject="passenger" />}
       <Button onClick={onDone}>Back to offers</Button>
     </div>
   );
@@ -177,11 +188,18 @@ export default function DrivePage() {
     setPlacing(false);
   };
 
+  const fitTo = [...(here ? [here] : []), ...(target ? [target.point] : [])];
   return (
-    <div className="grid h-[calc(100dvh-4rem)] grid-rows-[1fr_minmax(0,1.2fr)] lg:grid-cols-[26rem_1fr] lg:grid-rows-1">
-      <section aria-label="Driver console" className="order-2 flex flex-col gap-4 overflow-y-auto border-line bg-surface p-4 lg:order-1 lg:border-r">
+    <RideScreen label="Driver console" peek={ride || summary ? 380 : 300} map={(padding) => (
+      <LazyMap label="Your position and trip" driver={here ? { point: here, headingDeg: location.position?.headingDeg } : null}
+        pickup={ride && ride.status !== "IN_PROGRESS" && !isTerminal(ride.status) ? ride.pickup.point : null}
+        dropoff={ride && !isTerminal(ride.status) ? ride.dropoff.point : null}
+        route={route.data?.path} fitTo={fitTo} padding={padding}
+        onPick={placing ? onPick : undefined} />
+    )}>
+      <div className="flex min-h-full flex-col gap-5">
         {summary ? (
-          <TripSummary ride={summary} onDone={() => {
+          <TripDone ride={summary} onDone={() => {
             dismissFinished();
             queryClient.setQueryData(queryKeys.activeRide, null);
             void queryClient.invalidateQueries({ queryKey: queryKeys.driverProfile });
@@ -190,36 +208,49 @@ export default function DrivePage() {
           <DriverTripPanel ride={ride} />
         ) : (
           <>
-            <div className="flex items-center justify-between">
-              <h1 className="text-xl font-semibold tracking-[-0.02em]">{online ? "You are online" : "You are offline"}</h1>
-              <Badge tone={online ? "success" : "neutral"}>{online ? "Online" : "Offline"}</Badge>
-            </div>
+            <header className="flex items-center justify-between gap-3">
+              <div>
+                <p className="eyebrow">{driver.vehicle ? `${driver.vehicle.color} ${driver.vehicle.make} ${driver.vehicle.model}` : "Driver"}</p>
+                <h1 className="mt-1 text-[1.35rem] font-semibold tracking-[-0.02em]">{online ? "You are online" : "You are offline"}</h1>
+              </div>
+              <span className={clsx("flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+                online ? "bg-success-soft text-success" : "bg-surface-2 text-fg-muted")}>
+                <span aria-hidden className={clsx("size-1.5 rounded-full", online ? "bg-success" : "bg-line-strong")} />
+                {online ? "Online" : "Offline"}
+              </span>
+            </header>
             {online ? (
               <Button variant="secondary" size="lg" loading={goOffline.isPending} onClick={() => goOffline.mutate()}>
                 <Power className="size-5" aria-hidden /> Go offline
               </Button>
             ) : (
-              <Button size="lg" disabled={!here} loading={goOnline.isPending} onClick={() => here && goOnline.mutate(here)}>
+              <Button variant="signal" size="lg" disabled={!here} loading={goOnline.isPending} onClick={() => here && goOnline.mutate(here)}>
                 <Power className="size-5" aria-hidden /> Go online
               </Button>
             )}
             {!online && !here && <p className="text-sm text-fg-muted">Waiting for your position before you can go online.</p>}
             {online && (
               <section aria-label="Ride offers" aria-live="polite" className="flex flex-col gap-3">
-                {openOffers.length === 0
-                  ? <p className="rounded-card bg-surface-2 p-4 text-center text-sm text-fg-muted">Waiting for ride requests nearby…</p>
-                  : openOffers.map((offer) => (
-                    <OfferCard key={offer.offerId} offer={offer} now={now}
-                      onAccept={() => accept.mutate(offer.rideId)} onDecline={() => decline.mutate(offer.rideId)}
-                      accepting={accept.isPending && accept.variables === offer.rideId}
-                      declining={decline.isPending && decline.variables === offer.rideId} />
-                  ))}
+                {openOffers.length === 0 ? (
+                  <div className="flex items-center gap-3 rounded-card border border-dashed border-line-strong p-4 text-sm text-fg-muted">
+                    <span aria-hidden className="relative flex size-2.5">
+                      <span className="absolute inset-0 animate-ping rounded-full bg-success opacity-50 motion-reduce:hidden" />
+                      <span className="relative size-2.5 rounded-full bg-success" />
+                    </span>
+                    Waiting for ride requests nearby…
+                  </div>
+                ) : openOffers.map((offer) => (
+                  <OfferCard key={offer.offerId} offer={offer} now={now}
+                    onAccept={() => accept.mutate(offer.rideId)} onDecline={() => decline.mutate(offer.rideId)}
+                    accepting={accept.isPending && accept.variables === offer.rideId}
+                    declining={decline.isPending && decline.variables === offer.rideId} />
+                ))}
               </section>
             )}
           </>
         )}
 
-        <Card className="mt-auto p-4">
+        <div className="mt-auto border-t border-line pt-4">
           <p className="eyebrow">Your position</p>
           <p className="mt-1 text-sm text-fg">
             {location.mode === "manual" ? "Placed on the map (testing without GPS)" : here ? "From this device's GPS" : "Locating…"}
@@ -234,15 +265,8 @@ export default function DrivePage() {
               <Button size="sm" variant="ghost" onClick={location.useGps}><LocateFixed className="size-4" aria-hidden /> Use GPS</Button>
             )}
           </div>
-        </Card>
-      </section>
-      <div className="order-1 lg:order-2">
-        <LazyMap label="Your position and trip" driver={here ? { point: here, headingDeg: location.position?.headingDeg } : null}
-          pickup={ride && ride.status !== "IN_PROGRESS" && !isTerminal(ride.status) ? ride.pickup.point : null}
-          dropoff={ride && !isTerminal(ride.status) ? ride.dropoff.point : null}
-          route={route.data?.path} fitTo={[...(here ? [here] : []), ...(target ? [target.point] : [])]}
-          onPick={placing ? onPick : undefined} />
+        </div>
       </div>
-    </div>
+    </RideScreen>
   );
 }

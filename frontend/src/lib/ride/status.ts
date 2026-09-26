@@ -40,6 +40,22 @@ export function passengerHeadline(status: RideStatus): string {
   return PASSENGER_HEADLINES[status];
 }
 
+const DRIVER_HEADLINES: Record<RideStatus, string> = {
+  REQUESTED: "New request",
+  MATCHING: "New request",
+  DRIVER_ASSIGNED: "Ride accepted",
+  DRIVER_ARRIVING: "Heading to the pickup",
+  DRIVER_ARRIVED: "Waiting for your passenger",
+  IN_PROGRESS: "On the trip",
+  COMPLETED: "Trip complete",
+  CANCELLED: "Ride cancelled",
+  EXPIRED: "Ride expired",
+};
+
+export function driverHeadline(status: RideStatus): string {
+  return DRIVER_HEADLINES[status];
+}
+
 export type DriverAction = { path: "en-route" | "arrive" | "start" | "complete"; label: string; hint: string };
 
 const DRIVER_ACTIONS: Partial<Record<RideStatus, DriverAction>> = {
