@@ -4,11 +4,9 @@ import com.rideflow.geospatial.OsrmRoutingProvider;
 import com.rideflow.geospatial.RoutingProvider;
 import com.rideflow.geospatial.RoutingService;
 import com.rideflow.geospatial.StraightLineRoutingProvider;
-import java.net.http.HttpClient;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.web.client.RestClient;
 
@@ -38,12 +36,7 @@ public class RideDomainConfig {
     }
 
     private static RestClient osrmClient(RoutingProperties properties, RestClient.Builder builder) {
-        HttpClient httpClient = HttpClient.newBuilder().connectTimeout(properties.connectTimeout()).build();
-        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
-        requestFactory.setReadTimeout(properties.readTimeout());
-        return builder.clone()
-                .baseUrl(properties.osrmBaseUrl())
-                .requestFactory(requestFactory)
+        return OutboundHttp.client(builder, properties.osrmBaseUrl(), properties.connectTimeout(), properties.readTimeout())
                 .defaultHeader("User-Agent", USER_AGENT)
                 .build();
     }
