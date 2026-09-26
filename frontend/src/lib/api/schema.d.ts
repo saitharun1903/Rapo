@@ -273,7 +273,7 @@ export interface paths {
         put?: never;
         /**
          * Rotate the refresh-token cookie and issue a new access token
-         * @description Requires header X-Requested-With: rideflow
+         * @description Requires header X-Requested-With: rideflow. Without a refresh cookie there is no session to restore: 204, which is what every visitor who never signed in gets when a page loads. A cookie that is expired, revoked or reused is 401.
          */
         post: operations["refresh"];
         delete?: never;
@@ -1989,8 +1989,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description A new access token and a rotated cookie */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description No refresh cookie: not signed in */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };

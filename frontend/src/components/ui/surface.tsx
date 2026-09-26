@@ -51,11 +51,19 @@ export function LoadingBlock({ label = "Loading", rows = 3 }: { label?: string; 
 }
 
 /** Nothing to show yet: says why, and what would change that. */
-export function EmptyState({ title, children, action, icon }: { title: string; children?: ReactNode; action?: ReactNode; icon?: ReactNode }) {
+export function EmptyState({ title, children, action, icon, asPageHeading = false }: {
+  title: string;
+  children?: ReactNode;
+  action?: ReactNode;
+  icon?: ReactNode;
+  /** When the empty state is all the page shows, its title is the page's heading. */
+  asPageHeading?: boolean;
+}) {
+  const Title = asPageHeading ? "h1" : "p";
   return (
     <div className="flex flex-col items-start gap-2 rounded-card border border-dashed border-line-strong px-5 py-8">
       {icon && <span className="mb-1 text-fg-muted">{icon}</span>}
-      <p className="font-medium text-fg">{title}</p>
+      <Title className="font-medium text-fg">{title}</Title>
       {children && <div className="max-w-prose text-sm text-fg-muted">{children}</div>}
       {action && <div className="mt-2">{action}</div>}
     </div>

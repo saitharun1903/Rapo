@@ -146,10 +146,12 @@ class AuthControllerWebTest {
     }
 
     @Test
-    void refreshWithoutCookieIs401() throws Exception {
+    void refreshWithoutCookieMeansNoSession() throws Exception {
+        // Every page load asks; a visitor who never signed in is not an error.
         mvc.perform(post("/api/auth/refresh").header("X-Requested-With", "rideflow"))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
+                .andExpect(status().isNoContent())
+                .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE));
+        verifyNoInteractions(authService);
     }
 
     @Test

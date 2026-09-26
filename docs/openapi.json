@@ -2588,7 +2588,7 @@
     },
     "/api/auth/refresh" : {
       "post" : {
-        "description" : "Requires header X-Requested-With: rideflow",
+        "description" : "Requires header X-Requested-With: rideflow. Without a refresh cookie there is no session to restore: 204, which is what every visitor who never signed in gets when a page loads. A cookie that is expired, revoked or reused is 401.",
         "operationId" : "refresh",
         "responses" : {
           "200" : {
@@ -2599,7 +2599,17 @@
                 }
               }
             },
-            "description" : "OK"
+            "description" : "A new access token and a rotated cookie"
+          },
+          "204" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AuthResponse"
+                }
+              }
+            },
+            "description" : "No refresh cookie: not signed in"
           }
         },
         "security" : [ ],

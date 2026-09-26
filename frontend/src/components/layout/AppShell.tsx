@@ -171,9 +171,9 @@ export function AppShell({ user, children }: { user: UserResponse; children: Rea
   return (
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-[var(--z-header)] border-b border-line bg-bg/85 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-6 px-4 sm:px-6">
-          <Link href="/" aria-label="Raido home" className="shrink-0"><Logo /></Link>
-          <nav aria-label="Main" className="-mb-px flex h-full flex-1 items-stretch gap-5 overflow-x-auto">
+        <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-4 px-4 sm:gap-6 sm:px-6">
+          <Link href="/" aria-label="Raido home" className="shrink-0"><Logo wordmarkClassName="max-[420px]:hidden" /></Link>
+          <nav aria-label="Main" className="-mb-px flex h-full min-w-0 flex-1 items-stretch gap-4 overflow-x-auto sm:gap-5">
             {items.map((item) => {
               const active = isActive(pathname, item);
               return (

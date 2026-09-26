@@ -42,7 +42,7 @@ function VerificationNotice({ driver }: { driver: DriverResponse }) {
   const message = messages[driver.verificationStatus];
   return (
     <div className="mx-auto max-w-lg px-4 py-10">
-      <EmptyState title={message.title} action={<ButtonLink href="/drive/onboarding" variant="secondary">View profile</ButtonLink>}>
+      <EmptyState asPageHeading title={message.title} action={<ButtonLink href="/drive/onboarding" variant="secondary">View profile</ButtonLink>}>
         {message.text}
       </EmptyState>
     </div>
@@ -168,7 +168,7 @@ export default function DrivePage() {
     if (isApiError(profile.error, "DRIVER_PROFILE_NOT_FOUND")) {
       return (
         <div className="mx-auto max-w-lg px-4 py-10">
-          <EmptyState title="Finish setting up" action={<ButtonLink href="/drive/onboarding">Add licence and vehicle</ButtonLink>}>
+          <EmptyState asPageHeading title="Finish setting up" action={<ButtonLink href="/drive/onboarding">Add licence and vehicle</ButtonLink>}>
             Add your driving licence and vehicle. An admin verifies them before your first ride.
           </EmptyState>
         </div>

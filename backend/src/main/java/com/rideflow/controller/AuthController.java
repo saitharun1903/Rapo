@@ -4,12 +4,11 @@ import com.rideflow.dto.auth.AuthResponse;
 import com.rideflow.dto.auth.LoginRequest;
 import com.rideflow.dto.auth.RegisterRequest;
 import com.rideflow.dto.user.UserResponse;
-import com.rideflow.exception.AuthenticationFailedException;
-import com.rideflow.exception.ErrorCode;
 import com.rideflow.security.RefreshTokenCookies;
 import com.rideflow.service.auth.AuthService;
 import com.rideflow.service.auth.AuthSession;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -52,12 +51,16 @@ public class AuthController {
 
     @PostMapping("/refresh")
     @Operation(summary = "Rotate the refresh-token cookie and issue a new access token",
-            description = "Requires header X-Requested-With: rideflow")
+            description = "Requires header X-Requested-With: rideflow. Without a refresh cookie there is no session to "
+                    + "restore: 204, which is what every visitor who never signed in gets when a page loads. A cookie "
+                    + "that is expired, revoked or reused is 401.")
+    @ApiResponse(responseCode = "200", description = "A new access token and a rotated cookie", useReturnTypeSchema = true)
+    @ApiResponse(responseCode = "204", description = "No refresh cookie: not signed in")
     public ResponseEntity<AuthResponse> refresh(HttpServletRequest request) {
         refreshTokenCookies.requireCsrfHeader(request);
-        String refreshToken = refreshTokenCookies.read(request)
-                .orElseThrow(() -> new AuthenticationFailedException(ErrorCode.UNAUTHENTICATED, "No refresh token"));
-        return withRefreshCookie(authService.refresh(refreshToken));
+        return refreshTokenCookies.read(request)
+                .map(refreshToken -> withRefreshCookie(authService.refresh(refreshToken)))
+                .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
     @PostMapping("/logout")

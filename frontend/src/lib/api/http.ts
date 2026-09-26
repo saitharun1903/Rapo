@@ -4,6 +4,8 @@ import type { AuthResponse } from "./types";
 /** Refresh a little before expiry, so a request never leaves with a token that dies in flight. */
 export const REFRESH_MARGIN_MS = 30_000;
 const UNAUTHORIZED = 401;
+/** The refresh endpoint's answer when the browser holds no session at all. */
+const NO_SESSION = 204;
 /** Required by the backend on the cookie-authenticated endpoints (its CSRF defence). */
 export const CSRF_HEADER = { "X-Requested-With": "rideflow" } as const;
 const AUTH_PATH = "/api/auth/";
@@ -49,7 +51,8 @@ export function createRefresher(baseUrl: string, fetchImpl: typeof fetch, store:
       }
       return false;
     }
-    if (!response.ok) {
+    // 204: no refresh cookie, so nobody is signed in here; 401: the session ended.
+    if (response.status === NO_SESSION || !response.ok) {
       store.signedOut();
       return false;
     }

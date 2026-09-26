@@ -4,7 +4,7 @@ import clsx from "clsx";
  * The Raido mark: a route arriving at a live position. The wordmark dots its "i" with the same signal colour, the
  * colour Raido uses for everything that is live.
  */
-export function Logo({ className, withWordmark = true }: { className?: string; withWordmark?: boolean }) {
+export function Logo({ className, withWordmark = true, wordmarkClassName }: { className?: string; withWordmark?: boolean; wordmarkClassName?: string }) {
   return (
     <span className={clsx("inline-flex items-center gap-2 text-fg", className)}>
       <svg viewBox="0 0 32 32" className="size-7 shrink-0" aria-hidden>
@@ -13,14 +13,14 @@ export function Logo({ className, withWordmark = true }: { className?: string; w
         <circle cx="21.5" cy="12.5" r="7" className="fill-brand" fillOpacity="0.28" />
         <circle cx="21.5" cy="12.5" r="3.6" className="fill-brand" />
       </svg>
-      {withWordmark && <Wordmark />}
+      {withWordmark && <Wordmark className={wordmarkClassName} />}
     </span>
   );
 }
 
-function Wordmark() {
+function Wordmark({ className }: { className?: string }) {
   return (
-    <span className="text-[1.3rem] font-semibold leading-none tracking-[-0.045em]" aria-label="Raido">
+    <span className={clsx("text-[1.3rem] font-semibold leading-none tracking-[-0.045em]", className)} aria-label="Raido">
       <span aria-hidden>
         ra
         <span className="relative inline-block">

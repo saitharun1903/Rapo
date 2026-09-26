@@ -52,6 +52,13 @@ describe("createRefresher", () => {
     expect(store.get().status).toBe("anonymous");
   });
 
+  it("treats 'no session' (204) as signed out, without parsing a body", async () => {
+    const store = new SessionStore(() => NOW);
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 204 }));
+    await expect(createRefresher("", fetchImpl, store)()).resolves.toBe(false);
+    expect(store.get().status).toBe("anonymous");
+  });
+
   it("keeps the session when offline, but ends the initial loading state", async () => {
     const offline = vi.fn(async () => { throw new TypeError("Failed to fetch"); });
     const signedIn = signedInStore();
