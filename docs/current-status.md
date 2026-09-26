@@ -56,6 +56,11 @@ Real external services were used as in production: OpenFreeMap tiles, the public
    the endpoint now answers 204 (not signed in); a bad cookie is still 401. The re-audit showed no console errors
    on any page (commit 8e17d55).
 3. **The pending-driver page had no heading**, and **the header clipped "Trips" at 320 px** (commit 8e17d55).
+4. **Trip insights with AI switched off** (commit a35919a):
+   - The panel offered "Try again" and a question box, both of which could only fail. It now says AI summaries
+     are switched off on this deployment.
+   - The duration observation read "took 0 minutes, 100% shorter than the estimated 1 minutes". It now uses
+     "less than a minute" and "1 minute", and is skipped for differences under 2 minutes.
 
 ## PARTIALLY WORKING
 
