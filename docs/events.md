@@ -48,6 +48,7 @@ Every event is JSON with the same envelope (`EventEnvelope`, written and read by
 | `payment.created` | `PaymentCreatedEvent` | paymentId | outbox | `notifications` | 7 d |
 | `notification.requested` | `NotificationRequestedEvent` (driver verified or rejected) | userId | outbox | `notifications` | 3 d |
 | `notification.created` | `NotificationCreatedEvent` | userId | outbox | `realtime-{instance}` | 3 d |
+| `ride.message.sent` | `RideMessageSentEvent` `{messageId, rideId, passengerId, driverId}`: ids only, the bridge loads the text so message bodies never sit in Kafka | rideId | outbox | `realtime-{instance}` | 3 d |
 | `<topic>.DLT` | the failed record, unchanged, plus Spring's `kafka_dlt-*` headers (original topic, partition, offset, exception class and message) | same | — | none (inspect and replay by hand) | 14 d |
 
 Why these topics:
@@ -175,6 +176,7 @@ A rejected location message (validation failure, `STALE_LOCATION`, `DRIVER_OFFLI
 | `/user/queue/ride-location` | passenger of the driver's active ride | `{rideId, location: {lat, lng}, headingDeg, speedMps, recordedAt, eta: {target, seconds, distanceMeters, source, computedAt}?}`. The ETA is the Redis-cached value (refreshed in the background at most every 30 s); it is `null` until the first one is computed and while the driver waits at the pickup | each accepted location report while a driver is assigned (DRIVER_ASSIGNED to IN_PROGRESS) |
 | `/user/queue/presence` | driver | `{availability: "OFFLINE", reason: "LOCATION_TIMEOUT"\|"ACCOUNT_SUSPENDED", occurredAt}` | the server took the driver offline |
 | `/user/queue/notifications` | the notified user | `{id, type, title, body, rideId?, read: false, createdAt}` (same as the items of `GET /api/notifications`) | the notifications consumer stored a notification (ride progress, payment, verification decision) |
+| `/user/queue/ride-messages` | passenger and assigned driver | `{id, rideId, senderId, senderRole, body, sentAt}` (same as `GET /api/rides/{id}/messages`) | a chat message was stored (both sides get it, so the sender's other devices see it too) |
 | `/user/queue/errors` | sender | `{code, message, destination, fieldErrors}` | a location message was rejected |
 | `/topic/admin/activity` | ADMIN | `{rideId, previousStatus, status, actor, rideVersion, occurredAt}` (no personal data) | every ride status change |
 
@@ -188,7 +190,7 @@ Pushes are best effort, and a lost push is repaired by the reconnect snapshot. R
 
 `StompAuthorizationInterceptor` applies a deny-by-default allow-list:
 
-- `/user/queue/{rides, ride-location, ride-offers, presence, notifications, errors}`: any authenticated user. Spring resolves these to the caller's own sessions, so they cannot address another user.
+- `/user/queue/{rides, ride-location, ride-offers, presence, notifications, errors, ride-messages}`: any authenticated user. Spring resolves these to the caller's own sessions, so they cannot address another user.
 - `/topic/admin/activity`: ADMIN only.
 - Anything else is refused with `FORBIDDEN` (`ERROR` frame, socket closed). This includes a session's resolved queue name (`/queue/rides-user<sessionId>`), the classic way to read another user's queue.
 

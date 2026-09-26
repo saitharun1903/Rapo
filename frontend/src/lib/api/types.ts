@@ -36,6 +36,7 @@ export type RideTimelineEntry = Schemas["RideTimelineEntryResponse"];
 export type RideTracking = Schemas["RideTrackingResponse"];
 export type Eta = Schemas["EtaResponse"];
 export type RideOffer = Schemas["RideOfferResponse"];
+export type RideMessage = Schemas["RideMessageResponse"];
 export type NearbyDriver = Schemas["NearbyDriverResponse"];
 
 export type DriverResponse = Schemas["DriverResponse"];

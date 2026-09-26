@@ -12,6 +12,7 @@ import com.rideflow.service.admin.ErrorReportingService;
 import com.rideflow.service.admin.SystemStatusService;
 import com.rideflow.service.ai.TripInsightsService;
 import com.rideflow.service.audit.AuditService;
+import com.rideflow.service.chat.RideChatService;
 import com.rideflow.service.auth.AuthService;
 import com.rideflow.service.driver.DriverAdministrationService;
 import com.rideflow.service.driver.DriverAvailabilityService;
@@ -76,7 +77,7 @@ import tools.jackson.databind.json.JsonMapper;
     DriverLocationService.class, DriverOnboardingService.class, DriverRideService.class,
     ErrorReportingService.class, FareQuoteService.class, GeocodingService.class, NearbyDriverService.class,
     NotificationService.class, OfferQueryService.class, RatingService.class, RefreshTokenCookies.class,
-    RideBookingService.class, RideCancellationService.class, RideQueryService.class, RideTrackingService.class,
+    RideBookingService.class, RideCancellationService.class, RideChatService.class, RideQueryService.class, RideTrackingService.class,
     RouteService.class, SystemStatusService.class, TripInsightsService.class, UserAdministrationService.class,
     UserService.class})
 class OpenApiContractTest {

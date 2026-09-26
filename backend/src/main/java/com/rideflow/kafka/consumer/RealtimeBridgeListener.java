@@ -4,6 +4,7 @@ import com.rideflow.config.KafkaConfig;
 import com.rideflow.kafka.event.EventCodec;
 import com.rideflow.kafka.event.EventDecodingException;
 import com.rideflow.kafka.event.ReceivedEvent;
+import com.rideflow.service.chat.event.RideMessageSentEvent;
 import com.rideflow.service.driver.event.DriverLocationUpdatedEvent;
 import com.rideflow.service.driver.event.DriverWentOfflineEvent;
 import com.rideflow.service.event.DomainEvent;
@@ -38,7 +39,7 @@ public class RealtimeBridgeListener {
             topics = "#{@kafkaNames.topics('RIDE_REQUESTED', 'RIDE_MATCHING', 'RIDE_ACCEPTED', 'RIDE_DRIVER_ARRIVING',"
                     + " 'RIDE_DRIVER_ARRIVED', 'RIDE_STARTED', 'RIDE_COMPLETED', 'RIDE_CANCELLED', 'RIDE_EXPIRED',"
                     + " 'RIDE_DRIVER_ASSIGNED', 'RIDE_OFFERS_WITHDRAWN', 'DRIVER_LOCATION_UPDATED', 'DRIVER_WENT_OFFLINE',"
-                    + " 'NOTIFICATION_CREATED')}")
+                    + " 'NOTIFICATION_CREATED', 'RIDE_MESSAGE_SENT')}")
     public void onEvent(ConsumerRecord<String, String> record) {
         ReceivedEvent<DomainEvent> event = codec.decode(record.topic(), record.value());
         TraceContext.run(event.traceId(), () -> {
@@ -49,6 +50,7 @@ public class RealtimeBridgeListener {
                 case DriverLocationUpdatedEvent location -> realtime.driverLocationUpdated(location);
                 case DriverWentOfflineEvent offline -> realtime.driverWentOffline(offline);
                 case NotificationCreatedEvent notification -> realtime.notificationCreated(notification);
+                case RideMessageSentEvent message -> realtime.rideMessageSent(message);
                 default -> throw new EventDecodingException(event.topic().eventType() + " has no WebSocket push");
             }
         });

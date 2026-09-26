@@ -35,8 +35,11 @@ public class RideQueryService {
         this.views = views;
     }
 
+    /** A driver who holds only an offer for the ride sees it without the passenger (docs/feature-spec.md 4.8). */
     public RideResponse get(AuthenticatedUser user, UUID rideId) {
-        return views.toResponse(access.loadVisible(user, rideId));
+        Ride ride = access.loadVisible(user, rideId);
+        RideResponse view = views.toResponse(ride);
+        return user.role() == Role.DRIVER && !ride.isAssignedTo(user.id()) ? view.withoutPassenger() : view;
     }
 
     /**

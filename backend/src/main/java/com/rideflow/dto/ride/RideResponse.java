@@ -38,6 +38,15 @@ public record RideResponse(
         Timestamps timestamps,
         @Nullable Cancellation cancellation) {
 
+    /**
+     * The ride as a driver who has only been offered it sees it: everything needed to decide, but not who booked
+     * it. The passenger's name is shown once the driver has accepted.
+     */
+    public RideResponse withoutPassenger() {
+        return new RideResponse(id, status, version, vehicleCategory, pickup, dropoff, paymentMethod, estimate, actual,
+                payment, driver, null, matching, timestamps, cancellation);
+    }
+
     @Schema(name = "RidePlace")
     public record Place(GeoPoint point, String address) {
     }

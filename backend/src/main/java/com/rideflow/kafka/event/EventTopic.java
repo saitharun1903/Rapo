@@ -1,6 +1,7 @@
 package com.rideflow.kafka.event;
 
 import com.rideflow.entity.RideStatus;
+import com.rideflow.service.chat.event.RideMessageSentEvent;
 import com.rideflow.service.driver.event.DriverLocationUpdatedEvent;
 import com.rideflow.service.driver.event.DriverWentOfflineEvent;
 import com.rideflow.service.event.DomainEvent;
@@ -44,7 +45,8 @@ public enum EventTopic {
     NOTIFICATION_REQUESTED("notification.requested", NotificationRequestedEvent.class, Retention.NOTIFICATION,
             Delivery.OUTBOX),
     NOTIFICATION_CREATED("notification.created", NotificationCreatedEvent.class, Retention.NOTIFICATION,
-            Delivery.OUTBOX);
+            Delivery.OUTBOX),
+    RIDE_MESSAGE_SENT("ride.message.sent", RideMessageSentEvent.class, Retention.NOTIFICATION, Delivery.OUTBOX);
 
     /** Topics carrying {@link RideStatusChangedEvent}. */
     public static final Set<EventTopic> RIDE_STATUS_TOPICS = EnumSet.of(RIDE_REQUESTED, RIDE_MATCHING, RIDE_ACCEPTED,
@@ -87,6 +89,7 @@ public enum EventTopic {
             case PaymentCreatedEvent ignored -> PAYMENT_CREATED;
             case NotificationRequestedEvent ignored -> NOTIFICATION_REQUESTED;
             case NotificationCreatedEvent ignored -> NOTIFICATION_CREATED;
+            case RideMessageSentEvent ignored -> RIDE_MESSAGE_SENT;
             default -> throw new IllegalArgumentException("No topic for " + event.getClass().getName());
         };
     }

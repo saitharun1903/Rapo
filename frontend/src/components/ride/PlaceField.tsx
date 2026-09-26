@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Crosshair, LocateFixed, MapPin, Search } from "lucide-react";
+import { Crosshair, LocateFixed, Search } from "lucide-react";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/form";
@@ -15,7 +15,8 @@ const MIN_QUERY = 2;
 
 type PlaceFieldProps = {
   label: string;
-  tone: "brand" | "accent";
+  /** Pickup is drawn as a ring, the destination as a square, on the map and in the panel. */
+  kind: "pickup" | "destination";
   value: Place | null;
   onChange: (place: Place) => void;
   /** Results are biased towards this point. */
@@ -31,7 +32,7 @@ type PlaceFieldProps = {
  * Pickup or destination: search by name (on submit, as the geocoding provider's usage policy requires, not
  * per keystroke), the browser's position, or a point chosen on the map.
  */
-export function PlaceField({ label, tone, value, onChange, near, picking, onPickOnMap, onUseMyLocation, locating }: PlaceFieldProps) {
+export function PlaceField({ label, kind, value, onChange, near, picking, onPickOnMap, onUseMyLocation, locating }: PlaceFieldProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PlaceResponse[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -64,12 +65,13 @@ export function PlaceField({ label, tone, value, onChange, near, picking, onPick
   };
 
   return (
-    <div className={clsx("rounded-card border p-3", picking ? "border-brand ring-2 ring-brand/20" : "border-line")}>
-      <div className="flex items-center gap-2">
-        <MapPin className={clsx("size-4 shrink-0", tone === "brand" ? "text-brand-strong" : "text-fg")} aria-hidden />
+    <div className={clsx("rounded-card border p-3 transition-[border-color,box-shadow]", picking ? "border-brand ring-2 ring-brand/20" : "border-line")}>
+      <div className="flex items-center gap-2.5">
+        <span aria-hidden className={clsx("size-2.5 shrink-0",
+          kind === "pickup" ? "rounded-full border-2 border-ink" : "rounded-[2px] bg-ink")} />
         <label htmlFor={inputId} className="eyebrow">{label}</label>
       </div>
-      {value && <p className="mt-1 line-clamp-2 text-sm font-medium text-fg">{value.address}</p>}
+      {value && <p className="mt-1 line-clamp-2 pl-5 text-sm font-medium text-fg">{value.address}</p>}
       <form onSubmit={search} role="search" className="mt-2 flex gap-2">
         <Input id={inputId} value={query} onChange={(event) => setQuery(event.target.value)}
           placeholder={value ? "Search for another place" : "Search for a place"} autoComplete="off" />

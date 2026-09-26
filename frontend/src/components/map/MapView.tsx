@@ -11,6 +11,9 @@ import { config } from "@/lib/config";
 
 const DEFAULT_ZOOM = 12.5;
 const FIT_PADDING_PX = 72;
+
+/** Space kept clear around fitted points, for panels and sheets that cover part of the map. */
+export type MapPadding = { top: number; right: number; bottom: number; left: number };
 const FIT_MAX_ZOOM = 15.5;
 const FIT_DURATION_MS = 600;
 const ROUTE_WIDTH_PX = 5;
@@ -26,6 +29,10 @@ export type MapViewProps = {
   route?: GeoPoint[] | null;
   /** The map zooms to show all of these whenever they change. */
   fitTo?: GeoPoint[];
+  /** Kept clear of fitted points; defaults to an even margin. */
+  padding?: MapPadding;
+  /** Draws a searching pulse around the pickup while a driver is being found. */
+  searching?: boolean;
   onPick?: (point: GeoPoint) => void;
   className?: string;
 };
@@ -64,7 +71,7 @@ function Pin({ tone, label }: { tone: "brand" | "accent"; label: string }) {
  * provider is a matter of NEXT_PUBLIC_MAP_STYLE_URL; changing the library only touches this folder.
  */
 export default function MapView({ label, center = config.mapCenter, pickup, dropoff, driver, nearby = [], route,
-                                  fitTo = [], onPick, className }: MapViewProps) {
+                                  fitTo = [], padding, searching = false, onPick, className }: MapViewProps) {
   const mapRef = useRef<MapRef>(null);
   const colors = useTokenColors();
   // How far MapLibre got (loading, then its style loaded, then fully drawn once) and its last error, exposed as
@@ -72,6 +79,8 @@ export default function MapView({ label, center = config.mapCenter, pickup, drop
   const [stage, setStage] = useState<"loading" | "loaded" | "drawn">("loading");
   const [lastError, setLastError] = useState<string | null>(null);
   const fitKey = fitTo.map((point) => `${point.lat.toFixed(5)},${point.lng.toFixed(5)}`).join("|");
+  const fitPadding = padding ?? { top: FIT_PADDING_PX, right: FIT_PADDING_PX, bottom: FIT_PADDING_PX, left: FIT_PADDING_PX };
+  const paddingKey = `${fitPadding.top},${fitPadding.right},${fitPadding.bottom},${fitPadding.left}`;
 
   useEffect(() => {
     const map = mapRef.current;
@@ -79,16 +88,16 @@ export default function MapView({ label, center = config.mapCenter, pickup, drop
       return;
     }
     if (fitTo.length === 1) {
-      map.easeTo({ center: [fitTo[0].lng, fitTo[0].lat], duration: FIT_DURATION_MS });
+      map.easeTo({ center: [fitTo[0].lng, fitTo[0].lat], padding: fitPadding, duration: FIT_DURATION_MS });
       return;
     }
     const lngs = fitTo.map((point) => point.lng);
     const lats = fitTo.map((point) => point.lat);
     map.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
-      { padding: FIT_PADDING_PX, maxZoom: FIT_MAX_ZOOM, duration: FIT_DURATION_MS });
-    // fitKey captures the points; the array itself is a new object on every render.
+      { padding: fitPadding, maxZoom: FIT_MAX_ZOOM, duration: FIT_DURATION_MS });
+    // fitKey and paddingKey capture the values; the arrays and objects are new on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fitKey]);
+  }, [fitKey, paddingKey]);
 
   const routeData = useMemo(() => route && route.length > 1 ? {
     type: "Feature" as const,
@@ -122,6 +131,14 @@ export default function MapView({ label, center = config.mapCenter, pickup, drop
             </div>
           </Marker>
         ))}
+        {pickup && searching && (
+          <Marker latitude={pickup.lat} longitude={pickup.lng}>
+            <div aria-hidden className="pointer-events-none relative size-56">
+              <span className="absolute inset-0 rounded-full border-2 border-brand/60 bg-brand/10 animate-search" />
+              <span className="absolute inset-0 rounded-full border-2 border-brand/50 bg-brand/5 animate-search [animation-delay:1.2s]" />
+            </div>
+          </Marker>
+        )}
         {pickup && <Marker latitude={pickup.lat} longitude={pickup.lng}><Pin tone="brand" label="Pickup" /></Marker>}
         {dropoff && <Marker latitude={dropoff.lat} longitude={dropoff.lng}><Pin tone="accent" label="Destination" /></Marker>}
         {driver && (

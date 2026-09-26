@@ -1231,6 +1231,35 @@
         "required" : [ "from", "granularity", "series", "timeZone", "to" ],
         "type" : "object"
       },
+      "RideMessageResponse" : {
+        "properties" : {
+          "body" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "rideId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "senderId" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "senderRole" : {
+            "enum" : [ "PASSENGER", "DRIVER", "ADMIN" ],
+            "type" : "string"
+          },
+          "sentAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "body", "id", "rideId", "senderId", "senderRole", "sentAt" ],
+        "type" : "object"
+      },
       "RideOfferResponse" : {
         "properties" : {
           "distanceToPickupMeters" : {
@@ -1494,6 +1523,17 @@
           }
         },
         "required" : [ "distanceMeters", "durationSeconds", "path", "source" ],
+        "type" : "object"
+      },
+      "SendMessageRequest" : {
+        "properties" : {
+          "body" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "body" ],
         "type" : "object"
       },
       "SystemStatusResponse" : {
@@ -2040,7 +2080,7 @@
     },
     "/api/admin/drivers" : {
       "get" : {
-        "operationId" : "list_1",
+        "operationId" : "list_2",
         "parameters" : [ {
           "in" : "query",
           "name" : "verificationStatus",
@@ -3066,7 +3106,7 @@
     },
     "/api/notifications" : {
       "get" : {
-        "operationId" : "list",
+        "operationId" : "list_1",
         "parameters" : [ {
           "in" : "query",
           "name" : "unreadOnly",
@@ -3439,6 +3479,73 @@
         },
         "summary" : "Start driving to the pickup",
         "tags" : [ "Rides: driver actions" ]
+      }
+    },
+    "/api/rides/{rideId}/messages" : {
+      "get" : {
+        "operationId" : "list",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/RideMessageResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "The conversation between the passenger and the assigned driver, oldest first",
+        "tags" : [ "Ride chat" ]
+      },
+      "post" : {
+        "operationId" : "send",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "rideId",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SendMessageRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RideMessageResponse"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "summary" : "Send a message to the other participant; only while a driver is on the ride",
+        "tags" : [ "Ride chat" ]
       }
     },
     "/api/rides/{rideId}/rating" : {

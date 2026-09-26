@@ -26,14 +26,14 @@ export function newerRide(current: RideResponse | null | undefined, incoming: Ri
 
 const PASSENGER_HEADLINES: Record<RideStatus, string> = {
   REQUESTED: "Request received",
-  MATCHING: "Finding you a driver",
+  MATCHING: "Finding your ride",
   DRIVER_ASSIGNED: "Driver assigned",
   DRIVER_ARRIVING: "Your driver is on the way",
-  DRIVER_ARRIVED: "Your driver has arrived",
-  IN_PROGRESS: "On the way to your destination",
-  COMPLETED: "You have arrived",
+  DRIVER_ARRIVED: "Your driver is here",
+  IN_PROGRESS: "On the way",
+  COMPLETED: "You've arrived",
   CANCELLED: "Ride cancelled",
-  EXPIRED: "No driver was available",
+  EXPIRED: "No driver accepted in time",
 };
 
 export function passengerHeadline(status: RideStatus): string {

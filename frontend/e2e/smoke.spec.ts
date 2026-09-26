@@ -37,10 +37,10 @@ test("a passenger books a ride that a simulated driver completes, then sees the 
   await request.click();
 
   // Matching, then the live ride view with the assigned driver.
-  await expect(page.getByRole("heading", { name: /Driver assigned|Your driver is on the way|Your driver has arrived|On the way/ }))
+  await expect(page.getByRole("heading", { name: /Driver assigned|Your driver is on the way|Your driver is here|On the way/ }))
     .toBeVisible({ timeout: MATCH_TIMEOUT_MS });
   await capture(page, "passenger-live-ride");
-  await expect(page.getByRole("heading", { name: "You have arrived" })).toBeVisible({ timeout: RIDE_TIMEOUT_MS });
+  await expect(page.getByRole("heading", { name: "You've arrived" })).toBeVisible({ timeout: RIDE_TIMEOUT_MS });
 
   // Rate the driver, then open the trip with its computed observations.
   await page.getByRole("button", { name: "5 stars" }).click();

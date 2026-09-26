@@ -7,6 +7,8 @@ import com.rideflow.dto.realtime.RideActivityMessage;
 import com.rideflow.dto.realtime.RideOfferMessage;
 import com.rideflow.dto.ride.EtaResponse;
 import com.rideflow.entity.DriverAvailability;
+import com.rideflow.service.chat.RideChatService;
+import com.rideflow.service.chat.event.RideMessageSentEvent;
 import com.rideflow.service.driver.event.DriverLocationUpdatedEvent;
 import com.rideflow.service.driver.event.DriverWentOfflineEvent;
 import com.rideflow.service.matching.OfferQueryService;
@@ -50,15 +52,18 @@ public class RealtimePublisher {
     private final RideQueryService rideQueries;
     private final OfferQueryService offerQueries;
     private final LiveEtaService liveEta;
+    private final RideChatService chat;
     private final Counter failures;
 
     public RealtimePublisher(SimpMessagingTemplate messaging, SimpUserRegistry users, RideQueryService rideQueries,
-                             OfferQueryService offerQueries, LiveEtaService liveEta, MeterRegistry meters) {
+                             OfferQueryService offerQueries, LiveEtaService liveEta, RideChatService chat,
+                             MeterRegistry meters) {
         this.messaging = messaging;
         this.users = users;
         this.rideQueries = rideQueries;
         this.offerQueries = offerQueries;
         this.liveEta = liveEta;
+        this.chat = chat;
         this.failures = Counter.builder("rideflow.ws.push.failures")
                 .description("WebSocket pushes that could not be handed to the broker")
                 .register(meters);
@@ -123,6 +128,23 @@ public class RealtimePublisher {
             sendToUser(event.userId(), StompDestinations.NOTIFICATIONS, new NotificationResponse(event.notificationId(),
                     event.type(), event.title(), event.body(), event.rideId(), false, event.createdAt()));
         }
+    }
+
+    /** To both participants, so the sender's other tabs and devices see their own message too. */
+    public void rideMessageSent(RideMessageSentEvent event) {
+        boolean passengerHere = isConnectedHere(event.passengerId());
+        boolean driverHere = isConnectedHere(event.driverId());
+        if (!passengerHere && !driverHere) {
+            return;
+        }
+        chat.findForPush(event.messageId()).ifPresent(message -> {
+            if (passengerHere) {
+                sendToUser(event.passengerId(), StompDestinations.RIDE_MESSAGES, message);
+            }
+            if (driverHere) {
+                sendToUser(event.driverId(), StompDestinations.RIDE_MESSAGES, message);
+            }
+        });
     }
 
     private boolean isConnectedHere(UUID userId) {

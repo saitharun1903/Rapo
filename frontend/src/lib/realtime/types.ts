@@ -1,4 +1,4 @@
-import type { Eta, GeoPoint, NotificationItem, RideOffer, RideResponse, RideStatus } from "@/lib/api/types";
+import type { Eta, GeoPoint, NotificationItem, RideMessage, RideOffer, RideResponse, RideStatus } from "@/lib/api/types";
 
 /**
  * STOMP destinations and payloads (docs/events.md §2). They are not REST endpoints, so they are not in
@@ -11,6 +11,7 @@ export const Destinations = {
   presence: "/user/queue/presence",
   notifications: "/user/queue/notifications",
   errors: "/user/queue/errors",
+  rideMessages: "/user/queue/ride-messages",
   adminActivity: "/topic/admin/activity",
   driverLocation: "/app/drivers/location",
 } as const;
@@ -54,6 +55,7 @@ export type Payloads = {
   "/user/queue/presence": PresenceMessage;
   "/user/queue/notifications": NotificationItem;
   "/user/queue/errors": StompErrorMessage;
+  "/user/queue/ride-messages": RideMessage;
   "/topic/admin/activity": AdminActivityMessage;
 };
 

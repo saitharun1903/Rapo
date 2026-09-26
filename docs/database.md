@@ -264,6 +264,18 @@ Created by the payments consumer from `ride.completed` with the FINAL fare; cash
 
 Unique: `(ride_id, rater_id)`; CHECK `rater_id <> ratee_id`. Index `ix_ratings_ratee (ratee_id)`. When a passenger rates a driver, the driver's `rating_avg`/`rating_count` are recomputed from all their ratings in the same transaction, under the driver row lock: concurrent ratings cannot lose an update, and rounding never accumulates.
 
+### ride_messages
+| column | type | notes |
+|---|---|---|
+| id | uuid PK | |
+| ride_id | uuid NOT NULL FK rides ON DELETE CASCADE | |
+| sender_id | uuid NOT NULL FK users | |
+| sender_role | varchar(20) NOT NULL | CHECK `PASSENGER` or `DRIVER` |
+| body | varchar(500) NOT NULL | CHECK not blank |
+| sent_at | timestamptz NOT NULL | |
+
+Index `ix_ride_messages_ride_sent (ride_id, sent_at, id)`: a conversation is always read in order, one ride at a time. `RideMessageRetentionJob` deletes the messages of rides that ended more than `rideflow.chat.retention` (30 days) ago (V8).
+
 ### notifications
 | column | type | notes |
 |---|---|---|
@@ -366,6 +378,6 @@ Index `(processed_at)`. Purged after 7 days, longer than the Kafka retention of 
 
 ## Migration plan
 
-Implemented: `V1__extensions.sql` → `V2__users_auth_audit.sql` (users, refresh_tokens, audit_logs) → `V3__drivers_vehicles_locations.sql` → `V4__rides_offers_fares.sql` (rides, ride_offers, ride_status_events, fare_breakdowns, ride_track_points) → `V5__payments_ratings_notifications.sql` → `V6__outbox_processed_events.sql` → `V7__ai.sql` (trip_analyses, trip_questions).
+Implemented: `V1__extensions.sql` → `V2__users_auth_audit.sql` (users, refresh_tokens, audit_logs) → `V3__drivers_vehicles_locations.sql` → `V4__rides_offers_fares.sql` (rides, ride_offers, ride_status_events, fare_breakdowns, ride_track_points) → `V5__payments_ratings_notifications.sql` → `V6__outbox_processed_events.sql` → `V7__ai.sql` (trip_analyses, trip_questions) → `V8__ride_messages.sql` (in-ride chat).
 
 Seed: `db/seed/R__demo_seed.sql` (repeatable, `demo` profile only). Seed passwords are never committed: they are hashed inside PostgreSQL with pgcrypto `crypt()` from the `${demo_password}` Flyway placeholder, which comes from the `DEMO_USER_PASSWORD` environment variable.

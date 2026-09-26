@@ -20,7 +20,8 @@ import org.springframework.web.client.RestClient;
     MatchingProperties.class,
     RideProperties.class,
     RoutingProperties.class,
-    ReportingProperties.class
+    ReportingProperties.class,
+    ChatProperties.class
 })
 public class RideDomainConfig {
 

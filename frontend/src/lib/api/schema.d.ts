@@ -46,7 +46,7 @@ export interface paths {
             cookie?: never;
         };
         /** List drivers, optionally filtered by verification status */
-        get: operations["list_1"];
+        get: operations["list_2"];
         put?: never;
         post?: never;
         delete?: never;
@@ -528,7 +528,7 @@ export interface paths {
             cookie?: never;
         };
         /** Newest first by default */
-        get: operations["list"];
+        get: operations["list_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -699,6 +699,24 @@ export interface paths {
         put?: never;
         /** Start driving to the pickup */
         post: operations["enRoute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rides/{rideId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The conversation between the passenger and the assigned driver, oldest first */
+        get: operations["list"];
+        put?: never;
+        /** Send a message to the other participant; only while a driver is on the ride */
+        post: operations["send"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1344,6 +1362,19 @@ export interface components {
             /** Format: date-time */
             to: string;
         };
+        RideMessageResponse: {
+            body: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            rideId: string;
+            /** Format: uuid */
+            senderId: string;
+            /** @enum {string} */
+            senderRole: "PASSENGER" | "DRIVER" | "ADMIN";
+            /** Format: date-time */
+            sentAt: string;
+        };
         RideOfferResponse: {
             /** Format: int32 */
             distanceToPickupMeters: number;
@@ -1437,6 +1468,9 @@ export interface components {
             path: components["schemas"]["GeoPoint"][];
             /** @enum {string} */
             source: "ROUTED" | "APPROXIMATE";
+        };
+        SendMessageRequest: {
+            body: string;
         };
         SystemStatusResponse: {
             /** Format: int64 */
@@ -1638,7 +1672,7 @@ export interface operations {
             };
         };
     };
-    list_1: {
+    list_2: {
         parameters: {
             query?: {
                 verificationStatus?: "PENDING" | "VERIFIED" | "REJECTED" | "SUSPENDED";
@@ -2298,7 +2332,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    list_1: {
         parameters: {
             query?: {
                 unreadOnly?: boolean;
@@ -2571,6 +2605,54 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["RideResponse"];
+                };
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rideId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RideMessageResponse"][];
+                };
+            };
+        };
+    };
+    send: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rideId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RideMessageResponse"];
                 };
             };
         };

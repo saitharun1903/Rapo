@@ -19,5 +19,7 @@ public enum RateLimitScope {
     /** Per passenger: every trip question is a model call, which costs money (external) or CPU time (local). */
     AI_QUESTION,
     /** Per passenger: re-running a failed trip analysis. */
-    AI_REGENERATE
+    AI_REGENERATE,
+    /** Per user: in-ride chat messages. */
+    CHAT
 }

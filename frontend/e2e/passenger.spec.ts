@@ -21,7 +21,7 @@ test("a passenger books from their own location, cancels while matching, and see
   const request = page.getByRole("button", { name: /^Request / });
   await expect(request).toBeEnabled({ timeout: PUBLIC_SERVICES_TIMEOUT_MS });
   await request.click();
-  await expect(page.getByRole("heading", { name: /Request received|Finding you a driver/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Request received|Finding your ride/ })).toBeVisible();
 
   await page.getByRole("button", { name: "Cancel ride" }).click();
   const dialog = page.getByRole("dialog", { name: "Cancel this ride?" });

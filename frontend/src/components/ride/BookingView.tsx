@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Banknote, CreditCard, TrendingUp } from "lucide-react";
+import { Banknote, Check, CreditCard, TrendingUp } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { LazyMap } from "@/components/map/LazyMap";
@@ -16,6 +16,7 @@ import { formatDistance, formatDuration, formatMoney, humanize } from "@/lib/for
 import { currentPosition, toPoint } from "@/lib/geolocation";
 import { queryKeys } from "@/lib/queryKeys";
 import { PlaceField, type Place } from "./PlaceField";
+import { RideScreen } from "./RideScreen";
 
 const NEARBY_REFRESH_MS = 15_000;
 const NEARBY_RADIUS_METERS = 3_000;
@@ -60,7 +61,7 @@ export function BookingView() {
 
   const near = pickup?.point ?? config.mapCenter;
   const nearby = useQuery({
-    queryKey: queryKeys.nearby(near.lat, near.lng),
+    queryKey: queryKeys.nearby(near.lat, near.lng, NEARBY_RADIUS_METERS),
     queryFn: () => unwrap(api.GET("/api/drivers/nearby", {
       params: { query: { lat: near.lat, lng: near.lng, radiusMeters: NEARBY_RADIUS_METERS } },
     })),
@@ -131,75 +132,86 @@ export function BookingView() {
   const fitTo = [pickup?.point, dropoff?.point].filter((point): point is GeoPoint => Boolean(point));
 
   return (
-    <div className="grid h-[calc(100dvh-4rem)] grid-rows-[1fr_minmax(0,1.2fr)] lg:grid-cols-[26rem_1fr] lg:grid-rows-1">
-      <section aria-label="Book a ride" className="order-2 overflow-y-auto border-line bg-surface p-4 lg:order-1 lg:border-r">
-        <h1 className="mb-4 text-xl font-semibold tracking-[-0.02em]">Where to?</h1>
-        <div className="flex flex-col gap-3">
-          <PlaceField label="Pickup" tone="brand" value={pickup} onChange={(place) => set("pickup", place)} near={near}
-            picking={picking === "pickup"} onPickOnMap={() => setPicking(picking === "pickup" ? null : "pickup")}
-            onUseMyLocation={useMyLocation} locating={locating} />
-          <PlaceField label="Destination" tone="accent" value={dropoff} onChange={(place) => set("dropoff", place)} near={near}
-            picking={picking === "dropoff"} onPickOnMap={() => setPicking(picking === "dropoff" ? null : "dropoff")} />
-        </div>
-
-        <p className="mt-3 text-xs text-fg-muted" aria-live="polite">
-          {nearby.data ? `${nearby.data.length} driver${nearby.data.length === 1 ? "" : "s"} near ${pickup ? "your pickup" : "the city centre"}` : ""}
-        </p>
-
-        {estimateKey && (
-          <div className="mt-5">
-            <h2 className="mb-2 text-sm font-semibold text-fg">Choose a ride</h2>
-            {estimate.isPending && <div className="flex flex-col gap-2"><Skeleton className="h-16" /><Skeleton className="h-16" /></div>}
-            {estimate.isError && (
-              isApiError(estimate.error, "OUTSIDE_SERVICE_AREA", "PICKUP_EQUALS_DROPOFF")
-                ? <p role="alert" className="rounded-control bg-warning-soft p-3 text-sm text-warning">{errorMessage(estimate.error)}</p>
-                : <ErrorState error={estimate.error} onRetry={() => void estimate.refetch()} title="Could not price this trip" />
-            )}
-            {estimate.data && (
-              <>
-                <p className="mb-2 flex flex-wrap items-center gap-2 text-xs text-fg-muted">
-                  {formatDistance(estimate.data.distanceMeters)} · about {formatDuration(estimate.data.durationSeconds)}
-                  {estimate.data.estimateSource === "APPROXIMATE" && <Badge tone="warning">Approximate route</Badge>}
-                  {Number(estimate.data.surgeMultiplier) > 1 && (
-                    <Badge tone="warning"><TrendingUp className="size-3" aria-hidden /> High demand {estimate.data.surgeMultiplier}×</Badge>
-                  )}
-                </p>
-                <div role="radiogroup" aria-label="Vehicle category" className="flex flex-col gap-2">
-                  {quotes.map((quote) => (
-                    <button key={quote.quoteId} type="button" role="radio" aria-checked={selected?.vehicleCategory === quote.vehicleCategory}
-                      onClick={() => setCategory(quote.vehicleCategory)}
-                      className={clsx("flex items-center justify-between rounded-card border px-4 py-3 text-left transition-colors",
-                        selected?.vehicleCategory === quote.vehicleCategory ? "border-brand bg-brand-soft" : "border-line hover:bg-surface-2")}>
-                      <span className="font-semibold text-fg">{humanize(quote.vehicleCategory)}</span>
-                      <span className="text-base font-semibold tabular-nums text-fg">{formatMoney(quote.estimatedFare)}</span>
-                    </button>
-                  ))}
-                </div>
-                <div role="radiogroup" aria-label="Payment method" className="mt-4 grid grid-cols-2 gap-2">
-                  {PAYMENT_METHODS.map(({ value, label, note, icon: Icon }) => (
-                    <button key={value} type="button" role="radio" aria-checked={paymentMethod === value} onClick={() => setPaymentMethod(value)}
-                      className={clsx("flex items-center gap-2 rounded-control border px-3 py-2 text-left",
-                        paymentMethod === value ? "border-brand bg-brand-soft" : "border-line hover:bg-surface-2")}>
-                      <Icon className="size-4 text-fg-muted" aria-hidden />
-                      <span><span className="block text-sm font-semibold text-fg">{label}</span><span className="block text-xs text-fg-muted">{note}</span></span>
-                    </button>
-                  ))}
-                </div>
-                <Button size="lg" className="mt-4 w-full" disabled={!selected} loading={book.isPending}
-                  onClick={() => selected && book.mutate(selected)}>
-                  Request {selected ? humanize(selected.vehicleCategory) : "ride"}
-                </Button>
-                <p className="mt-2 text-center text-xs text-fg-muted">The final fare uses the route actually driven, at this demand multiplier.</p>
-              </>
-            )}
-          </div>
-        )}
-      </section>
-      <div className="order-1 lg:order-2">
-        <LazyMap label="Map for choosing pickup and destination" pickup={pickup?.point} dropoff={dropoff?.point}
-          route={estimate.data?.route} nearby={nearby.data?.map((driver) => driver.position)} fitTo={fitTo}
-          onPick={picking ? onPick : undefined} />
+    <RideScreen label="Book a ride" peek={estimateKey ? 420 : 330} map={(padding) => (
+      <LazyMap label="Map for choosing pickup and destination" pickup={pickup?.point} dropoff={dropoff?.point}
+        route={estimate.data?.route} nearby={nearby.data?.map((driver) => driver.position)} fitTo={fitTo} padding={padding}
+        onPick={picking ? onPick : undefined} />
+    )}>
+      <h1 className="mb-4 text-[1.35rem] font-semibold tracking-[-0.02em]">Where to?</h1>
+      <div className="flex flex-col gap-2">
+        <PlaceField label="Pickup" kind="pickup" value={pickup} onChange={(place) => set("pickup", place)} near={near}
+          picking={picking === "pickup"} onPickOnMap={() => setPicking(picking === "pickup" ? null : "pickup")}
+          onUseMyLocation={useMyLocation} locating={locating} />
+        <PlaceField label="Destination" kind="destination" value={dropoff} onChange={(place) => set("dropoff", place)} near={near}
+          picking={picking === "dropoff"} onPickOnMap={() => setPicking(picking === "dropoff" ? null : "dropoff")} />
       </div>
-    </div>
+
+      <p className="mt-3 flex items-center gap-2 text-xs text-fg-muted" aria-live="polite">
+        {nearby.data && (
+          <>
+            <span aria-hidden className={clsx("size-1.5 rounded-full", nearby.data.length > 0 ? "bg-success" : "bg-line-strong")} />
+            {nearby.data.length === 0
+              ? `No cars online near ${pickup ? "your pickup" : "the city centre"} right now`
+              : `${nearby.data.length} car${nearby.data.length === 1 ? "" : "s"} online near ${pickup ? "your pickup" : "the city centre"}`}
+          </>
+        )}
+      </p>
+
+      {estimateKey && (
+        <div className="mt-5 animate-fade">
+          <h2 className="mb-2 text-sm font-medium text-fg">Choose a ride</h2>
+          {estimate.isPending && <div className="flex flex-col gap-2"><Skeleton className="h-14" /><Skeleton className="h-14" /><Skeleton className="h-14" /></div>}
+          {estimate.isError && (
+            isApiError(estimate.error, "OUTSIDE_SERVICE_AREA", "PICKUP_EQUALS_DROPOFF")
+              ? <p role="alert" className="rounded-control bg-warning-soft p-3 text-sm text-warning">{errorMessage(estimate.error)}</p>
+              : <ErrorState error={estimate.error} onRetry={() => void estimate.refetch()} title="Could not price this trip" />
+          )}
+          {estimate.data && (
+            <>
+              <p className="mb-2 flex flex-wrap items-center gap-2 text-xs text-fg-muted">
+                <span className="num">{formatDistance(estimate.data.distanceMeters)} · about {formatDuration(estimate.data.durationSeconds)}</span>
+                {estimate.data.estimateSource === "APPROXIMATE" && <Badge tone="warning">Approximate route</Badge>}
+                {Number(estimate.data.surgeMultiplier) > 1 && (
+                  <Badge tone="warning"><TrendingUp className="size-3" aria-hidden /> High demand {estimate.data.surgeMultiplier}×</Badge>
+                )}
+              </p>
+              <div role="radiogroup" aria-label="Vehicle category" className="flex flex-col divide-y divide-line overflow-hidden rounded-card border border-line">
+                {quotes.map((quote) => {
+                  const chosen = selected?.vehicleCategory === quote.vehicleCategory;
+                  return (
+                    <button key={quote.quoteId} type="button" role="radio" aria-checked={chosen}
+                      onClick={() => setCategory(quote.vehicleCategory)}
+                      className={clsx("flex items-center gap-3 px-4 py-3.5 text-left transition-colors",
+                        chosen ? "bg-surface-2" : "hover:bg-surface-2/60")}>
+                      <span aria-hidden className={clsx("flex size-5 shrink-0 items-center justify-center rounded-full border",
+                        chosen ? "border-ink bg-ink text-ink-fg" : "border-line-strong")}>
+                        {chosen && <Check className="size-3" />}
+                      </span>
+                      <span className="flex-1 font-medium text-fg">{humanize(quote.vehicleCategory)}</span>
+                      <span className="num text-[0.95rem] font-semibold text-fg">{formatMoney(quote.estimatedFare)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div role="radiogroup" aria-label="Payment method" className="mt-3 grid grid-cols-2 gap-2">
+                {PAYMENT_METHODS.map(({ value, label, note, icon: Icon }) => (
+                  <button key={value} type="button" role="radio" aria-checked={paymentMethod === value} onClick={() => setPaymentMethod(value)}
+                    className={clsx("flex items-center gap-2.5 rounded-control border px-3 py-2.5 text-left transition-colors",
+                      paymentMethod === value ? "border-ink" : "border-line hover:bg-surface-2")}>
+                    <Icon className="size-4 text-fg-muted" aria-hidden />
+                    <span><span className="block text-sm font-medium text-fg">{label}</span><span className="block text-xs text-fg-muted">{note}</span></span>
+                  </button>
+                ))}
+              </div>
+              <Button variant="signal" size="lg" className="mt-4 w-full" disabled={!selected} loading={book.isPending}
+                onClick={() => selected && book.mutate(selected)}>
+                Request {selected ? humanize(selected.vehicleCategory) : "ride"}
+              </Button>
+              <p className="mt-2 text-xs text-fg-muted">The final fare uses the route actually driven, at this demand multiplier.</p>
+            </>
+          )}
+        </div>
+      )}
+    </RideScreen>
   );
 }
