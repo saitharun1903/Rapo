@@ -194,7 +194,8 @@ export default function DrivePage() {
       <LazyMap label="Your position and trip" driver={here ? { point: here, headingDeg: location.position?.headingDeg } : null}
         pickup={ride && ride.status !== "IN_PROGRESS" && !isTerminal(ride.status) ? ride.pickup.point : null}
         dropoff={ride && !isTerminal(ride.status) ? ride.dropoff.point : null}
-        route={route.data?.path} fitTo={fitTo} padding={padding}
+        route={route.data?.path} fitTo={fitTo} cameraKey={`${ride?.id ?? "idle"}:${ride?.status ?? ""}:${here !== null}`}
+        follow={here} padding={padding}
         onPick={placing ? onPick : undefined} />
     )}>
       <div className="flex min-h-full flex-col gap-5">

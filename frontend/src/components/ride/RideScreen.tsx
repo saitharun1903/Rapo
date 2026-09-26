@@ -8,6 +8,8 @@ import { DESKTOP_QUERY, useMediaQuery } from "@/lib/useMediaQuery";
 const PANEL_WIDTH_PX = 400;
 const PANEL_GAP_PX = 16;
 const EDGE_PX = 56;
+/** The map controls sit at the right edge; fitted points stay clear of them. */
+const CONTROLS_PX = 72;
 
 type RideScreenProps = {
   /** Names the panel for screen readers. */
@@ -26,14 +28,14 @@ type RideScreenProps = {
 export function RideScreen({ label, map, peek = 340, children }: RideScreenProps) {
   const desktop = useMediaQuery(DESKTOP_QUERY);
   const padding: MapPadding = desktop
-    ? { top: EDGE_PX, right: EDGE_PX, bottom: EDGE_PX, left: PANEL_WIDTH_PX + PANEL_GAP_PX + EDGE_PX }
-    : { top: EDGE_PX, right: 32, bottom: peek + 24, left: 32 };
+    ? { top: EDGE_PX, right: CONTROLS_PX, bottom: EDGE_PX, left: PANEL_WIDTH_PX + PANEL_GAP_PX + EDGE_PX }
+    : { top: EDGE_PX, right: CONTROLS_PX, bottom: peek + 24, left: 32 };
   return (
     <div className="relative h-[calc(100dvh-3.5rem)] overflow-hidden bg-surface-2">
       <div className="absolute inset-0">{map(padding)}</div>
       {desktop ? (
         <section aria-label={label}
-          className="absolute bottom-4 left-4 top-4 z-[var(--z-float)] flex flex-col overflow-hidden rounded-sheet border border-line bg-surface shadow-float animate-rise"
+          className="absolute left-4 top-4 z-[var(--z-float)] flex max-h-[calc(100%-2rem)] flex-col overflow-hidden rounded-sheet border border-line bg-surface shadow-float animate-rise"
           style={{ width: PANEL_WIDTH_PX }}>
           <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
         </section>

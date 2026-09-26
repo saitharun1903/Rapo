@@ -38,12 +38,14 @@ export function DriverCard({ driver, plateSize = "md" }: { driver: Driver; plate
           <span className="truncate">{driver.fullName}</span>
           <BadgeCheck className="size-4 shrink-0 text-success" aria-label="Verified driver" />
         </p>
-        <p className="flex items-center gap-1 text-xs text-fg-muted">
+        <p className="flex items-center gap-1 whitespace-nowrap text-xs text-fg-muted">
           <Star className="size-3.5 fill-current text-fg" aria-hidden />
           <span className="num text-fg">{formatRating(driver.ratingAvg)}</span>
-          {driver.ratingCount > 0 && <span className="num">({driver.ratingCount})</span>}
-          {vehicle && <span className="truncate">· {vehicle.color} {vehicle.make} {vehicle.model} · {humanize(vehicle.category)}</span>}
+          {driver.ratingCount > 0 && <span className="num">· {driver.ratingCount} ratings</span>}
         </p>
+        {vehicle && (
+          <p className="truncate text-xs text-fg-muted">{vehicle.color} {vehicle.make} {vehicle.model} · {humanize(vehicle.category)}</p>
+        )}
       </div>
       {vehicle && <Plate number={vehicle.plateNumber} size={plateSize} />}
     </div>

@@ -5,7 +5,8 @@
 
 const DEFAULT_WS_URL = "ws://localhost:8080/ws";
 /** OpenFreeMap's hosted style: vector tiles without an API key. */
-const DEFAULT_MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+/** The base style; lib/map/style.ts restyles it for the light and dark themes. */
+const DEFAULT_MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 /** Hyderabad, the demo city (matches the backend's default service area). */
 const DEFAULT_CENTER = { lat: 17.385, lng: 78.4867 };
 

@@ -25,8 +25,6 @@ const NEARBY_REFRESH_MS = 15_000;
 const NEARBY_MAX_RADIUS_METERS = 10_000;
 /** The approach route is re-queried when the car has moved about this far (3 decimals of a degree, ~110 m). */
 const APPROACH_ROUTE_DECIMALS = 3;
-/** The camera refits to the car only when it moves about a kilometre, so it does not fight the rider's panning. */
-const CAMERA_DECIMALS = 2;
 
 function rounded(point: GeoPoint, decimals: number): GeoPoint {
   const factor = 10 ** decimals;
@@ -156,12 +154,15 @@ export function ActiveRideView({ ride }: { ride: RideResponse }) {
     placeholderData: (previous) => previous,
   });
 
-  const cameraCar = live.point ? rounded(live.point, CAMERA_DECIMALS) : null;
+  // The camera fits each phase once (with the car where it was when the phase began) and afterwards only brings
+  // the car back into view if it drives off screen; it never re-centres on every fix.
+  const hasCar = live.point !== null;
   const fitTo: GeoPoint[] = inTrip
-    ? [ride.pickup.point, ride.dropoff.point, ...(cameraCar ? [cameraCar] : [])]
-    : approaching
-      ? [ride.pickup.point, ...(cameraCar ? [cameraCar] : [])]
+    ? [live.point ?? ride.pickup.point, ride.dropoff.point]
+    : approaching && live.point
+      ? [ride.pickup.point, live.point]
       : [ride.pickup.point, ride.dropoff.point];
+  const cameraKey = `${ride.id}:${ride.status}:${hasCar}`;
 
   const route = inTrip || searching ? tripRoute.data?.path : approachRoute.data?.path;
   const vehicle = ride.driver?.vehicle;
@@ -170,9 +171,10 @@ export function ActiveRideView({ ride }: { ride: RideResponse }) {
   return (
     <RideScreen label="Your ride" peek={searching ? 300 : 360} map={(padding) => (
       <LazyMap label="Live map of your ride" pickup={inTrip ? null : ride.pickup.point} dropoff={ride.dropoff.point}
-        driver={live.point ? { point: live.point, headingDeg: live.headingDeg } : null}
+        driver={live.point ? { point: live.point, headingDeg: live.headingDeg, stale: live.signalLost } : null}
         nearby={searching ? nearby.data?.map((driver) => driver.position) : undefined}
-        route={route} fitTo={fitTo} padding={padding} searching={searching} />
+        route={route} progressAt={inTrip ? live.point : null} fitTo={fitTo} cameraKey={cameraKey}
+        follow={engaged ? live.point : null} padding={padding} searching={searching} />
     )}>
       <div key={ride.status} className="flex flex-col gap-5 animate-fade">
         <header>

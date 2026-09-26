@@ -306,7 +306,7 @@ startup if one is missing. Under the `prod` profile, `DATABASE_URL`, `DATABASE_U
 | `PORT` | no | — | Used for the API port when `SERVER_PORT` is not set (hosts such as Render set it) |
 | `BACKEND_URL` | build | `http://localhost:8080` | Frontend: where `/api` is forwarded. Fixed at build time; a Vercel build requires `https://` |
 | `NEXT_PUBLIC_WS_URL` | build | `ws://localhost:8080/ws` | Frontend: the browser's WebSocket URL. Fixed at build time; `wss://` on an https site (a Vercel build requires it) |
-| `NEXT_PUBLIC_MAP_STYLE_URL` / `NEXT_PUBLIC_MAP_CENTER_LAT` / `NEXT_PUBLIC_MAP_CENTER_LNG` | build | OpenFreeMap Liberty / Hyderabad | Map style and starting centre; empty means the default |
+| `NEXT_PUBLIC_MAP_STYLE_URL` / `NEXT_PUBLIC_MAP_CENTER_LAT` / `NEXT_PUBLIC_MAP_CENTER_LNG` | build | OpenFreeMap Positron / Hyderabad | Base map style and starting centre; empty means the default. An OpenMapTiles-based style is restyled to Raido's light and dark palettes (`lib/map/style.ts`); any other style is used as it is |
 | `NEXT_PUBLIC_SENTRY_ENVIRONMENT` | build | `local` | Environment name on the frontend's Sentry events |
 | `NEXT_PUBLIC_API_BASE_URL` | build | (empty: same origin) | Frontend: a different API origin instead of the `/api` rewrite. Leave empty; the refresh cookie is first-party only through the rewrite |
 
