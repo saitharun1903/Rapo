@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.1</version>
+        <version>4.1.2</version>
         <relativePath/>
     </parent>
 
@@ -19,14 +19,14 @@
 
     <properties>
         <java.version>21</java.version>
-        <springdoc.version>3.1.1</springdoc.version>
+        <springdoc.version>3.2.0</springdoc.version>
         <mapstruct.version>1.6.3</mapstruct.version>
-        <archunit.version>1.4.2</archunit.version>
+        <archunit.version>1.5.1</archunit.version>
         <anthropic.version>2.65.0</anthropic.version>
         <resilience4j.version>2.4.0</resilience4j.version>
         <wiremock.version>3.13.2</wiremock.version>
-        <jacoco.version>0.8.15</jacoco.version>
-        <sentry.version>8.58.0</sentry.version>
+        <jacoco.version>0.8.16</jacoco.version>
+        <sentry.version>8.61.1</sentry.version>
         <!-- Set by JaCoCo's prepare-agent goals; empty when JaCoCo is skipped (-Djacoco.skip=true). -->
         <jacocoUnitArgLine/>
         <jacocoItArgLine/>
